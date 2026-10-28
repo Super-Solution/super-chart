@@ -1,0 +1,17 @@
+@import (reference) '../../base.less';
+
+// One setting per row: the label, then its control at the end (SC-063).
+.@{prefix-cls}-setting-modal-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 16px;
+  row-gap: 12px;
+  margin: 16px 0;
+  align-items: center;
+  > :nth-child(2n) {
+    justify-self: end;
+  }
+  > .label {
+    min-width: 0;
+  }
+}

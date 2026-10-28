@@ -1,0 +1,509 @@
+// Vitest Snapshot v1
+
+exports[`canvasTheme (the Pro engine theme) > matches the snapshot for both themes > dark 1`] = `
+{
+  "candle": {
+    "bar": {
+      "downBorderColor": "#F23645",
+      "downColor": "#F23645",
+      "downWickColor": "#F23645",
+      "noChangeBorderColor": "#8A8F9C",
+      "noChangeColor": "#8A8F9C",
+      "noChangeWickColor": "#8A8F9C",
+      "upBorderColor": "#089981",
+      "upColor": "#089981",
+      "upWickColor": "#089981",
+    },
+    "priceMark": {
+      "high": {
+        "color": "#929AA5",
+      },
+      "last": {
+        "downColor": "#F23645",
+        "noChangeColor": "#8A8F9C",
+        "text": {
+          "color": "#131722",
+        },
+        "upColor": "#089981",
+      },
+      "low": {
+        "color": "#929AA5",
+      },
+    },
+    "tooltip": {
+      "rect": {
+        "borderColor": "rgba(10, 10, 10, 0.6)",
+        "color": "rgba(10, 10, 10, 0.6)",
+      },
+      "text": {
+        "color": "#929AA5",
+      },
+    },
+  },
+  "crosshair": {
+    "horizontal": {
+      "line": {
+        "color": "#929AA5",
+      },
+      "text": {
+        "backgroundColor": "#373A40",
+        "borderColor": "#373A40",
+        "color": "#FFFFFF",
+      },
+    },
+    "vertical": {
+      "line": {
+        "color": "#929AA5",
+      },
+      "text": {
+        "backgroundColor": "#373A40",
+        "borderColor": "#373A40",
+        "color": "#FFFFFF",
+      },
+    },
+  },
+  "grid": {
+    "horizontal": {
+      "color": "#292929",
+      "style": "solid",
+    },
+    "vertical": {
+      "color": "#292929",
+      "style": "solid",
+    },
+  },
+  "indicator": {
+    "bars": [
+      {
+        "borderDashedValue": [
+          2,
+          2,
+        ],
+        "borderSize": 1,
+        "borderStyle": "solid",
+        "downColor": "rgba(242, 54, 69, 0.65)",
+        "noChangeColor": "rgba(138, 143, 156, 0.65)",
+        "style": "fill",
+        "upColor": "rgba(8, 153, 129, 0.65)",
+      },
+    ],
+    "circles": [
+      {
+        "borderDashedValue": [
+          2,
+          2,
+        ],
+        "borderSize": 1,
+        "borderStyle": "solid",
+        "downColor": "rgba(242, 54, 69, 0.65)",
+        "noChangeColor": "rgba(138, 143, 156, 0.65)",
+        "style": "fill",
+        "upColor": "rgba(8, 153, 129, 0.65)",
+      },
+    ],
+    "ohlc": {
+      "downColor": "rgba(242, 54, 69, 0.65)",
+      "noChangeColor": "rgba(138, 143, 156, 0.65)",
+      "upColor": "rgba(8, 153, 129, 0.65)",
+    },
+    "tooltip": {
+      "icons": [
+        {
+          "activeBackgroundColor": "rgba(163, 164, 213, 0.1)",
+          "activeColor": "#929AA5",
+          "backgroundColor": "transparent",
+          "color": "#929AA5",
+          "fontFamily": "klinecharts-pro-icons",
+          "icon": "",
+          "id": "visible",
+          "marginBottom": 0,
+          "marginLeft": 8,
+          "marginRight": 0,
+          "marginTop": 7,
+          "paddingBottom": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "paddingTop": 0,
+          "position": "middle",
+          "size": 14,
+        },
+        {
+          "activeBackgroundColor": "rgba(163, 164, 213, 0.1)",
+          "activeColor": "#929AA5",
+          "backgroundColor": "transparent",
+          "color": "#929AA5",
+          "fontFamily": "klinecharts-pro-icons",
+          "icon": "",
+          "id": "invisible",
+          "marginBottom": 0,
+          "marginLeft": 8,
+          "marginRight": 0,
+          "marginTop": 7,
+          "paddingBottom": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "paddingTop": 0,
+          "position": "middle",
+          "size": 14,
+        },
+        {
+          "activeBackgroundColor": "rgba(163, 164, 213, 0.1)",
+          "activeColor": "#929AA5",
+          "backgroundColor": "transparent",
+          "color": "#929AA5",
+          "fontFamily": "klinecharts-pro-icons",
+          "icon": "",
+          "id": "setting",
+          "marginBottom": 0,
+          "marginLeft": 6,
+          "marginRight": 0,
+          "marginTop": 7,
+          "paddingBottom": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "paddingTop": 0,
+          "position": "middle",
+          "size": 14,
+        },
+        {
+          "activeBackgroundColor": "rgba(163, 164, 213, 0.1)",
+          "activeColor": "#929AA5",
+          "backgroundColor": "transparent",
+          "color": "#929AA5",
+          "fontFamily": "klinecharts-pro-icons",
+          "icon": "",
+          "id": "close",
+          "marginBottom": 0,
+          "marginLeft": 6,
+          "marginRight": 0,
+          "marginTop": 7,
+          "paddingBottom": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "paddingTop": 0,
+          "position": "middle",
+          "size": 14,
+        },
+      ],
+      "text": {
+        "color": "#929AA5",
+      },
+    },
+  },
+  "overlay": {
+    "arc": {
+      "color": "#2962FF",
+    },
+    "circle": {
+      "borderColor": "#2962FF",
+      "color": "rgba(41, 98, 255, 0.25)",
+    },
+    "line": {
+      "color": "#2962FF",
+    },
+    "point": {
+      "activeBorderColor": "rgba(41, 98, 255, 0.35)",
+      "activeColor": "#2962FF",
+      "borderColor": "rgba(41, 98, 255, 0.35)",
+      "color": "#2962FF",
+    },
+    "polygon": {
+      "borderColor": "#2962FF",
+      "color": "#2962FF",
+    },
+    "rect": {
+      "borderColor": "#2962FF",
+      "color": "rgba(41, 98, 255, 0.25)",
+    },
+    "rectText": {
+      "backgroundColor": "#2962FF",
+      "borderColor": "#2962FF",
+      "color": "#FFFFFF",
+    },
+    "text": {
+      "backgroundColor": "#2962FF",
+      "borderColor": "#2962FF",
+      "color": "#FFFFFF",
+    },
+  },
+  "separator": {
+    "color": "#292929",
+  },
+  "xAxis": {
+    "axisLine": {
+      "color": "#292929",
+    },
+    "tickLine": {
+      "color": "#292929",
+    },
+    "tickText": {
+      "color": "#929AA5",
+    },
+  },
+  "yAxis": {
+    "axisLine": {
+      "color": "#292929",
+    },
+    "tickLine": {
+      "color": "#292929",
+    },
+    "tickText": {
+      "color": "#929AA5",
+    },
+  },
+}
+`;
+
+exports[`canvasTheme (the Pro engine theme) > matches the snapshot for both themes > light 1`] = `
+{
+  "candle": {
+    "bar": {
+      "downBorderColor": "#F23645",
+      "downColor": "#F23645",
+      "downWickColor": "#F23645",
+      "noChangeBorderColor": "#8A8F9C",
+      "noChangeColor": "#8A8F9C",
+      "noChangeWickColor": "#8A8F9C",
+      "upBorderColor": "#089981",
+      "upColor": "#089981",
+      "upWickColor": "#089981",
+    },
+    "priceMark": {
+      "high": {
+        "color": "#5B6270",
+      },
+      "last": {
+        "downColor": "#F23645",
+        "noChangeColor": "#8A8F9C",
+        "text": {
+          "color": "#131722",
+        },
+        "upColor": "#089981",
+      },
+      "low": {
+        "color": "#5B6270",
+      },
+    },
+    "tooltip": {
+      "rect": {
+        "borderColor": "#F2F3F5",
+        "color": "#FEFEFE",
+      },
+      "text": {
+        "color": "#5B6270",
+      },
+    },
+  },
+  "crosshair": {
+    "horizontal": {
+      "line": {
+        "color": "#5B6270",
+      },
+      "text": {
+        "backgroundColor": "#686D76",
+        "borderColor": "#686D76",
+        "color": "#FFFFFF",
+      },
+    },
+    "vertical": {
+      "line": {
+        "color": "#5B6270",
+      },
+      "text": {
+        "backgroundColor": "#686D76",
+        "borderColor": "#686D76",
+        "color": "#FFFFFF",
+      },
+    },
+  },
+  "grid": {
+    "horizontal": {
+      "color": "#EBEDF1",
+      "style": "solid",
+    },
+    "vertical": {
+      "color": "#EBEDF1",
+      "style": "solid",
+    },
+  },
+  "indicator": {
+    "bars": [
+      {
+        "borderDashedValue": [
+          2,
+          2,
+        ],
+        "borderSize": 1,
+        "borderStyle": "solid",
+        "downColor": "rgba(242, 54, 69, 0.65)",
+        "noChangeColor": "rgba(138, 143, 156, 0.65)",
+        "style": "fill",
+        "upColor": "rgba(8, 153, 129, 0.65)",
+      },
+    ],
+    "circles": [
+      {
+        "borderDashedValue": [
+          2,
+          2,
+        ],
+        "borderSize": 1,
+        "borderStyle": "solid",
+        "downColor": "rgba(242, 54, 69, 0.65)",
+        "noChangeColor": "rgba(138, 143, 156, 0.65)",
+        "style": "fill",
+        "upColor": "rgba(8, 153, 129, 0.65)",
+      },
+    ],
+    "ohlc": {
+      "downColor": "rgba(242, 54, 69, 0.65)",
+      "noChangeColor": "rgba(138, 143, 156, 0.65)",
+      "upColor": "rgba(8, 153, 129, 0.65)",
+    },
+    "tooltip": {
+      "icons": [
+        {
+          "activeBackgroundColor": "rgba(53, 53, 57, 0.1)",
+          "activeColor": "#5B6270",
+          "backgroundColor": "transparent",
+          "color": "#5B6270",
+          "fontFamily": "klinecharts-pro-icons",
+          "icon": "",
+          "id": "visible",
+          "marginBottom": 0,
+          "marginLeft": 8,
+          "marginRight": 0,
+          "marginTop": 7,
+          "paddingBottom": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "paddingTop": 0,
+          "position": "middle",
+          "size": 14,
+        },
+        {
+          "activeBackgroundColor": "rgba(53, 53, 57, 0.1)",
+          "activeColor": "#5B6270",
+          "backgroundColor": "transparent",
+          "color": "#5B6270",
+          "fontFamily": "klinecharts-pro-icons",
+          "icon": "",
+          "id": "invisible",
+          "marginBottom": 0,
+          "marginLeft": 8,
+          "marginRight": 0,
+          "marginTop": 7,
+          "paddingBottom": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "paddingTop": 0,
+          "position": "middle",
+          "size": 14,
+        },
+        {
+          "activeBackgroundColor": "rgba(53, 53, 57, 0.1)",
+          "activeColor": "#5B6270",
+          "backgroundColor": "transparent",
+          "color": "#5B6270",
+          "fontFamily": "klinecharts-pro-icons",
+          "icon": "",
+          "id": "setting",
+          "marginBottom": 0,
+          "marginLeft": 6,
+          "marginRight": 0,
+          "marginTop": 7,
+          "paddingBottom": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "paddingTop": 0,
+          "position": "middle",
+          "size": 14,
+        },
+        {
+          "activeBackgroundColor": "rgba(53, 53, 57, 0.1)",
+          "activeColor": "#5B6270",
+          "backgroundColor": "transparent",
+          "color": "#5B6270",
+          "fontFamily": "klinecharts-pro-icons",
+          "icon": "",
+          "id": "close",
+          "marginBottom": 0,
+          "marginLeft": 6,
+          "marginRight": 0,
+          "marginTop": 7,
+          "paddingBottom": 0,
+          "paddingLeft": 0,
+          "paddingRight": 0,
+          "paddingTop": 0,
+          "position": "middle",
+          "size": 14,
+        },
+      ],
+      "text": {
+        "color": "#5B6270",
+      },
+    },
+  },
+  "overlay": {
+    "arc": {
+      "color": "#2962FF",
+    },
+    "circle": {
+      "borderColor": "#2962FF",
+      "color": "rgba(41, 98, 255, 0.25)",
+    },
+    "line": {
+      "color": "#2962FF",
+    },
+    "point": {
+      "activeBorderColor": "rgba(41, 98, 255, 0.35)",
+      "activeColor": "#2962FF",
+      "borderColor": "rgba(41, 98, 255, 0.35)",
+      "color": "#2962FF",
+    },
+    "polygon": {
+      "borderColor": "#2962FF",
+      "color": "#2962FF",
+    },
+    "rect": {
+      "borderColor": "#2962FF",
+      "color": "rgba(41, 98, 255, 0.25)",
+    },
+    "rectText": {
+      "backgroundColor": "#2962FF",
+      "borderColor": "#2962FF",
+      "color": "#FFFFFF",
+    },
+    "text": {
+      "backgroundColor": "#2962FF",
+      "borderColor": "#2962FF",
+      "color": "#FFFFFF",
+    },
+  },
+  "separator": {
+    "color": "#EBEDF1",
+  },
+  "xAxis": {
+    "axisLine": {
+      "color": "#EBEDF1",
+    },
+    "tickLine": {
+      "color": "#EBEDF1",
+    },
+    "tickText": {
+      "color": "#5B6270",
+    },
+  },
+  "yAxis": {
+    "axisLine": {
+      "color": "#EBEDF1",
+    },
+    "tickLine": {
+      "color": "#EBEDF1",
+    },
+    "tickText": {
+      "color": "#5B6270",
+    },
+  },
+}
+`;

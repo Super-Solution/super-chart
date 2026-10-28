@@ -1,0 +1,28 @@
+@prefix-cls: klinecharts-pro;
+
+@period-bar-height: 38px;
+@drawing-bar-width: 52px;
+@widget-width: calc(100% - @drawing-bar-width);
+
+// The chrome's default tokens. src/theme/tokens.ts (CHROME_TOKENS) holds the
+// same values for the canvas; src/theme/tokens.test.ts fails if they differ.
+
+// The accent (TradingView's blue), shared with the canvas: drawings, the
+// line/area series and the colour popover's first swatch.
+@c-primary: #2962FF;
+
+// Hover is a neutral wash; only a selected item uses the accent wash.
+@c-hover-background-light: fade(#353539, 10%);
+@c-popover-background-light: #ffffff;
+@c-background-light: #ffffff;
+@c-text-light: #051441;
+// 4.72:1 on white (AA for body text).
+@c-text-second-light: #6B7483;
+@c-border-light: #ebedf1;
+
+@c-hover-background-dark: fade(#a3a4d5, 10%);
+@c-background-dark: #151517;
+@c-popover-background-dark: #1c1c1f;
+@c-text-dark: #f8f8f8;
+@c-text-second-dark: #929AA5;
+@c-border-dark: #292929;

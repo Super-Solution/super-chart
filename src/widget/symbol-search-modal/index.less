@@ -1,0 +1,59 @@
+@import (reference) '../../base.less';
+
+.@{prefix-cls}-symbol-search-modal-input {
+  flex: none;
+  margin: 20px 0 10px 0;
+  height: 40px;
+  svg {
+    width: 18px;
+    height: 18px;
+    fill: var(--klinecharts-pro-text-second-color);
+  }
+  .value {
+    font-size: var(--klinecharts-pro-font-size-lg);
+  }
+}
+
+.@{prefix-cls}-symbol-search-modal-group-label {
+  flex: none;
+  padding: 4px 0;
+  font-size: var(--klinecharts-pro-font-size-sm);
+  color: var(--klinecharts-pro-text-second-color);
+}
+
+.@{prefix-cls}-symbol-search-modal-list {
+  // Only the list scrolls; the search field stays in view (SC-078).
+  flex: 0 1 400px;
+  min-height: 0;
+  margin: 0 calc(-1 * var(--klinecharts-pro-modal-padding, 24px));
+  border-radius: 0 0 var(--klinecharts-pro-radius-lg) var(--klinecharts-pro-radius-lg);
+  li {
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 var(--klinecharts-pro-modal-padding, 24px);
+    cursor: pointer;
+    // The keyboard-active row (ArrowUp/ArrowDown), same wash as a hovered one.
+    &.active {
+      background-color: var(--klinecharts-pro-hover-background-color);
+    }
+    div {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      flex: 1;
+      min-width: 0;
+      img {
+        width: 16px;
+        height: 16px;
+        margin-right: 6px;
+      }
+      span {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+    }
+  }
+}

@@ -1,0 +1,226 @@
+@import (reference) '../../base.less';
+
+.@{prefix-cls}-period-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex: none;
+  height: @period-bar-height;
+  width: 100%;
+  box-sizing: border-box;
+  border-bottom: solid 1px var(--klinecharts-pro-border-color);
+  // Visible: a clipping or scrolling bar would cut its own menus off. It fits
+  // its width instead (src/layout/topBarFit.ts), and nothing in it shrinks
+  // or wraps (SC-064).
+  overflow: visible;
+  // The controls are buttons (SC-143): no browser look, the bar's font.
+  :where(button) {
+    appearance: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: inherit;
+    cursor: pointer;
+    &:focus-visible {
+      outline: 2px solid var(--klinecharts-pro-primary-color);
+      outline-offset: -2px;
+    }
+  }
+  [hidden] {
+    display: none !important;
+  }
+  .menu-container {
+    display: flex;
+    height: 100%;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    flex: none;
+    width: @drawing-bar-width;
+    box-sizing: border-box;
+    border-right: solid 1px var(--klinecharts-pro-border-color);
+    svg {
+      fill: var(--klinecharts-pro-text-color);
+      width: 28px;
+      height: 28px;
+      transition: all .2s;
+      &.rotate {
+        transform: rotate(180deg);
+        transform-origin: center;
+      }
+    }
+  }
+  .symbol {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex: none;
+    height: 100%;
+    font-size: var(--klinecharts-pro-font-size-xl);
+    padding: 0 12px;
+    font-weight: var(--klinecharts-pro-font-weight-strong);
+    box-sizing: border-box;
+    border-right: solid 1px var(--klinecharts-pro-border-color);
+    img {
+      width: 20px;
+      height: 20px;
+      margin-right: 6px;
+    }
+    .label {
+      max-width: 160px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+  }
+  // SC-NEXT #4: a host's own header/symbol-selector content, in place of
+  // .symbol above. Sized like it (full bar height, no shrink) but otherwise
+  // unstyled — the host's own element controls its look. The class is
+  // unprefixed by .klinecharts-pro-period-bar (unlike this file's other
+  // nested rules) because ChartProComponent hands the DOM Node itself to a
+  // plain wrapper div with this exact class, not to a `&`-relative selector.
+  .@{prefix-cls}-header-slot {
+    display: flex;
+    align-items: center;
+    flex: none;
+    height: 100%;
+    box-sizing: border-box;
+  }
+  .item {
+    flex: none;
+    transition: all 0.2s;
+    box-sizing: border-box;
+    white-space: nowrap;
+    fill: var(--klinecharts-pro-text-color);
+    &:active {
+      background-color: var(--klinecharts-pro-active-background-color);
+    }
+    &.selected {
+      background-color: var(--klinecharts-pro-selected-color)!important;
+      color: var(--klinecharts-pro-primary-text-color);
+    }
+  }
+  .period {
+    position: relative;
+    padding: 2px 6px;
+    margin: 0 4px;
+    border-radius: 2px;
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--klinecharts-pro-hover-background-color);
+      }
+    }
+    &:first-child {
+      margin-left: 8px;
+    }
+  }
+  .symbol + .period, .menu-container + .period {
+    margin-left: 12px;
+  }
+  // The periods in one dropdown (narrow), showing the current one. Not
+  // `.selected`: that stays the one selected period chip hosts look for.
+  .period-menu {
+    background-color: var(--klinecharts-pro-selected-color);
+    color: var(--klinecharts-pro-primary-text-color);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    margin-left: 12px;
+    .caret {
+      width: 10px;
+      height: 6px;
+    }
+  }
+  .tools {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    height: 100%;
+    padding: 0 12px;
+    border-right: solid 1px var(--klinecharts-pro-border-color);
+    // A neutral wash: hover must not look like "on" (it used the accent).
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--klinecharts-pro-hover-background-color);
+      }
+    }
+    svg {
+      flex: none;
+      width: 16px;
+      height: 16px;
+      margin-right: 4px;
+    }
+    .label {
+      white-space: nowrap;
+    }
+    // SC-NEXT #4: the Indicators tool's active-count badge (10.png in the
+    // brief). Inline after the icon/label rather than corner-absolute, so it
+    // reads correctly in both the labelled and icon-only collapsed states.
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: none;
+      min-width: 16px;
+      height: 16px;
+      margin-left: 4px;
+      padding: 0 4px;
+      border-radius: 999px;
+      background-color: var(--klinecharts-pro-primary-color);
+      color: #fff;
+      // The type-scale's smallest token (SC-NEXT's badge is the only chrome
+      // text below it before this — chrome.spec.ts checks every top-bar text
+      // node is one of the tokens, not an arbitrary size).
+      font-size: var(--klinecharts-pro-font-size-xs);
+      line-height: 16px;
+      font-weight: var(--klinecharts-pro-font-weight-strong);
+    }
+  }
+  .more svg {
+    margin-right: 0;
+  }
+  .period + .tools {
+    border-left: solid 1px var(--klinecharts-pro-border-color);
+    margin-left: 8px;
+  }
+  // Touch: larger hit areas without larger boxes (SC-084). Up to half the
+  // gap to the next control, and inside the bar.
+  @media (pointer: coarse) {
+    .period::after {
+      content: '';
+      position: absolute;
+      top: -8px;
+      bottom: -8px;
+      left: -4px;
+      right: -4px;
+    }
+  }
+}
+
+// Icon-only tools (compact and narrow). Every tool keeps its name in
+// aria-label and title.
+.@{prefix-cls}-root[data-size="compact"],
+.@{prefix-cls}-root[data-size="narrow"] {
+  .@{prefix-cls}-period-bar .tools {
+    padding: 0 10px;
+    > .label {
+      display: none;
+    }
+    svg {
+      margin-right: 0;
+    }
+  }
+}
+
+.@{prefix-cls}-root[data-size="narrow"] .@{prefix-cls}-period-bar .symbol {
+  padding: 0 8px;
+  .label {
+    max-width: 88px;
+  }
+}

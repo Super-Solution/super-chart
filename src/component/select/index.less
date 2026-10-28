@@ -1,0 +1,127 @@
+@import (reference) '../../base.less';
+
+.@{prefix-cls}-select {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  cursor: pointer;
+  height: 34px;
+  width: 100px;
+  outline: none;
+  &:focus-visible .selector-container {
+    outline: 2px solid var(--klinecharts-pro-primary-color);
+    outline-offset: 1px;
+  }
+  color: var(--klinecharts-pro-text-color);
+  font-size: var(--klinecharts-pro-font-size-base);
+  .selector-container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: 100%;
+    width: 100%;
+    padding: 0 10px;
+    justify-content: space-between;
+    border: solid 1px var(--klinecharts-pro-control-border-color);
+    border-radius: 2px;
+    box-sizing: border-box;
+    .arrow {
+      display: inline;
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 6px solid var(--klinecharts-pro-text-color);
+      transition: all .2s;
+    }
+  }
+  .drop-down-container {
+    background-color: var(--klinecharts-pro-popover-background-color);
+    // The border keeps it apart from the Setting modal it opens in (same
+    // colour, 1.0:1); border-box keeps it as wide as its trigger.
+    border: solid 1px var(--klinecharts-pro-popover-border-color);
+    box-sizing: border-box;
+    box-shadow: var(--klinecharts-pro-shadow-menu);
+    // Fixed: a dialog's scrolling body cannot clip it. Inside a chart the
+    // chart's root is its containing block; the component places it.
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    transition: all .2s;
+    transform: scaleY(0);
+    transform-origin: top;
+    opacity: 0;
+    visibility: hidden;
+    z-index: var(--klinecharts-pro-z-dropdown);
+    border-radius: var(--klinecharts-pro-radius-sm);
+    max-height: 200px;
+    overflow-y: auto;
+    // Here only: scrollbar-color inherits, and wherever it is set Chrome
+    // ignores ::-webkit-scrollbar, which the lists use for their 8px thumb.
+    scrollbar-width: thin;
+    scrollbar-color: var(--klinecharts-pro-border-color) transparent;
+    ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      li {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 6px;
+        height: 40px;
+        padding: 0 10px 0 6px;
+        .check {
+          display: inline-flex;
+          flex: none;
+          width: 16px;
+          height: 16px;
+        }
+        .text {
+          min-width: 0;
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+        }
+        // The check says which one is current (SC-060); colour repeats it.
+        &.selected {
+          color: var(--klinecharts-pro-primary-text-color);
+        }
+        &.active {
+          background-color: var(--klinecharts-pro-hover-background-color);
+        }
+        &:first-child {
+          border-top-left-radius: 2px;
+          border-top-right-radius: 2px;
+        }
+        &:last-child {
+          border-bottom-left-radius: 2px;
+          border-bottom-right-radius: 2px;
+        }
+        &:hover {
+          background-color: var(--klinecharts-pro-hover-background-color);
+        }
+      }
+    }
+  }
+}
+
+.@{prefix-cls}-select-show {
+  .selector-container {
+    border-color: var(--klinecharts-pro-primary-color)!important;
+    .value {
+      color: var(--klinecharts-pro-primary-text-color);
+    }
+    .arrow {
+      transform: rotate(180deg);
+    }
+  }
+  .drop-down-container {
+    transform: scaleY(1)!important;
+    opacity: 1!important;
+    visibility: visible;
+  }
+}

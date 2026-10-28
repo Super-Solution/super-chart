@@ -1,0 +1,99 @@
+@import (reference) '../../base.less';
+
+.@{prefix-cls}-modal {
+  position: absolute;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  left: 0;
+  top: 0;
+  background-color: rgba(0, 0, 0, .2);
+  z-index: var(--klinecharts-pro-z-modal);
+  .inner {
+    // Never larger than the chart (SC-078): the body scrolls, the title and
+    // the buttons stay.
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100% - 16px);
+    box-sizing: border-box;
+    background-color: var(--klinecharts-pro-popover-background-color);
+    border: solid 1px var(--klinecharts-pro-popover-border-color);
+    box-shadow: var(--klinecharts-pro-shadow-dialog);
+    border-radius: var(--klinecharts-pro-radius-lg);
+    outline: none;
+    .title-container {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      flex: none;
+      gap: 12px;
+      height: 48px;
+      padding: 0 var(--klinecharts-pro-modal-padding);
+      font-size: var(--klinecharts-pro-font-size-lg);
+      font-weight: var(--klinecharts-pro-font-weight-strong);
+      color: var(--klinecharts-pro-text-color);
+      position: relative;
+      box-sizing: border-box;
+      border-bottom: solid 1px var(--klinecharts-pro-border-color);
+      .title {
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      // A 28px button around the 14px glyph; the glyph stays aligned with the
+      // content edge.
+      .close-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        width: 28px;
+        height: 28px;
+        margin: 0 -7px 0 0;
+        padding: 0;
+        border: 0;
+        border-radius: var(--klinecharts-pro-radius-sm);
+        appearance: none;
+        background: none;
+        color: var(--klinecharts-pro-text-color);
+        cursor: pointer;
+        svg {
+          width: 14px;
+          height: 14px;
+          fill: currentColor;
+        }
+        @media (hover: hover) {
+          &:hover {
+            background-color: var(--klinecharts-pro-hover-background-color);
+          }
+        }
+        &:focus-visible {
+          outline: 2px solid var(--klinecharts-pro-primary-color);
+          outline-offset: 0;
+        }
+      }
+    }
+    .content-container {
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      padding: 0 var(--klinecharts-pro-modal-padding);
+    }
+    .button-container {
+      display: flex;
+      flex-direction: row;
+      justify-content: flex-end;
+      flex: none;
+      gap: 12px;
+      padding: 16px var(--klinecharts-pro-modal-padding) var(--klinecharts-pro-modal-padding);
+    }
+  }
+}

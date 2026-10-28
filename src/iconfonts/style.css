@@ -1,0 +1,14 @@
+/*
+ * The legend icons' font (eye, gear, close), drawn on the canvas by name:
+ * ICON_FONT_FAMILY in src/theme/tokens.ts. One WOFF face, inlined by the
+ * build (every browser the package targets reads WOFF). No global class
+ * rules: the chrome draws its own icons as SVG, and a rule on [class^="icon-"]
+ * would restyle host elements.
+ */
+@font-face {
+  font-family: 'klinecharts-pro-icons';
+  src: url('fonts/icomoon.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}

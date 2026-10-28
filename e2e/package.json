@@ -1,0 +1,18 @@
+{
+  "name": "super-chart-e2e",
+  "private": true,
+  "description": "Browser behaviour tests for frontend/super-chart: Playwright over the built dist/ in the installed Google Chrome, on every klinecharts version a host runs. Its own package and lockfile, so nothing here enters the published package or the wallet tarball.",
+  "type": "module",
+  "scripts": {
+    "test:browser": "playwright test",
+    "test:browser:9.7.2": "playwright test --project=kc-9.7.2",
+    "test:browser:9.8.12": "playwright test --project=kc-9.8.12"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "kc-9-1-1": "npm:klinecharts@9.1.1",
+    "kc-9-7-2": "npm:klinecharts@9.7.2",
+    "kc-9-8-12": "npm:klinecharts@9.8.12",
+    "webpack": "5.111.1"
+  }
+}

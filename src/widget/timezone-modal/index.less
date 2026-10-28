@@ -1,0 +1,83 @@
+@import (reference) '../../base.less';
+
+// The timezone popover, under the top bar's Timezone item (positioned by the
+// component inside the .klinecharts-pro root).
+.@{prefix-cls}-timezone-picker {
+  position: absolute;
+  z-index: var(--klinecharts-pro-z-dropdown);
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100% - 16px);
+  max-height: min(380px, calc(100% - 56px));
+  box-sizing: border-box;
+  padding: 8px 0 4px;
+  border-radius: var(--klinecharts-pro-radius-lg);
+  border: solid 1px var(--klinecharts-pro-popover-border-color);
+  background-color: var(--klinecharts-pro-popover-background-color);
+  box-shadow: var(--klinecharts-pro-shadow-menu);
+  color: var(--klinecharts-pro-text-color);
+  font-size: var(--klinecharts-pro-font-size-md);
+  .search {
+    margin: 0 8px 6px;
+    height: 32px;
+    padding: 0 10px;
+    box-sizing: border-box;
+    border-radius: var(--klinecharts-pro-radius-sm);
+    border: solid 1px var(--klinecharts-pro-control-border-color);
+    background-color: transparent;
+    color: inherit;
+    font-size: var(--klinecharts-pro-font-size-base);
+    cursor: text;
+    &::placeholder {
+      color: var(--klinecharts-pro-text-second-color);
+    }
+    &:focus {
+      outline: none;
+      border-color: var(--klinecharts-pro-primary-color);
+      box-shadow: 0 0 0 1px var(--klinecharts-pro-primary-color);
+    }
+  }
+  .list {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow-y: auto;
+    li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      height: 32px;
+      padding: 0 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      &.active {
+        background-color: var(--klinecharts-pro-hover-background-color);
+      }
+      &.selected {
+        color: var(--klinecharts-pro-primary-text-color);
+        background-color: var(--klinecharts-pro-selected-color);
+      }
+      // The browser's whole list starts after the picker's own cities.
+      &[data-group="all"]:not([data-group="all"] + li) {
+        border-top: solid 1px var(--klinecharts-pro-popover-border-color);
+      }
+      .name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .offset {
+        flex-shrink: 0;
+        font-size: var(--klinecharts-pro-font-size-sm);
+        color: var(--klinecharts-pro-text-second-color);
+        font-variant-numeric: tabular-nums;
+      }
+    }
+  }
+  .empty {
+    padding: 8px 12px;
+    color: var(--klinecharts-pro-text-second-color);
+  }
+}

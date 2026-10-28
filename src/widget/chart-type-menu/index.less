@@ -1,0 +1,114 @@
+@import (reference) '../../base.less';
+
+// Grouped/favourited chart-type menu (SC-NEXT #2). Extends the shared
+// .klinecharts-pro-menu surface (component/menu/index.less) with group
+// headers and a two-button row (pick the type / toggle favourite).
+.klinecharts-pro-chart-type-menu {
+  min-width: 200px;
+}
+
+.klinecharts-pro-chart-type-group {
+  &:not(:first-child) {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: solid 1px var(--klinecharts-pro-popover-border-color);
+  }
+}
+
+.klinecharts-pro-chart-type-group-label {
+  padding: 4px 10px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--klinecharts-pro-text-second-color);
+}
+
+.klinecharts-pro-chart-type-item {
+  display: flex;
+  align-items: center;
+  padding: 0 2px 0 0;
+  cursor: default;
+  &.selected {
+    color: var(--klinecharts-pro-primary-text-color);
+  }
+}
+
+.klinecharts-pro-chart-type-item-main {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 6px 6px 6px;
+  border: 0;
+  border-radius: var(--klinecharts-pro-radius-sm);
+  appearance: none;
+  background: none;
+  font: inherit;
+  font-size: var(--klinecharts-pro-font-size-md);
+  color: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  @media (hover: hover) {
+    &:hover {
+      background-color: var(--klinecharts-pro-hover-background-color);
+    }
+  }
+  &:focus-visible {
+    outline: 2px solid var(--klinecharts-pro-primary-color);
+    outline-offset: -2px;
+  }
+}
+
+.klinecharts-pro-chart-type-favourite {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--klinecharts-pro-radius-sm);
+  appearance: none;
+  background: none;
+  color: var(--klinecharts-pro-text-second-color);
+  cursor: pointer;
+  &.active {
+    color: #f0a500;
+  }
+  @media (hover: hover) {
+    &:hover {
+      background-color: var(--klinecharts-pro-hover-background-color);
+      color: #f0a500;
+    }
+  }
+  &:focus-visible {
+    outline: 2px solid var(--klinecharts-pro-primary-color);
+    outline-offset: -2px;
+  }
+}
+
+.klinecharts-pro-star {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+// Forced colors (Windows High Contrast, SC-154): the selected state and the
+// favourite star are colour-only affordances otherwise. Scoped by this
+// component's own class names (not a period-bar ancestor selector), since
+// the menu portals to the chart's root, not into the top bar's own subtree.
+@media (forced-colors: active) {
+  .klinecharts-pro-chart-type-item.selected {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .klinecharts-pro-chart-type-favourite.active {
+    forced-color-adjust: none;
+    color: Highlight;
+  }
+}

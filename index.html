@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SUPer-Chart — demo</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b0e11; font-family: system-ui, -apple-system, sans-serif; }
+      #app { display: flex; flex-direction: column; height: 100vh; }
+      header {
+        color: #eaecef; padding: 10px 16px; font-size: 13px; line-height: 1.4;
+        border-bottom: 1px solid #1f2329; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      }
+      header .brand { font-weight: 700; font-size: 15px; color: #2962ff; letter-spacing: -0.2px; }
+      header .tag { font-size: 11px; color: #adb4bd; border: 1px solid #2b3139; padding: 2px 7px; border-radius: 4px; }
+      header .tag.ss { color: #c79bff; border-color: #4a3a66; }
+      #chart { flex: 1; min-height: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <span class="brand">SUPer-Chart</span>
+        <span class="tag">KLineChart Pro engine</span>
+        <span class="tag ss">SuperScript · SMA Cross (price pane)</span>
+        <span class="tag ss">SuperScript · RSI (sub pane)</span>
+        <span class="tag">offline synthetic datafeed</span>
+      </header>
+      <div id="chart"></div>
+    </div>
+    <script type="module" src="/demo/main.ts"></script>
+  </body>
+</html>

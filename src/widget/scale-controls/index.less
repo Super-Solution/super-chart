@@ -1,0 +1,56 @@
+@import (reference) '../../base.less';
+
+// The anchor: an absolutely positioned element appended into the candle
+// pane's own y-axis DOM (ChartProComponent), so it sits in that axis's box
+// at any chart size with no manual measurement — the same technique the
+// price-unit badge uses (src/index.less, &-price-unit).
+.@{prefix-cls}-scale-controls-anchor {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  z-index: var(--klinecharts-pro-z-float);
+  pointer-events: none; // only the buttons themselves are interactive.
+}
+
+.@{prefix-cls}-scale-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--klinecharts-pro-radius-sm);
+  border: solid 1px var(--klinecharts-pro-popover-border-color);
+  background-color: var(--klinecharts-pro-popover-background-color);
+  box-shadow: var(--klinecharts-pro-shadow-bar);
+  pointer-events: auto;
+  button {
+    appearance: none;
+    margin: 0;
+    height: 20px;
+    min-width: 20px;
+    padding: 0 4px;
+    border: 0;
+    border-radius: var(--klinecharts-pro-radius-sm);
+    background: none;
+    font: inherit;
+    font-size: var(--klinecharts-pro-font-size-xs);
+    line-height: 1;
+    color: var(--klinecharts-pro-text-second-color);
+    cursor: pointer;
+    svg {
+      width: 12px;
+      height: 12px;
+      fill: currentColor;
+    }
+    &:hover {
+      background-color: var(--klinecharts-pro-hover-background-color);
+    }
+    &.selected {
+      color: var(--klinecharts-pro-primary-text-color);
+      background-color: var(--klinecharts-pro-selected-color);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--klinecharts-pro-primary-color);
+      outline-offset: 1px;
+    }
+  }
+}

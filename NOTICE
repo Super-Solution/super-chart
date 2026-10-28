@@ -1,0 +1,21 @@
+SUPer-Chart
+Copyright 2026 ZzyzxLabs
+
+This product includes software developed by the KLineChart project.
+
+SUPer-Chart is based on KLineChart Pro (@klinecharts/pro)
+  https://github.com/klinecharts/pro
+  forked at commit 4234b79f0bcfc26734d0a721c38cbd6d23aa38f5
+  Copyright (c) liihuu and the KLineChart authors
+  Licensed under the Apache License, Version 2.0.
+
+It depends on KLineChart (klinecharts)
+  https://github.com/klinecharts/KLineChart
+  Copyright (c) liihuu and the KLineChart authors
+  Licensed under the Apache License, Version 2.0.
+
+The original Apache-2.0 license text is retained in the LICENSE file.
+
+Modifications and additions by ZzyzxLabs (the SuperScript language runtime, the
+AI layer, and related rebranding) are likewise licensed under the Apache License,
+Version 2.0.

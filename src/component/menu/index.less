@@ -1,0 +1,69 @@
+@import (reference) '../../base.less';
+
+// Menus opened from the top bar, rendered at the chart's root (SC-064).
+.@{prefix-cls}-menu {
+  position: absolute;
+  z-index: var(--klinecharts-pro-z-dropdown);
+  display: flex;
+  flex-direction: column;
+  min-width: 128px;
+  max-width: calc(100% - 8px);
+  box-sizing: border-box;
+  padding: 4px;
+  overflow-y: auto;
+  border: solid 1px var(--klinecharts-pro-popover-border-color);
+  border-radius: var(--klinecharts-pro-radius-sm);
+  background-color: var(--klinecharts-pro-popover-background-color);
+  box-shadow: var(--klinecharts-pro-shadow-menu);
+  scrollbar-width: thin;
+  cursor: default;
+  &-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex: none;
+    gap: 6px;
+    width: 100%;
+    margin: 0;
+    padding: 6px 10px 6px 6px;
+    border: 0;
+    border-radius: var(--klinecharts-pro-radius-sm);
+    appearance: none;
+    background: none;
+    font: inherit;
+    font-size: var(--klinecharts-pro-font-size-md);
+    color: var(--klinecharts-pro-text-color);
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    @media (hover: hover) {
+      &:hover {
+        background-color: var(--klinecharts-pro-hover-background-color);
+      }
+    }
+    &:focus-visible {
+      outline: 2px solid var(--klinecharts-pro-primary-color);
+      outline-offset: -2px;
+    }
+    // The check mark says which one is current; the colour only repeats it.
+    &.selected {
+      color: var(--klinecharts-pro-primary-text-color);
+    }
+    &[aria-disabled="true"] {
+      opacity: .5;
+      cursor: default;
+    }
+  }
+  &-check {
+    display: inline-flex;
+    flex: none;
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.@{prefix-cls}-check {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}

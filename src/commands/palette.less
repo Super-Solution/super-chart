@@ -1,0 +1,59 @@
+@import (reference) '../base.less';
+
+.@{prefix-cls}-command-palette-input {
+  flex: none;
+  width: 100%;
+  height: 36px;
+  margin: 4px 0 10px 0;
+  padding: 0 10px;
+  border: 1px solid var(--klinecharts-pro-border-color);
+  border-radius: var(--klinecharts-pro-radius-md, 6px);
+  background-color: var(--klinecharts-pro-background-color);
+  color: var(--klinecharts-pro-text-color);
+  font-size: var(--klinecharts-pro-font-size-md);
+  &:focus {
+    outline: none;
+    border-color: var(--klinecharts-pro-primary-color);
+  }
+}
+
+.@{prefix-cls}-command-palette-list {
+  flex: 0 1 320px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.@{prefix-cls}-command-palette-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 6px;
+  border-radius: var(--klinecharts-pro-radius-sm, 4px);
+  cursor: pointer;
+  &.active,
+  &:hover {
+    background-color: var(--klinecharts-pro-hover-background-color);
+  }
+}
+
+.@{prefix-cls}-command-palette-title {
+  color: var(--klinecharts-pro-text-color);
+  font-size: var(--klinecharts-pro-font-size-md);
+}
+
+.@{prefix-cls}-command-palette-id {
+  color: var(--klinecharts-pro-text-second-color);
+  font-size: var(--klinecharts-pro-font-size-sm);
+}
+
+.@{prefix-cls}-command-palette-status {
+  flex: none;
+  min-height: 16px;
+  padding-top: 4px;
+  color: var(--klinecharts-pro-text-second-color);
+  font-size: var(--klinecharts-pro-font-size-sm);
+}

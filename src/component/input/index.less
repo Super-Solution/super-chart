@@ -1,0 +1,52 @@
+@import (reference) '../../base.less';
+
+.@{prefix-cls}-input {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  position: relative;
+  height: 34px;
+  border: solid 1px var(--klinecharts-pro-control-border-color);
+  border-radius: 2px;
+  padding: 0 12px;
+  font-size: var(--klinecharts-pro-font-size-sm);
+  color: var(--klinecharts-pro-text-color);
+  box-sizing: border-box;
+  cursor: pointer;
+  &[data-status="focus"] {
+    border-color: var(--klinecharts-pro-primary-color);
+  }
+  &[data-status="error"] {
+    border-color: #F23645;
+  }
+  .prefix {
+    display: flex;
+    white-space: nowrap;
+    padding-right: 10px;
+  }
+  .suffix {
+    display: flex;
+    white-space: nowrap;
+    padding-left: 10px;
+  }
+  .value {
+    width: 100%;
+    border: none;
+    outline: none;
+    border: none;
+    background: transparent;
+    color: var(--klinecharts-pro-text-color);
+    font-size: var(--klinecharts-pro-font-size-base);
+    // font-family, not the `font` shorthand, which would reset the size.
+    font-family: inherit;
+    cursor: text;
+  }
+}
+
+// iOS Safari zooms the page into a text field whose font is under 16px and
+// does not zoom back (SC-087). Touch only; scoped to the chart's own fields.
+@media (pointer: coarse) {
+  .@{prefix-cls}-input .value {
+    font-size: 16px;
+  }
+}

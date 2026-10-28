@@ -1,0 +1,301 @@
+@import (reference) './base.less';
+@import './component/index.less';
+@import './widget/index.less';
+@import './replay/ReplayBar.less';
+@import './canvas/clockWidget.less';
+@import './iconfonts/style.css';
+
+.@{prefix-cls} {
+  --klinecharts-pro-primary-color: @c-primary;
+  --klinecharts-pro-hover-background-color: @c-hover-background-light;
+  --klinecharts-pro-background-color: @c-background-light;
+  --klinecharts-pro-popover-background-color: @c-popover-background-light;
+  --klinecharts-pro-text-color: @c-text-light;
+  --klinecharts-pro-text-second-color: @c-text-second-light;
+  --klinecharts-pro-border-color: @c-border-light;
+  --klinecharts-pro-selected-color: fade(@c-primary, 15%);
+  // Derived tokens: computed from the ones above on this element, so they
+  // follow a host's overrides and the dark values without being set again.
+  // Text on a selected item (the accent pulled toward the text colour):
+  // >= 4.5:1 on the selected wash in both themes, where the accent alone
+  // was 3.4-3.8:1.
+  --klinecharts-pro-primary-text-color: color-mix(in srgb, var(--klinecharts-pro-primary-color) 70%, var(--klinecharts-pro-text-color));
+  // Borders of controls (inputs, selects, an off switch): >= 3:1. The
+  // border colour stays for decorative dividers.
+  --klinecharts-pro-control-border-color: var(--klinecharts-pro-text-second-color);
+  // Pressed controls.
+  --klinecharts-pro-active-background-color: color-mix(in srgb, var(--klinecharts-pro-text-color) 16%, transparent);
+  // Floating surfaces: three elevations (bars, menus, dialogs), two radii and
+  // a border every surface has, so none depends on its shadow alone.
+  --klinecharts-pro-shadow-bar: 0 2px 8px rgba(0, 0, 0, .12);
+  --klinecharts-pro-shadow-menu: 0 4px 16px rgba(0, 0, 0, .16);
+  --klinecharts-pro-shadow-dialog: 0 8px 24px rgba(0, 0, 0, .2);
+  --klinecharts-pro-radius-sm: 4px;
+  --klinecharts-pro-radius-lg: 8px;
+  --klinecharts-pro-popover-border-color: var(--klinecharts-pro-border-color);
+  // Stacking inside the chart, lowest first. The root isolates them, so no
+  // value here competes with the host page's z-indexes.
+  --klinecharts-pro-z-bar: 10;
+  --klinecharts-pro-z-float: 20;
+  --klinecharts-pro-z-badge: 30;
+  --klinecharts-pro-z-loading: 50;
+  --klinecharts-pro-z-popover: 99;
+  --klinecharts-pro-z-modal: 99;
+  --klinecharts-pro-z-dropdown: 100;
+  // Type scale. Runtime properties, so a host can change them without
+  // fighting selector specificity; nested labels inherit instead of setting
+  // their own size.
+  --klinecharts-pro-font-size-xs: 11px;
+  --klinecharts-pro-font-size-sm: 12px;
+  --klinecharts-pro-font-size-md: 13px;
+  --klinecharts-pro-font-size-base: 14px;
+  --klinecharts-pro-font-size-lg: 16px;
+  --klinecharts-pro-font-size-xl: 18px;
+  --klinecharts-pro-font-weight-regular: 400;
+  --klinecharts-pro-font-weight-strong: 600;
+  // A dialog's side inset: its title, its body and the rows of lists that
+  // run edge to edge in it (SC-071), so they cannot drift apart.
+  --klinecharts-pro-modal-padding: 24px;
+  &[data-theme="dark"] {
+    --klinecharts-pro-hover-background-color: @c-hover-background-dark;
+    --klinecharts-pro-background-color: @c-background-dark;
+    --klinecharts-pro-popover-background-color: @c-popover-background-dark;
+    --klinecharts-pro-text-color: @c-text-dark;
+    --klinecharts-pro-text-second-color: @c-text-second-dark;
+    --klinecharts-pro-border-color: @c-border-dark;
+    color-scheme: dark;
+    --klinecharts-pro-shadow-bar: 0 2px 8px rgba(0, 0, 0, .4);
+    --klinecharts-pro-shadow-menu: 0 4px 16px rgba(0, 0, 0, .5);
+    --klinecharts-pro-shadow-dialog: 0 8px 24px rgba(0, 0, 0, .6);
+    // In dark, #292929 on a #1c1c1f popover is 1.17:1 and shadows barely
+    // show: a border mixed from the text colour (1.5:1), following a host's
+    // text and popover tokens.
+    --klinecharts-pro-popover-border-color: color-mix(in srgb, var(--klinecharts-pro-text-color) 14%, var(--klinecharts-pro-popover-background-color));
+  }
+  // The host's element carries only the theme: custom properties, the
+  // inherited text colour and size, and the colour scheme native parts
+  // (scrollbars, the range slider's track) follow, none of which sizes or
+  // places it. Its height, display and position are the host's (utilities,
+  // layered or not, now win), and a host that sets tokens on it keeps doing
+  // so (SC-075). The layout is on the engine's own root below.
+  color-scheme: light;
+  color: var(--klinecharts-pro-text-color);
+  font-size: var(--klinecharts-pro-font-size-base);
+  // The engine's own root, the only child of the host's element (SC-075).
+  &-root {
+    position: relative;
+    // A stacking context: the chart's modals, menus and loading layer stack
+    // among themselves and never above the host's sticky headers, toasts or
+    // portals (they used their raw z-index, up to 100, in the page's context).
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    background-color: var(--klinecharts-pro-background-color);
+    // Its size never comes from its content (the top bar alone asks for
+    // about 1,200px, the rail for 600px): a grid column, a flex item or a
+    // pane holding the chart sizes it, and it shrinks with them (SC-076).
+    // The top bar fits itself to it (src/layout/topBarFit.ts).
+    container-type: size;
+    // Nothing inside widens the page (SC-086). Only across: menus, flyouts
+    // and modals may still extend below a short chart.
+    overflow-x: clip;
+    -webkit-tap-highlight-color: transparent;
+    // A container that gives the root no height (SC-075): a definite
+    // height, not 80vh on the host, and a console warning to size it
+    // (src/layout/hostRoot.ts).
+    &[data-autosize] {
+      height: 480px;
+    }
+    // Maximised inside the page where the browser's full screen is
+    // unavailable or refused (SC-081). !important: hosts size this element
+    // inline, and the browser's own :fullscreen rules work the same way.
+    &.@{prefix-cls}-pseudo-fullscreen {
+      position: fixed !important;
+      top: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      left: 0 !important;
+      width: auto !important;
+      height: 100vh !important;
+      height: 100dvh !important;
+      max-width: none !important;
+      max-height: none !important;
+      z-index: 2147483000;
+    }
+  }
+  // Native controls default to the browser's font, not the inherited one.
+  // :where() keeps this at one class of specificity, so component rules
+  // (e.g. the toolbar's monospace hex field) still win.
+  :where(button, input, select, textarea) {
+    font-family: inherit;
+  }
+  &-watermark {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 1;
+    transform: translateX(-50%) translateY(-50%);
+    .logo {
+      width: 160px;
+      height: 184px;
+      fill: var(--klinecharts-pro-border-color);
+    }
+  }
+  &-price-unit {
+    display: none;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: var(--klinecharts-pro-z-badge);
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: var(--klinecharts-pro-radius-sm);
+    font-size: var(--klinecharts-pro-font-size-xs);
+    font-weight: var(--klinecharts-pro-font-weight-strong);
+    padding: 1px 4px;
+    color: var(--klinecharts-pro-text-second-color);
+    box-shadow: var(--klinecharts-pro-shadow-bar);
+    border: solid 1px var(--klinecharts-pro-popover-border-color);
+    background-color: var(--klinecharts-pro-background-color);
+  }
+  // A legend icon's hover label (SC-099): follows the pointer, since
+  // klinecharts exposes no public geometry for an icon to anchor to.
+  &-icon-tooltip {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: var(--klinecharts-pro-z-float);
+    pointer-events: none;
+    white-space: nowrap;
+    border-radius: var(--klinecharts-pro-radius-sm);
+    font-size: var(--klinecharts-pro-font-size-xs);
+    padding: 2px 6px;
+    color: var(--klinecharts-pro-text-second-color);
+    box-shadow: var(--klinecharts-pro-shadow-bar);
+    border: solid 1px var(--klinecharts-pro-popover-border-color);
+    background-color: var(--klinecharts-pro-background-color);
+  }
+  // The replay bar's own styles are in src/replay/ReplayBar.less (SC-067).
+  // Whatever height the top bar leaves (none in headless mode): a flex item,
+  // so a bar that wraps (a host's CSS) or is hidden needs no calc().
+  &-content {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  &-widget {
+    width: @widget-width;
+    height: 100%;
+    margin-left: 0;
+    // SC-NEXT #1: fade-in on a new page of history or a chart-type switch
+    // (src/motion/fadeIn.ts triggers it by writing opacity directly; this is
+    // the only place the duration/easing/reduced-motion opt-out live).
+    &.klinecharts-pro-fade-target {
+      transition: opacity 180ms ease-out;
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
+    }
+    &[data-drawing-bar-visible="false"] {
+      width: 100%;
+    }
+    // klinecharts sets this element's tabIndex and inline outline:none
+    // (ChartProComponent clears the inline style and sets tabIndex=0 instead,
+    // so it follows the host's tab order — SC-088). The ring here restores
+    // focus visibility for it (SC-069); inset, since the element fills its
+    // host slot and an outer ring would be clipped.
+    > div:focus-visible {
+      outline: 2px solid var(--klinecharts-pro-primary-color);
+      outline-offset: -2px;
+    }
+    // The brush/highlighter capture pointer drags itself (SC-082): the
+    // browser must not also pan, pinch-zoom or long-press-select under the
+    // same touch while a stroke is armed.
+    &[data-freehand="true"] {
+      touch-action: none;
+    }
+  }
+  // A shared keyboard-focus ring for the chrome's own buttons and tabbable
+  // elements (SC-069). Every tabIndex this chrome sets is 0 (never a
+  // negative "programmatic focus only" stop), so [tabindex="0"] is exactly
+  // the tabbable set — and it sidesteps a less@4 parser bug: `:where(button,
+  // [tabindex]:not(...))` fails to parse ("Missing closing ')'") the moment a
+  // second :where() argument nests its own :not([attr="-1"]); reproduced in
+  // isolation, unrelated to anything else in this file. Text inputs are left
+  // out on purpose — the Input wrapper already recolours its border on
+  // focus, and :focus-visible would double up with it on every click (not
+  // just keyboard focus).
+  :where(button, [tabindex="0"]):focus-visible {
+    outline: 2px solid var(--klinecharts-pro-primary-color);
+    outline-offset: 2px;
+  }
+  // Windows High Contrast (forced-colors): states that are colour-only
+  // vanish under the forced palette (SC-154). System colours only; anything
+  // else is either replaced (borders/outlines) or exempted where the colour
+  // itself is content, not decoration (the drawing toolbar's swatches).
+  @media (forced-colors: active) {
+    .@{prefix-cls}-period-bar .item.selected,
+    .@{prefix-cls}-period-bar .chart-type-item.selected,
+    .@{prefix-cls}-drawing-toolbar .tb-button.active,
+    .@{prefix-cls}-drawing-toolbar .tb-menu-item.selected {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+    .@{prefix-cls}-switch {
+      border: 1px solid ButtonText;
+      box-sizing: border-box;
+      .thumb {
+        background-color: ButtonText;
+      }
+      &.turn-on {
+        background-color: Highlight;
+        .thumb {
+          background-color: HighlightText;
+        }
+      }
+    }
+    // These colours are content (the user's chosen line/text colour), not
+    // decoration: never force them to the system palette.
+    .@{prefix-cls}-drawing-toolbar .tb-swatch,
+    .@{prefix-cls}-drawing-toolbar .tb-color-bar {
+      forced-color-adjust: none;
+    }
+  }
+  // A screen-reader-only region: present in the accessibility tree, invisible
+  // and out of the layout. Used for the chart's aria-describedby summary and
+  // the "Loading…" / list-loading live regions.
+  &-visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+// Screen-reader only: visible to assistive tech, invisible on screen. Used
+// for a live result count (symbol search, SC-106) and similar announcements
+// that need no visible text.
+.@{prefix-cls}-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

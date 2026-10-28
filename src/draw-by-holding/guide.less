@@ -1,0 +1,59 @@
+.klinecharts-pro {
+.sc-draw-hold-controls {
+  position: absolute;
+  inset: 8px 48px 8px 8px;
+  z-index: var(--klinecharts-pro-z-popover);
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: calc(100% - 16px);
+  color: var(--klinecharts-pro-text-color);
+  font-size: 12px;
+  pointer-events: none;
+
+  button {
+    pointer-events: auto;
+    border: 1px solid var(--klinecharts-pro-border-color);
+    color: var(--klinecharts-pro-text-color);
+    background: var(--klinecharts-pro-popover-background-color);
+    cursor: pointer;
+    &:hover { background: var(--klinecharts-pro-hover-background-color); }
+    &:focus-visible { outline: 2px solid var(--klinecharts-pro-primary-color); outline-offset: 2px; }
+  }
+}
+.sc-draw-hold-help { width: 28px; height: 28px; border-radius: 50%; flex: none; font-size: 15px; }
+.sc-draw-hold-status { padding: 4px 7px; border-radius: 4px; background: var(--klinecharts-pro-popover-background-color); }
+.sc-draw-hold-status:empty { display: none; }
+.sc-draw-hold-guide {
+  pointer-events: auto;
+  position: absolute;
+  right: 0;
+  top: 36px;
+  width: 360px;
+  max-width: 100%;
+  max-height: min(540px, 65vh, calc(100% - 44px));
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 18px;
+  border: 1px solid var(--klinecharts-pro-border-color);
+  border-radius: 8px;
+  color: var(--klinecharts-pro-text-color);
+  background: var(--klinecharts-pro-popover-background-color);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+  &[hidden] { display: none; }
+  h3 { margin: 0 28px 12px 0; font-size: 16px; }
+  p { line-height: 1.6; margin: 12px 0 0; color: var(--klinecharts-pro-text-second-color); }
+}
+.sc-draw-hold-close { position: absolute; top: 10px; right: 10px; width: 28px; height: 28px; border-radius: 4px; font-size: 20px; }
+.sc-draw-hold-got-it { width: 100%; padding: 8px 12px; border-radius: 4px; margin-top: 14px; }
+.sc-draw-hold-examples {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+  > div { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  svg { width: 64px; max-width: 100%; height: 48px; color: var(--klinecharts-pro-primary-color); }
+  small { color: var(--klinecharts-pro-text-second-color); text-align: center; }
+}
+}

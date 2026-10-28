@@ -1,0 +1,32 @@
+@import (reference) '../base.less';
+
+// UTC/local clock toggle (SC-NEXT #3), appended into the candle pane's main
+// DOM node exactly like the existing "scroll to latest" button
+// (ChartProComponent's goToLatestButton) — both are absolutely positioned
+// against that node, which klinecharts already gives `position: relative`.
+.klinecharts-pro-clock {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  z-index: var(--klinecharts-pro-z-badge);
+  padding: 2px 8px;
+  border: 0;
+  border-radius: var(--klinecharts-pro-radius-sm);
+  appearance: none;
+  background: none;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--klinecharts-pro-text-second-color);
+  cursor: pointer;
+  @media (hover: hover) {
+    &:hover {
+      background-color: var(--klinecharts-pro-hover-background-color);
+      color: var(--klinecharts-pro-text-color);
+    }
+  }
+  &:focus-visible {
+    outline: 2px solid var(--klinecharts-pro-primary-color);
+    outline-offset: -2px;
+  }
+}

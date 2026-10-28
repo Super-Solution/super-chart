@@ -1,0 +1,408 @@
+@import (reference) '../../base.less';
+
+// Floating editor for the selected drawing. Positioned (left/top) by the
+// component inside .klinecharts-pro-content, over the chart area. Above the
+// chart (no z-index) and the replay bar (z-bar); below the drawing-bar popovers
+// and modals (z-popover, z-modal).
+.@{prefix-cls}-drawing-toolbar {
+  position: absolute;
+  z-index: var(--klinecharts-pro-z-float);
+  display: flex;
+  flex-direction: row;
+  // SC-080: a callout-width toolbar (8 controls) does not fit a ~204-268px
+  // widget. It wraps onto a second row instead of overflowing the chart, and
+  // is capped to the chart's own width (set inline from measure(), because an
+  // absolutely positioned box otherwise shrinks to "containing block minus
+  // left", not "the chart's width" — a toolbar dragged toward the right edge
+  // would fold into a tall column instead of wrapping sideways).
+  flex-wrap: wrap;
+  row-gap: 2px;
+  width: max-content;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px;
+  box-sizing: border-box;
+  border-radius: var(--klinecharts-pro-radius-lg);
+  border: solid 1px var(--klinecharts-pro-popover-border-color);
+  background-color: var(--klinecharts-pro-popover-background-color);
+  box-shadow: var(--klinecharts-pro-shadow-bar);
+  color: var(--klinecharts-pro-text-color);
+  fill: currentColor;
+  font-size: var(--klinecharts-pro-font-size-sm);
+  line-height: 1;
+  user-select: none;
+  white-space: nowrap;
+
+  .tb-control {
+    position: relative;
+    display: flex;
+  }
+
+  .tb-button {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 4px;
+    margin: 0;
+    box-sizing: border-box;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    fill: currentColor;
+    font: inherit;
+    cursor: pointer;
+    &:hover,
+    &[aria-expanded="true"] {
+      background-color: var(--klinecharts-pro-hover-background-color);
+    }
+    &:focus-visible {
+      outline: solid 2px var(--klinecharts-pro-primary-color);
+      outline-offset: -2px;
+    }
+    &:active {
+      background-color: var(--klinecharts-pro-active-background-color);
+    }
+    // After :hover and :active, so a hovered active button still looks active.
+    &.active {
+      color: var(--klinecharts-pro-primary-text-color);
+      fill: var(--klinecharts-pro-primary-color);
+      background-color: var(--klinecharts-pro-selected-color);
+    }
+  }
+
+  .tb-grip {
+    min-width: 16px;
+    padding: 0 2px;
+    cursor: grab;
+    touch-action: none;
+    color: var(--klinecharts-pro-text-second-color);
+    &:active {
+      cursor: grabbing;
+    }
+  }
+
+  .tb-text-button {
+    padding: 0 6px;
+    color: var(--klinecharts-pro-text-color);
+  }
+
+  // .sc-icon: the shared registry's own wrapper class (src/icons, SC-074),
+  // used by LockIcon / UnlockIcon / TrashIcon / MoreIcon here.
+  .toolbar-icon, .sc-icon {
+    width: 18px;
+    height: 18px;
+    flex: none;
+  }
+
+  .toolbar-glyph {
+    width: 24px;
+    height: 12px;
+    flex: none;
+  }
+
+  .tb-color-icon {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+  }
+
+  .tb-color-bar {
+    display: block;
+    width: 16px;
+    height: 3px;
+    border-radius: 1px;
+    // SC-059: border-color (a 1.17:1 border on the popover) made a white swatch
+    // in light theme, or #131722 in dark, read as an empty cell. A ring
+    // derived from the text colour clears 3:1 in both themes, and follows a
+    // consumer's own token overrides instead of a colour fixed per data-theme.
+    box-shadow: inset 0 0 0 1px var(--klinecharts-pro-text-second-color);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--klinecharts-pro-text-color) 55%, transparent);
+  }
+
+  .tb-separator {
+    width: 1px;
+    height: 20px;
+    margin: 0 3px;
+    background-color: var(--klinecharts-pro-border-color);
+  }
+
+  .tb-popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 1;
+    box-sizing: border-box;
+    padding: 6px;
+    border-radius: var(--klinecharts-pro-radius-sm);
+    border: solid 1px var(--klinecharts-pro-popover-border-color);
+    background-color: var(--klinecharts-pro-popover-background-color);
+    box-shadow: var(--klinecharts-pro-shadow-menu);
+    color: var(--klinecharts-pro-text-color);
+  }
+
+  &.open-up .tb-popover {
+    top: auto;
+    bottom: calc(100% + 6px);
+  }
+
+  .tb-menu {
+    display: flex;
+    flex-direction: column;
+    min-width: 132px;
+    padding: 4px;
+  }
+
+  .tb-menu-end {
+    left: auto;
+    right: 0;
+  }
+
+  .tb-menu-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    height: 30px;
+    padding: 0 8px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    fill: currentColor;
+    font: inherit;
+    font-size: var(--klinecharts-pro-font-size-md);
+    text-align: left;
+    cursor: pointer;
+    &:hover:not(:disabled) {
+      background-color: var(--klinecharts-pro-hover-background-color);
+    }
+    &:focus-visible {
+      outline: solid 2px var(--klinecharts-pro-primary-color);
+      outline-offset: -2px;
+    }
+    &.selected {
+      color: var(--klinecharts-pro-primary-text-color);
+    }
+    &:disabled {
+      opacity: .4;
+      cursor: default;
+    }
+    .tb-check {
+      display: inline-flex;
+      width: 16px;
+      height: 16px;
+      margin-left: auto;
+      fill: none;
+    }
+  }
+
+  .tb-color-popover {
+    width: 204px;
+  }
+
+  .tb-swatches {
+    display: grid;
+    grid-template-columns: repeat(8, 20px);
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+
+  .tb-swatch {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    margin: 0;
+    border-radius: 3px;
+    border: none;
+    // SC-059: an inset ring instead of a border-color edge, so a swatch that
+    // matches the popover background (white in light theme, #131722 in dark)
+    // still reads as a swatch, not an empty grid cell.
+    box-shadow: inset 0 0 0 1px var(--klinecharts-pro-text-second-color);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--klinecharts-pro-text-color) 55%, transparent);
+    cursor: pointer;
+    &:hover {
+      transform: scale(1.12);
+    }
+    &:focus-visible,
+    &.selected {
+      outline: solid 2px var(--klinecharts-pro-primary-color);
+      outline-offset: 1px;
+    }
+  }
+
+  .tb-field {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    color: var(--klinecharts-pro-text-second-color);
+    font-size: var(--klinecharts-pro-font-size-sm);
+    input[type="range"] {
+      flex: 1;
+      min-width: 0;
+      accent-color: var(--klinecharts-pro-primary-color);
+    }
+  }
+
+  .tb-field-stack {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    .tb-hex {
+      flex: none;
+      width: 100%;
+    }
+  }
+
+  .tb-field-value {
+    width: 34px;
+    text-align: right;
+    color: var(--klinecharts-pro-text-color);
+  }
+
+  .tb-hex {
+    flex: 1;
+    min-width: 0;
+    height: 24px;
+    padding: 0 6px;
+    box-sizing: border-box;
+    border-radius: 4px;
+    border: solid 1px var(--klinecharts-pro-border-color);
+    background-color: var(--klinecharts-pro-background-color);
+    color: var(--klinecharts-pro-text-color);
+    font: inherit;
+    font-family: monospace;
+    text-transform: uppercase;
+    &:focus {
+      outline: none;
+      border-color: var(--klinecharts-pro-primary-color);
+    }
+    &[aria-invalid="true"] {
+      border-color: #F23645;
+    }
+  }
+
+  // SC-150: colour alone (the red border above) never told a screen reader or
+  // a low-vision user why the hex field is rejected. This text is the
+  // aria-describedby target while it shows, and disappears the moment the
+  // value parses again.
+  .tb-hex-error {
+    color: #F23645;
+    font-size: var(--klinecharts-pro-font-size-sm);
+  }
+}
+
+// iOS Safari zooms the page into a text field under 16px (SC-087): the hex
+// field is 16px on touch. After the rule above, so it wins over font: inherit.
+@media (pointer: coarse) {
+  .@{prefix-cls}-drawing-toolbar .tb-hex {
+    font-size: 16px;
+  }
+}
+
+// SC-090: the right-click context menu. Same surface and .tb-menu-item look
+// as the toolbar's own "More" popover above (drawing-editor/contextMenu.tsx),
+// positioned at the press point instead of under a button.
+.@{prefix-cls}-drawing-context-menu {
+  position: absolute;
+  z-index: var(--klinecharts-pro-z-float);
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: 4px;
+  box-sizing: border-box;
+  border-radius: var(--klinecharts-pro-radius-sm);
+  border: solid 1px var(--klinecharts-pro-popover-border-color);
+  background-color: var(--klinecharts-pro-popover-background-color);
+  box-shadow: var(--klinecharts-pro-shadow-menu);
+  color: var(--klinecharts-pro-text-color);
+  fill: currentColor;
+  font-size: var(--klinecharts-pro-font-size-sm);
+
+  .tb-menu-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    height: 30px;
+    padding: 0 8px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    fill: currentColor;
+    font: inherit;
+    font-size: var(--klinecharts-pro-font-size-md);
+    text-align: left;
+    cursor: pointer;
+    .toolbar-icon {
+      width: 18px;
+      height: 18px;
+      flex: none;
+    }
+    .icon-overlay {
+      width: 22px;
+      height: 22px;
+      flex: none;
+    }
+    &:hover:not(:disabled) {
+      background-color: var(--klinecharts-pro-hover-background-color);
+    }
+    &:focus-visible {
+      outline: solid 2px var(--klinecharts-pro-primary-color);
+      outline-offset: -2px;
+    }
+    &:disabled {
+      opacity: .4;
+      cursor: default;
+    }
+  }
+}
+
+// SC-093: the inline text/image editor that replaced window.prompt().
+.@{prefix-cls}-drawing-text-editor {
+  position: absolute;
+  z-index: var(--klinecharts-pro-z-float);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  .dte-input {
+    box-sizing: border-box;
+    width: 100%;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: var(--klinecharts-pro-radius-sm);
+    border: solid 1px var(--klinecharts-pro-primary-color);
+    background-color: var(--klinecharts-pro-popover-background-color);
+    box-shadow: var(--klinecharts-pro-shadow-menu);
+    color: var(--klinecharts-pro-text-color);
+    font: inherit;
+    font-size: var(--klinecharts-pro-font-size-base);
+    &[aria-invalid="true"] {
+      border-color: #F23645;
+    }
+  }
+
+  .dte-error {
+    padding: 2px 8px;
+    border-radius: var(--klinecharts-pro-radius-sm);
+    background-color: var(--klinecharts-pro-popover-background-color);
+    box-shadow: var(--klinecharts-pro-shadow-menu);
+    color: #F23645;
+    font-size: var(--klinecharts-pro-font-size-xs);
+  }
+}
+
+@media (pointer: coarse) {
+  .@{prefix-cls}-drawing-text-editor .dte-input {
+    font-size: 16px;
+  }
+}

@@ -1,0 +1,62 @@
+@import (reference) '../../base.less';
+
+// Edge to edge in the dialog, rows inset like the title (SC-071); it shrinks
+// in a short chart and scrolls on its own (SC-078).
+.@{prefix-cls}-indicator-modal-list {
+  flex: 0 1 440px;
+  min-height: 0;
+  margin: 0 calc(-1 * var(--klinecharts-pro-modal-padding, 24px));
+  border-radius: 0 0 var(--klinecharts-pro-radius-lg) var(--klinecharts-pro-radius-lg);
+  position: relative;
+  li {
+    padding: 0 var(--klinecharts-pro-modal-padding, 24px);
+  }
+  .row {
+    outline: none;
+    &:focus-visible {
+      box-shadow: inset 0 0 0 2px var(--klinecharts-pro-primary-color);
+    }
+  }
+  .title {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background-color: var(--klinecharts-pro-popover-background-color);
+    font-size: var(--klinecharts-pro-font-size-lg);
+    color: var(--klinecharts-pro-text-color);
+    font-weight: var(--klinecharts-pro-font-weight-regular);
+    cursor: default;
+    &:hover {
+      background-color: var(--klinecharts-pro-popover-background-color);
+    }
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    &.managed {
+      cursor: default;
+      opacity: 0.7;
+    }
+  }
+  .presets {
+    display: flex;
+    gap: 4px;
+  }
+  .preset {
+    font-size: var(--klinecharts-pro-font-size-sm);
+    color: var(--klinecharts-pro-text-second-color);
+    border: 1px solid var(--klinecharts-pro-border-color);
+    border-radius: 4px;
+    padding: 0 6px;
+    &:hover {
+      color: var(--klinecharts-pro-primary-color);
+      border-color: var(--klinecharts-pro-primary-color);
+    }
+  }
+  .empty {
+    text-align: center;
+    color: var(--klinecharts-pro-text-second-color);
+    padding: 20px 0;
+  }
+}
