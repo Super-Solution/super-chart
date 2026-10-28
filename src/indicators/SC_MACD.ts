@@ -28,9 +28,10 @@
  *
  * Maintained by ZzyzxLabs. Part of SUPer-Chart (Apache-2.0).
  */
+import { priceSeries } from '../core/series'
 import type { IndicatorFigureStyle, IndicatorStyle, IndicatorTemplate, KLineData } from 'klinecharts'
 import { macd } from '../ta'
-import { ohlcv, SERIES_PRICE } from './shared'
+import { SERIES_PRICE } from './shared'
 
 interface Row { dif: number, dea: number, hist: number }
 
@@ -55,7 +56,7 @@ export function calcScMacd (dataList: KLineData[], indicator?: { calcParams?: un
   const fast = Number(p[0]) > 0 ? Number(p[0]) : 12
   const slow = Number(p[1]) > 0 ? Number(p[1]) : 26
   const signal = Number(p[2]) > 0 ? Number(p[2]) : 9
-  const { close } = ohlcv(dataList)
+  const close = priceSeries(dataList, 'close')
   const { dif, dea, hist } = macd(close, fast, slow, signal)
   return dataList.map((_, i) => {
     const row: Partial<Row> = {}

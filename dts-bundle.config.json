@@ -6,22 +6,45 @@
     {
       "filePath": "./src/index.ts",
       "outFile": "./dist/index.d.ts",
-      "output": { "noBanner": true, "umdModuleName": "klinechartspro" }
+      "output": {
+        "noBanner": true,
+        "umdModuleName": "klinechartspro"
+      }
     },
     {
       "filePath": "./src/lite.ts",
       "outFile": "./dist/lite.d.ts",
-      "output": { "noBanner": true }
+      "output": {
+        "noBanner": true
+      }
     },
     {
       "filePath": "./src/superscript-entry.ts",
       "outFile": "./dist/superscript.d.ts",
-      "output": { "noBanner": true }
+      "output": {
+        "noBanner": true
+      }
     },
     {
       "filePath": "./src/commands/schema.ts",
       "outFile": "./dist/commands.d.ts",
-      "output": { "noBanner": true }
+      "output": {
+        "noBanner": true
+      }
+    },
+    {
+      "filePath": "./src/core/index.ts",
+      "outFile": "./dist/core.d.ts",
+      "output": {
+        "noBanner": true
+      }
+    },
+    {
+      "filePath": "./src/native.ts",
+      "outFile": "./dist/native.d.ts",
+      "output": {
+        "noBanner": true
+      }
     }
   ]
 }

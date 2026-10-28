@@ -26,9 +26,10 @@
  *
  * Maintained by ZzyzxLabs. Part of SUPer-Chart (Apache-2.0).
  */
+import { priceSeries } from '../core/series'
 import type { IndicatorTemplate, KLineData } from 'klinecharts'
 import { sma } from '../ta'
-import { ohlcv, toRows, SERIES_PRICE } from './shared'
+import { toRows, SERIES_PRICE } from './shared'
 import { paramsKey, tailMode, type TailCache } from './tail'
 
 type Row = Record<string, number>
@@ -56,7 +57,7 @@ export function createScSmaCalc (): (dataList: KLineData[], indicator?: { calcPa
     const cache = caches.get(cacheKey) ?? null
     const mode = tailMode(cache, dataList, key)
     if (mode === 'full') {
-      const { close } = ohlcv(dataList)
+      const close = priceSeries(dataList, 'close')
       const rows = toRows(['sma'], [sma(close, len)])
       caches.set(cacheKey, { ref: dataList, length: n, paramsKey: key, state: { rows } })
       return rows

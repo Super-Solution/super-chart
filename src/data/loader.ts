@@ -40,6 +40,7 @@ import type { KLineData } from 'klinecharts'
 
 import type { Datafeed, DatafeedSubscribeCallback, HistoryRequest, Period, SymbolInfo } from '../types'
 
+import type { ChartDataPort, HistoryLoadRequest } from '../core/chartPort'
 import type { FrameScheduler } from './coalesce'
 import { TickCoalescer } from './coalesce'
 import type { HistoryCacheOptions } from './historyCache'
@@ -88,21 +89,8 @@ export interface DataStatus {
 }
 
 /** The part of a klinecharts Chart the loader drives (9.7 has no setLoadDataCallback). */
-export interface LoaderChart {
-  applyNewData: (data: KLineData[], more?: boolean) => void
-  applyMoreData: (data: KLineData[], more?: boolean) => void
-  updateData: (data: KLineData) => void
-  getDataList: () => KLineData[]
-  loadMore?: (cb: (timestamp: number | null) => void) => void
-  setLoadDataCallback?: (cb: (params: LoadDataRequest) => void) => void
-}
-
-/** klinecharts 9.8's LoadDataParams. */
-export interface LoadDataRequest {
-  type: string
-  data: KLineData | null
-  callback: (data: KLineData[], more?: boolean) => void
-}
+export type LoaderChart = ChartDataPort<KLineData>
+export type LoadDataRequest = HistoryLoadRequest<KLineData>
 
 interface EventTargetLike {
   addEventListener: (type: string, fn: () => void) => void

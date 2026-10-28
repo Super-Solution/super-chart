@@ -20,10 +20,11 @@
  *
  * Maintained by ZzyzxLabs. Part of SUPer-Chart (Apache-2.0).
  */
+import { priceSeries } from '../core/series'
 import type { IndicatorTemplate, KLineData } from 'klinecharts'
 import { bbPercent } from '../ta'
 import { createLevelsDraw } from './levels'
-import { ohlcv, OSCILLATOR_PRECISION, toRows, SERIES_NORMAL } from './shared'
+import { OSCILLATOR_PRECISION, toRows, SERIES_NORMAL } from './shared'
 
 type Row = Record<string, number>
 
@@ -31,7 +32,7 @@ export function calcScBbp (dataList: KLineData[], indicator?: { calcParams?: unk
   const p = indicator?.calcParams ?? [20, 2]
   const len = Number(p[0]) > 0 ? Number(p[0]) : 20
   const mult = Number(p[1]) > 0 ? Number(p[1]) : 2
-  const { close } = ohlcv(dataList)
+  const close = priceSeries(dataList, 'close')
   return toRows(['b'], [bbPercent(close, len, mult)])
 }
 

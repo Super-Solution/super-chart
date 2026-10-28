@@ -1,4 +1,4 @@
-> Private source snapshot **v0.0.40**, imported from `ZzyzxLabs/zzyzx-full-repo` main `de693554a087299df77fbd65be8e1f1f445f9fee` (`frontend/super-chart`). This repository remains private. This import does not publish a package or configure automatic CI/release workflows. Existing package installation instructions below refer to the upstream distribution.
+> Private development **v0.0.41** in `Super-Solution/super-chart`, based on the imported v0.0.40 snapshot. Shared Web/React Native computation is available through `./core` and `./native`; rendering and gestures remain host-specific. See [shared-core scope and measurements](docs/SHARED-CORE.md). No package has been published and no automatic CI/release workflow is installed.
 
 <div align="center">
 
