@@ -1,4 +1,4 @@
-/** Pure chart core: no DOM, React, Solid, renderer, gesture or klinecharts runtime. */
+/** Renderer-free chart core: no DOM, React, Solid, renderer, gesture or klinecharts runtime. */
 export type { MarketBar } from './types'
 export * as ta from './ta'
 export type { Series } from './ta'
@@ -11,3 +11,10 @@ export * from './viewport'
 export { indicatorSeries as nativeIndicatorSeries } from './nativeIndicators'
 export type { NativeCandle } from './nativeIndicators'
 export type { ChartDataPort, HistoryLoadRequest } from './chartPort'
+export * from './feed'
+export * from './dataLoader'
+export * from './historyCache'
+export * from './requestRange'
+export * from './marketKeys'
+export * from './replay'
+export * from './loaderEnvironment'
