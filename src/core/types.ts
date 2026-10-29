@@ -7,5 +7,6 @@ export interface MarketBar {
   close: number
   volume?: number
   turnover?: number
-  [key: string]: unknown
+  /** Preserve the Web feed extension-field contract; OHLCV fields stay numeric. */
+  [key: string]: any
 }

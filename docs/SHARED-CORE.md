@@ -16,7 +16,7 @@ The original Mobile mathematical model, viewport transitions and MA20/EMA21 calc
 - src/core/financialModel.ts: platform-neutral financial-card model, domains, coordinates and nearest-point lookup.
 - src/core/viewport.ts: pure viewport state transitions extracted from native; hosts keep their own gesture handlers.
 - src/core/nativeIndicators.ts: existing native MA20/EMA21 compatibility. Native EMA starts at the first close, while the standard Web TA EMA uses an SMA seed. This difference remains explicit rather than silently changing historical results.
-- src/data/* and src/ta/index.ts retain compatibility facades for existing Web imports. src/indicators/* remain the thin KLineChart template adapters. src/data/loader.ts still owns the existing Web load protocol/engine bridge; this phase does not replace that state machine.
+- src/data/* and src/ta/index.ts retain compatibility facades for existing Web imports. src/indicators/* remain the thin KLineChart template adapters. Phase 1 retained the existing Web load protocol/engine bridge. Phase 2 moves the same state machine into core and leaves a thin browser adapter; see SHARED-LOADER.md.
 
 Import the renderer-free API from @zzyzxlabs/super-chart/core or @zzyzxlabs/super-chart/native. Both entries use plain JavaScript/TypeScript, with no DOM, React, Solid, browser Worker or KLineChart runtime import. KLineChart is an optional peer for core/native consumers; Web hosts must still install the supported KLineChart peer themselves. The existing main/lite/superscript entry contracts remain unchanged.
 
