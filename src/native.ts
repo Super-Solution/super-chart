@@ -1,2 +1,4 @@
-/** React Native entry: data and computational core only. Keep native SVG rendering and gestures in the host. */
+/** React Native entry: shared core plus opt-in native lifecycle wiring; rendering stays in the host. */
 export * from './core/index'
+export { createNativeEnvironment, createNativeDataLoader } from './platform/native'
+export type { NativeAppStateSource, NativeEnvironmentOptions, NativeLoaderOptions } from './platform/native'

@@ -1,4 +1,4 @@
-> Private development **v0.0.42** in `Super-Solution/super-chart`, based on the imported v0.0.40 snapshot. Shared Web/React Native data lifecycle and computation are available through `./core` and `./native`; rendering and gestures remain host-specific. See [shared-core scope and measurements](docs/SHARED-CORE.md) and [shared loader/lifecycle](docs/SHARED-LOADER.md). No package has been published and no automatic CI/release workflow is installed.
+> Private development **v0.0.43** in `Super-Solution/super-chart`, based on the imported v0.0.40 snapshot. Shared Web/React Native data lifecycle and computation are available through `./core` and `./native`; rendering and gestures remain host-specific. See [shared-core scope and measurements](docs/SHARED-CORE.md) and [shared loader/lifecycle](docs/SHARED-LOADER.md) and [opt-in native lifecycle](docs/NATIVE-LIFECYCLE.md). No package has been published and no automatic CI/release workflow is installed.
 
 <div align="center">
 

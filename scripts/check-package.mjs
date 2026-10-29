@@ -111,7 +111,9 @@ const PACKAGE = "@zzyzxlabs/super-chart";
  * three builds, measuring ~760 KB. Raised 2026-10-01 to 775 KB; the separate
  * source-map, packed-file, CSS-scope and external-import gates remain active.
  */
-const MAX_PACKED_BYTES = 775_000;
+// Private candidate 0.0.43 adds the opt-in RN lifecycle adapter and declarations.
+// Measured packed size: 776,223 bytes (no new runtime dependency or source maps).
+const MAX_PACKED_BYTES = 780_000;
 /**
  * dist/klinecharts-pro.css budget: ~21 KB of it was four copies of the icon font.
  * Raised 2026-09-27 (30_000 -> 34_000, actual ~33.3 KB) for the i18n/a11y batch:
