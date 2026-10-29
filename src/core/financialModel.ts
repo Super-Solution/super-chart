@@ -58,20 +58,31 @@ function numericX(key: ChartX): number { if (typeof key === 'number') return key
 function keyId(key: ChartX, xType: FinancialChartData['xType']): string { return xType === 'category' ? String(key) : String(numericX(key)); }
 function validCandle(c: FinancialCandle): boolean { return [c.o, c.h, c.l, c.c].every(Number.isFinite) && c.h >= Math.max(c.o, c.c) && c.l <= Math.min(c.o, c.c); }
 export function chartKeys(data: FinancialChartData): ChartX[] {
+  // Scope date parsing to this call. Never retain history by array identity:
+  // callers may edit points between builds, and returned models keep no cache.
+  const dates = new Map<string, number>();
+  const numeric = (key: ChartX): number => {
+    if (typeof key === 'number') return key;
+    const parsed = Number(key);
+    if (Number.isFinite(parsed)) return parsed;
+    let date = dates.get(key);
+    if (date === undefined) { date = Date.parse(key); dates.set(key, date); }
+    return date;
+  };
   const sources = data.series ?? [];
   const longest = sources.reduce<FinancialSeries | null>((best, s) => (best == null) || s.points.length > best.points.length ? s : best, null);
   const seen = new Set<string>();
   const keys: ChartX[] = [];
   const add = (key: ChartX) => {
-    if (data.xType !== 'category' && !Number.isFinite(numericX(key))) return;
-    const id = keyId(key, data.xType);
+    if (data.xType !== 'category' && !Number.isFinite(numeric(key))) return;
+    const id = data.xType === 'category' ? String(key) : String(numeric(key));
     if (!seen.has(id)) { seen.add(id); keys.push(key); }
   };
   // Preserve category ordering: candles, longest series, then the other series.
   for (const candle of data.candles ?? []) if (validCandle(candle)) add(candle.t);
   if (longest != null) for (const point of longest.points) if (Number.isFinite(point[1])) add(point[0]);
   for (const source of sources) for (const point of source.points) if (Number.isFinite(point[1])) add(point[0]);
-  return data.xType === 'category' ? keys : keys.sort((a, b) => numericX(a) - numericX(b));
+  return data.xType === 'category' ? keys : keys.sort((a, b) => numeric(a) - numeric(b));
 }
 function niceTicks(min: number, max: number, count = 3): number[] {
   if (min === max) return [min];
@@ -123,7 +134,7 @@ export function buildFinancialChartModel(data: FinancialChartData, width: number
   const useZero = data.scale === 'zero' || (data.scale !== 'tight' && sources.length > 0 && sources.every(s => s.type === 'bar'));
   const [min, max] = domain(leftValues, useZero || sources.some(s => s.type === 'bar' && (s.axis ?? 'left') === 'left'));
   const [rightMin, rightMax] = domain(rightValues, useZero || sources.some(s => s.type === 'bar' && s.axis === 'right'));
-  const xNumbers = xKeys.map(numericX), xMin = xNumbers[0] ?? 0, xMax = xNumbers[xNumbers.length - 1] ?? 1;
+  const xNumbers = data.xType === 'category' ? [] : xKeys.map(numericX), xMin = xNumbers[0] ?? 0, xMax = xNumbers[xNumbers.length - 1] ?? 1;
   const x = (key: ChartX, index: number) => data.xType === 'category'
     ? geometry.left + (xKeys.length < 2 ? geometry.plotWidth / 2 : index / (xKeys.length - 1) * geometry.plotWidth)
     : geometry.left + (xMax === xMin ? geometry.plotWidth / 2 : (numericX(key) - xMin) / (xMax - xMin) * geometry.plotWidth);
@@ -158,5 +169,6 @@ export function nearestChartIndex(model: FinancialChartModel, touchX: number): n
 export function valueAtChartIndex(series: FinancialSeries, data: FinancialChartData, model: FinancialChartModel, index: number): number | null {
   const key = model.xKeys[index];
   if (key == null) return null;
-  return series.points.find(p => keyId(p[0], data.xType) === keyId(key, data.xType))?.[1] ?? null;
+  const id = keyId(key, data.xType);
+  return series.points.find(p => keyId(p[0], data.xType) === id)?.[1] ?? null;
 }
