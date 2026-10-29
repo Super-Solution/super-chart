@@ -19,10 +19,11 @@
  *
  * Maintained by ZzyzxLabs. Part of SUPer-Chart (Apache-2.0).
  */
+import { priceSeries } from '../core/series'
 import type { IndicatorTemplate, KLineData } from 'klinecharts'
 import { stochRsi } from '../ta'
 import { createLevelsDraw } from './levels'
-import { ohlcv, OSCILLATOR_PRECISION, toRows, SERIES_NORMAL } from './shared'
+import { OSCILLATOR_PRECISION, toRows, SERIES_NORMAL } from './shared'
 
 type Row = Record<string, number>
 
@@ -32,7 +33,7 @@ export function calcScStochRsi (dataList: KLineData[], indicator?: { calcParams?
   const stochLen = Number(p[1]) > 0 ? Number(p[1]) : 14
   const kLen = Number(p[2]) > 0 ? Number(p[2]) : 3
   const dLen = Number(p[3]) > 0 ? Number(p[3]) : 3
-  const { close } = ohlcv(dataList)
+  const close = priceSeries(dataList, 'close')
   const { k, d } = stochRsi(close, rsiLen, stochLen, kLen, dLen)
   return toRows(['k', 'd'], [k, d])
 }

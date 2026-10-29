@@ -97,7 +97,9 @@ export default defineConfig(({ mode }) => {
               'klinecharts-pro': './src/index.ts',
               lite: './src/lite.ts',
               superscript: './src/superscript-entry.ts',
-              commands: './src/commands/schema.ts'
+              commands: './src/commands/schema.ts',
+              core: './src/core/index.ts',
+              native: './src/native.ts'
             },
             formats: ['es']
           }

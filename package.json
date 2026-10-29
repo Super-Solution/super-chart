@@ -1,6 +1,6 @@
 {
   "name": "@zzyzxlabs/super-chart",
-  "version": "0.0.40",
+  "version": "0.0.41",
   "description": "Super Chart — a TradingView-grade financial charting engine based on KLineChart, with built-in AI and the SuperScript indicator/strategy language. Maintained by ZzyzxLabs.",
   "type": "module",
   "main": "./dist/klinecharts-pro.cjs",
@@ -31,7 +31,18 @@
     },
     "./style.css": "./dist/klinecharts-pro.css",
     "./dist/*": "./dist/*",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js",
+      "default": "./dist/core.js"
+    },
+    "./native": {
+      "types": "./dist/native.d.ts",
+      "react-native": "./dist/native.js",
+      "import": "./dist/native.js",
+      "default": "./dist/native.js"
+    }
   },
   "typesVersions": {
     "*": {
@@ -43,6 +54,12 @@
       ],
       "commands": [
         "./dist/commands.d.ts"
+      ],
+      "core": [
+        "./dist/core.d.ts"
+      ],
+      "native": [
+        "./dist/native.d.ts"
       ]
     }
   },
@@ -113,5 +130,10 @@
   },
   "peerDependencies": {
     "klinecharts": "^9.7.2"
+  },
+  "peerDependenciesMeta": {
+    "klinecharts": {
+      "optional": true
+    }
   }
 }

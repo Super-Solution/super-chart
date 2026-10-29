@@ -19,3 +19,8 @@ The original Apache-2.0 license text is retained in the LICENSE file.
 Modifications and additions by ZzyzxLabs (the SuperScript language runtime, the
 AI layer, and related rebranding) are likewise licensed under the Apache License,
 Version 2.0.
+
+The platform-neutral financial model, viewport transitions and native indicator
+compatibility calculations were extracted from SupWallet Mobile in
+ZzyzxLabs/zzyzx-full-repo at de693554a087299df77fbd65be8e1f1f445f9fee.
+Shared-core extraction and optimizations, Copyright 2026 ZzyzxLabs.
