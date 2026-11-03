@@ -36,6 +36,8 @@ let cursorX: number | null = null
 let inspectedFrame: RealtimeChartFrame | null = null
 let inspectedIndex: number | null = null
 let exporting = false
+let seeking = false
+let navigationRevision = 0
 const abort = new AbortController()
 const samples: number[] = []
 const price = (i: number): number => 100 + 8 * Math.sin(i / 37) + 2 * Math.sin(i / 7)
@@ -115,7 +117,7 @@ function draw (): void {
   }
   const sorted = [...samples].sort((a, b) => a - b)
   metrics.textContent = `Loaded ${snapshot.length.toLocaleString()} · visible ${snapshot.bars.length} · ${snapshot.following ? 'following' : 'pinned'} · ${snapshot.mode} · notifications ${notifications} · draws ${draws} · model + draw median ${sorted[Math.floor(sorted.length / 2)].toFixed(2)} ms`
-  element<HTMLButtonElement>('older').disabled = !snapshot.hasMore
+  element<HTMLButtonElement>('older').disabled = seeking || !snapshot.hasMore
   range.max = String(Math.max(0, snapshot.length - snapshot.bars.length))
   range.value = String(snapshot.viewport.i0)
   range.disabled = snapshot.length <= snapshot.bars.length
@@ -144,7 +146,57 @@ on(element('out'), 'click', () => { view.zoom(1 / 1.5) })
 on(mode, 'change', () => { view.setMode(mode.value as CandleMode) })
 on(spacing, 'change', schedule)
 on(indicators, 'change', schedule)
-on(element('seek'), 'click', () => { status.textContent = view.seek(new Date(time.value).getTime()) ? 'Jumped to nearest loaded candle' : 'Enter a valid loaded time' })
+const cancelSeek = (): void => { navigationRevision++ }
+for (const type of ['pointerdown', 'wheel', 'keydown']) on(plot, type, cancelSeek)
+for (const id of ['range', 'mode', 'spacing', 'indicators', 'time']) on(element(id), 'input', cancelSeek)
+for (const id of ['follow', 'in', 'out']) on(element(id), 'click', cancelSeek)
+on(element('seek'), 'click', () => { void seekTime() })
+async function seekTime (): Promise<void> {
+  if (disposed || seeking) return
+  const target = new Date(time.value).getTime(), rows = series.getDataList()
+  if (!Number.isFinite(target)) { status.textContent = 'Enter a valid time'; return }
+  if (loader.status.state !== 'ready' || rows.length === 0) { status.textContent = 'Wait for data to be ready'; return }
+  if (target > rows[rows.length - 1].timestamp) { status.textContent = 'Requested time is newer than available data'; return }
+  const revision = ++navigationRevision
+  seeking = true
+  let historyFailure: string | null = null
+  const stopSeekError = loader.on('error', failure => {
+    if (failure.phase !== 'more') return
+    historyFailure = failure.error instanceof Error ? failure.error.message : String(failure.error)
+    if (!disposed && revision === navigationRevision) status.textContent = 'History loading failed: ' + historyFailure
+  })
+  const button = element<HTMLButtonElement>('seek'); button.disabled = true
+  element<HTMLButtonElement>('older').disabled = true
+  try {
+    let pages = 0
+    while (series.getDataList()[0].timestamp > target && series.hasMore && pages < 8) {
+      const before = series.getDataList()[0].timestamp
+      // One bounded page at a time permits cancellation between page requests.
+      await loader.loadUntil(target, 1)
+      pages++
+      if (disposed) return
+      if (revision !== navigationRevision) { status.textContent = 'Automatic jump cancelled; loaded history retained'; return }
+      if (historyFailure !== null) throw new Error(historyFailure)
+      const first = series.getDataList()[0]
+      if (first === undefined || first.timestamp >= before) break
+    }
+    if (disposed || revision !== navigationRevision) return
+    const first = series.getDataList()[0]
+    if (first === undefined) { status.textContent = 'No history available'; return }
+    if (first.timestamp > target) {
+      status.textContent = !series.hasMore ? 'Requested time predates available history' :
+        pages === 8 ? 'Loaded 8 pages; press Go again to continue toward this time' : 'History loading did not advance; press Go to retry'
+      return
+    }
+    status.textContent = view.seek(target) ? 'Jumped to nearest candle at requested time' : 'Unable to locate requested time'
+  } catch (error) {
+    if (!disposed) status.textContent = 'History loading failed: ' + (error instanceof Error ? error.message : String(error))
+  } finally {
+    stopSeekError()
+    seeking = false
+    if (!disposed) { button.disabled = false; element<HTMLButtonElement>('older').disabled = !series.hasMore }
+  }
+}
 const stopGestures = attachChartGestures(plot, view, () => frame?.model.geometry ?? null, x => { cursorX = x; inspect() })
 const resize = new ResizeObserver(schedule)
 resize.observe(plot)

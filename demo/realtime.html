@@ -30,7 +30,7 @@
     <label><input id="indicators" type="checkbox" checked /> MA20 / EMA21</label>
   </div>
   <div class="controls">
-    <label>Jump to local time <input id="time" type="datetime-local" /></label><button id="seek">Go</button>
+    <label>Find local time <input id="time" type="datetime-local" /></label><button id="seek">Go</button>
     <button id="export">Export PNG</button><button id="dispose">Dispose session</button><a href="./realtime.html">New session</a>
   </div>
   <div id="plot" tabindex="0" role="group" aria-label="Synthetic chart. Drag or use arrow keys to pan; pinch, wheel or zoom buttons to zoom. Home follows latest.">
@@ -43,7 +43,7 @@
   <output id="readout">Move over a candle to inspect its values.</output>
   <output id="status" aria-live="polite">Loading…</output>
   <output id="metrics"></output>
-  <p class="notes">Drag / arrow keys: pan · pinch / wheel: zoom · Page Up/Down: page · Home: follow · +/-: zoom · Escape: cancel · Go: nearest loaded time.
+  <p class="notes">Drag / arrow keys: pan · pinch / wheel: zoom · Page Up/Down: page · Home: follow · +/-: zoom · Escape: cancel · Go: load up to 8 history pages and locate time.
   HA prices are synthetic; MA20 / EMA21 always use raw closes. All prices here are generated locally.
   Pointer inspection reuses the current geometry; it does not rebuild the chart.
   Timings measure this demo's model/draw work, not device FPS or production performance.</p>

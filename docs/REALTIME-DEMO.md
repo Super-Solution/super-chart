@@ -140,3 +140,33 @@ while pointerup before the next frame committed the last move to19819. TypeScrip
 including the demo passed; no page errors were observed in the navigation sequence.
 No tests/pipelines were added. Core/package code is unchanged and its previously
 passing checks were not redundantly rerun. This remains a Web development demo.
+
+## Bounded navigation into unloaded history
+
+Go now uses the existing loader.loadUntil API to find older times instead of
+silently clamping an unloaded request to the oldest visible data. It loads one
+page at a time, at most8 pages per click; another click can continue. A successful
+lookup still uses the nearest available candle. Dates newer than the latest data,
+before available history, the page budget, non-advancing loads and loader errors
+are reported separately. No new loader/cache/retry algorithm was introduced.
+
+During lookup, Go and manual Load older are disabled. Pointer/keyboard/wheel
+navigation, changing the time or view controls cancels the pending automatic jump.
+The page already in flight may finish and is retained; no further pages are then
+requested. Disposal ignores completion and keeps controls disabled. The feature
+does not forcibly abort a shared history request. Loader failure messages are
+retained, and its existing backoff policy remains in effect.
+
+Validation: the7 existing SC-141 loadUntil cases passed (77 unrelated loader cases
+filtered), plus demo-inclusive TypeScript. Manual Chrome observations:
+- A requested older time loaded22,500 rows and pinned the requested interval.
+- A farther target stopped at24,000 after8 pages, then the next click reached25,000
+  and located it. A date before all25,000 rows was explicitly rejected.
+- A future time preserved the current viewport with an unavailable message.
+- With a temporary local250ms response delay, Follow cancelled the jump after one
+  page (20,500 loaded, still following). With a temporary rejected response, the
+  original error appeared and the20,000-row view stayed intact.
+- Disposal during a delayed page preserved its terminal message/disabled controls.
+No browser page errors. Delay/failure probes were local runtime observations, not
+committed fixtures or tests. No tests, pipelines, core/package changes or production
+integration were added. Unchanged library builds were not repeated.
