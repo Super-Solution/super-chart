@@ -2,6 +2,7 @@ import type { RealtimeSeries, CandleMode, RealtimeSeriesChange } from './realtim
 import type { MarketBar } from './types'
 import { MIN_BARS, clampViewport, defaultViewport, panViewport, viewportSpan, zoomViewport } from './viewport'
 import type { Viewport } from './viewport'
+import { nearestBarIndex } from './series'
 
 export interface RealtimeViewSnapshot {
   readonly version: number
@@ -85,6 +86,17 @@ export class RealtimeView {
     if (this._disposed || mode === this._mode) return
     this._mode = mode
     this._publish()
+  }
+
+  /** Jump to the nearest loaded candle. Does not fetch history outside the loaded range. */
+  seek (timestamp: number, anchor = 0.5): boolean {
+    if (this._disposed || !Number.isFinite(anchor)) return false
+    const index = nearestBarIndex(this._series.getDataList(), timestamp)
+    if (index === null) return false
+    const span = viewportSpan(this._viewport)
+    const start = index - Math.round(Math.max(0, Math.min(1, anchor)) * (span - 1))
+    this.setViewport({ i0: start, i1: start + span - 1 })
+    return true
   }
 
   requestMore (): void { if (!this._disposed) this._series.requestMore() }

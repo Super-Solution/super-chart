@@ -19,3 +19,5 @@ See docs/NORMALIZATION-BUFFER.md for the subsequent normalization buffer optimiz
 See docs/REALTIME-SERIES.md for the opt-in batch sink and incremental native indicators.
 
 See docs/REALTIME-VIEW.md for stable viewport subscriptions and incremental Heikin Ashi.
+
+See docs/REALTIME-INSPECTION.md for visible geometry, cursor inspection and time navigation.
