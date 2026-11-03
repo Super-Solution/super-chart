@@ -15,3 +15,5 @@ For local development, use the existing package scripts with the locked dependen
 The package name and GitHub Packages publishConfig are retained for compatibility. The repository URL is updated to this repository. Publishing a package, making this repository public, or changing release automation requires a separate owner instruction.
 
 See docs/NORMALIZATION-BUFFER.md for the subsequent normalization buffer optimization.
+
+See docs/REALTIME-SERIES.md for the opt-in batch sink and incremental native indicators.
