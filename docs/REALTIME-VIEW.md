@@ -90,3 +90,33 @@ offscreen tail replacement; the same first candle timestamp after a 100-bar prep
 visible HA matching full-history conversion after prepend; zoom from 160 to 80 bars;
 follow returning to latest; and an unchanged snapshot after dispose. No production
 feed, React renderer or actual Mobile application was exercised.
+
+## Pinned-window data reuse (0.0.50)
+
+Metadata-only availability changes and tail changes entirely after an unchanged
+viewport now retain the frozen visible bars/MA20/EMA21 arrays. The outer snapshot
+still changes and reports the latest version, total length and hasMore; subscribers
+still receive those updates. Existing suppression of unchanged-length offscreen
+replacements is preserved. Reset, prepend, a changing viewport, visible replacement
+and mode changes continue to read fresh visible data. Reuse is safe for HA and the
+causal MA/EMA calculations because a later input cannot change an earlier output.
+
+Hosts may use visible-array identity plus layout/options to avoid rebuilding geometry
+when only metadata changes. They must still read current metadata from getSnapshot()
+for range controls, counts and history availability. A reused frame remains bound to
+its original snapshot: do not use that older frame's length/version as live metadata.
+The offline demo demonstrates this separation. Paint timing excludes skipped paints.
+
+Bounded local Bun measurement: 20,000 initial candles, pinned 160-candle HA window,
+1,000 individual offscreen appends. Across nine retained samples after warmup,
+median update time was80.93ms before and0.377ms after. Both delivered1,000 notifications,
+ended at21,000 rows, and preserved visible values; initialization/first HA calculation
+is excluded. This is a core operation measurement, not browser/native FPS.
+A manual old/new snapshot comparison matched through pinned append, availability,
+prepend, follow, visible replacement, raw mode, short/empty reset and first append.
+
+Manual Chrome observed pinned raw and HA quote bursts updating loaded counts without
+additional main draws; history prepend, follow, following burst, indicator toggle
+and resize each painted again. No page errors. Existing loader84 and HA9 tests passed,
+scoped lint/type checks passed, and independent review found no confirmed findings.
+No tests, assertions, fixtures, pipelines or dependencies were added to the repository.
