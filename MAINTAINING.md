@@ -12,7 +12,7 @@ This snapshot includes source, existing tests, examples and lockfiles. It exclud
 
 For local development, use the existing package scripts with the locked dependencies: bun install --frozen-lockfile --ignore-scripts, bun run build, and relevant existing tests. Run browser checks only when relevant; no package is published by these local commands.
 
-The package name and GitHub Packages publishConfig are retained for compatibility. The repository URL is updated to this repository. Publishing a package, making this repository public, or changing release automation requires a separate owner instruction.
+Owner authorized public npm publication on 2026-11-03 as @super-solution/super-chart. publishConfig targets registry.npmjs.org with public access. The GitHub repository stays private; making it public or adding release automation requires separate authorization. Existing original-monorepo consumers are unchanged.
 
 See docs/NORMALIZATION-BUFFER.md for the subsequent normalization buffer optimization.
 

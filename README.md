@@ -1,4 +1,4 @@
-> Private development **v0.0.53** in `Super-Solution/super-chart`, based on the imported v0.0.40 snapshot. Shared Web/React Native data lifecycle and computation are available through `./core` and `./native`; rendering and gestures remain host-specific. See [shared-core scope and measurements](docs/SHARED-CORE.md) and [shared loader/lifecycle](docs/SHARED-LOADER.md) and [opt-in native lifecycle](docs/NATIVE-LIFECYCLE.md). [Phase 4](docs/AXIS-KEY-PERFORMANCE.md) reduces repeated axis-key computation; [phase 5](docs/LATEST-HIT-PERFORMANCE.md) removes unused latest-hit history. [Phase 6](docs/SHARED-CANDLE-TRANSFORM.md) shares the Heikin Ashi transform without per-bar check arrays. No package has been published and no automatic CI/release workflow is installed.
+> Private development **v0.0.53** in `Super-Solution/super-chart`, based on the imported v0.0.40 snapshot. Shared Web/React Native data lifecycle and computation are available through `./core` and `./native`; rendering and gestures remain host-specific. See [shared-core scope and measurements](docs/SHARED-CORE.md) and [shared loader/lifecycle](docs/SHARED-LOADER.md) and [opt-in native lifecycle](docs/NATIVE-LIFECYCLE.md). [Phase 4](docs/AXIS-KEY-PERFORMANCE.md) reduces repeated axis-key computation; [phase 5](docs/LATEST-HIT-PERFORMANCE.md) removes unused latest-hit history. [Phase 6](docs/SHARED-CANDLE-TRANSFORM.md) shares the Heikin Ashi transform without per-bar check arrays. Public npm release configuration is enabled; no automatic CI/release workflow is installed.
 
 <div align="center">
 
@@ -45,30 +45,23 @@ engine — that we extend in three directions the upstream doesn't cover:
 
 ## Install
 
-The package is private. It is published only to GitHub Packages, for this organisation:
+The npm package is public under `@super-solution`. The source repository remains private. Linked GitHub guides currently require repository access; installation and API usage below are available here.
 
 ```bash
-# .npmrc (the token needs read:packages)
-@zzyzxlabs:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GH_PACKAGES_TOKEN}
-```
-
-```bash
-npm install @zzyzxlabs/super-chart klinecharts@^9
+npm install @super-solution/super-chart klinecharts@^9
 ```
 
 `klinecharts` is a peer dependency: `^9.7.2`, that is 9.7.2 or a later 9.x. Super Chart is built and tested
 against 9.8.12 (what SupWallet resolves) and 9.7.2 (Broker's pin). klinecharts 10 is not supported yet; a plain
 `npm install klinecharts` would fetch it, so keep the `@^9`.
 
-In this repository, SupWallet installs a committed tarball instead, so no install needs a registry credential:
-`"@zzyzxlabs/super-chart": "file:../../vendor/zzyzxlabs-super-chart-<version>.tgz"` (see `MAINTAINING.md`).
+Existing SupWallet installations in the original monorepo are not migrated by this release.
 
 ## Quick start
 
 ```ts
-import { SuperChart, type Datafeed } from "@zzyzxlabs/super-chart";
-import "@zzyzxlabs/super-chart/style.css"; // or "@zzyzxlabs/super-chart/dist/klinecharts-pro.css"
+import { SuperChart, type Datafeed } from "@super-solution/super-chart";
+import "@super-solution/super-chart/style.css"; // or "@super-solution/super-chart/dist/klinecharts-pro.css"
 
 declare const myDatafeed: Datafeed; // your implementation, see "Datafeed" below
 
@@ -91,17 +84,17 @@ Construct the chart in the browser (for example in an effect). Importing the pac
 server-rendered file that a bundler builds (Next, webpack, Vite, Bun) can import it; constructing a chart without
 a DOM throws a clear error. Plain Node, without a bundler, cannot load `.`: klinecharts 9.7 and 9.8 point Node at
 their UMD file, which Node loads as an ES module without klinecharts' functions, so registering the overlays on import
-fails. Node tools (MCP servers, backends, scripts) use `@zzyzxlabs/super-chart/superscript`.
+fails. Node tools (MCP servers, backends, scripts) use `@super-solution/super-chart/superscript`.
 
 ## Entry points
 
 | Import | What it is |
 | --- | --- |
-| `@zzyzxlabs/super-chart` | The full engine (`SuperChart` and its chrome) plus everything below. Registers Super Chart's drawing overlays when it loads. |
-| `@zzyzxlabs/super-chart/lite` | No chart chrome: `chartStyles`, SuperScript, `registerScriptIndicator`, the AI helpers and `registerExtensionOverlays()`. For hosts that drive a `klinecharts` chart themselves. Registers nothing on import. |
-| `@zzyzxlabs/super-chart/superscript` | The SuperScript runtime and AI helpers with no klinecharts and no DOM: runs in plain Node (MCP tools, backends). Only SuperScript runs by default; any other language must be registered through this entry first. |
-| `@zzyzxlabs/super-chart/commands` | The AI/MCP command registry's DOM-free descriptors (`COMMAND_DESCRIPTORS`, `getCommandDescriptors()`, `findCommandDescriptor()`, `validateAgainstSchema()`) — no klinecharts, no Solid, no DOM. For a server that only needs to list or validate tool schemas (an MCP gateway) without ever constructing a chart. Also re-exported from `./lite`. |
-| `@zzyzxlabs/super-chart/style.css` | The chrome CSS. Same file as `@zzyzxlabs/super-chart/dist/klinecharts-pro.css`, which keeps working. |
+| `@super-solution/super-chart` | The full engine (`SuperChart` and its chrome) plus everything below. Registers Super Chart's drawing overlays when it loads. |
+| `@super-solution/super-chart/lite` | No chart chrome: `chartStyles`, SuperScript, `registerScriptIndicator`, the AI helpers and `registerExtensionOverlays()`. For hosts that drive a `klinecharts` chart themselves. Registers nothing on import. |
+| `@super-solution/super-chart/superscript` | The SuperScript runtime and AI helpers with no klinecharts and no DOM: runs in plain Node (MCP tools, backends). Only SuperScript runs by default; any other language must be registered through this entry first. |
+| `@super-solution/super-chart/commands` | The AI/MCP command registry's DOM-free descriptors (`COMMAND_DESCRIPTORS`, `getCommandDescriptors()`, `findCommandDescriptor()`, `validateAgainstSchema()`) — no klinecharts, no Solid, no DOM. For a server that only needs to list or validate tool schemas (an MCP gateway) without ever constructing a chart. Also re-exported from `./lite`. |
+| `@super-solution/super-chart/style.css` | The chrome CSS. Same file as `@super-solution/super-chart/dist/klinecharts-pro.css`, which keeps working. |
 
 The package is tree-shakeable (`"sideEffects"` lists only the `.` bundles and CSS): importing `chartStyles`
 from `./lite` costs about 1.3 KB minified in a webpack production build.
@@ -231,7 +224,7 @@ an ancestor with a `transform`, `filter` or `contain`, or inside an iframe, it o
 ## Datafeed
 
 ```ts
-import type { Datafeed, DatafeedSubscribeCallback, Period, SymbolInfo } from "@zzyzxlabs/super-chart";
+import type { Datafeed, DatafeedSubscribeCallback, Period, SymbolInfo } from "@super-solution/super-chart";
 import type { KLineData } from "klinecharts";
 
 export class MyDatafeed implements Datafeed {
@@ -322,7 +315,7 @@ The imported release history is preserved in [Legacy changelog](https://github.c
 Write an indicator in SuperScript, register it, and create it on the chart like any built-in:
 
 ```ts
-import { registerScriptIndicator, type SuperChartInstance } from "@zzyzxlabs/super-chart";
+import { registerScriptIndicator, type SuperChartInstance } from "@super-solution/super-chart";
 
 declare const chart: SuperChartInstance; // the chart from the quick start
 
@@ -360,7 +353,7 @@ A script that does not compile throws a `SuperScriptError` (check with `isSuperS
 and column. `checkSuperScript(source)` lists every problem without throwing:
 
 ```ts
-import { checkSuperScript, formatDiagnostics } from "@zzyzxlabs/super-chart/superscript";
+import { checkSuperScript, formatDiagnostics } from "@super-solution/super-chart/superscript";
 
 const source = "x = close\nx := x * 2\nplot(x)";
 const problems = checkSuperScript(source);
@@ -371,7 +364,7 @@ console.log(formatDiagnostics(problems, source));
 You can also just compute results headlessly, in the browser or in Node:
 
 ```ts
-import { runScript, SuperScriptLanguage, type Bar } from "@zzyzxlabs/super-chart/superscript";
+import { runScript, SuperScriptLanguage, type Bar } from "@super-solution/super-chart/superscript";
 
 declare const source: string;
 declare const bars: Bar[]; // { timestamp, open, high, low, close, volume }[]
@@ -392,7 +385,7 @@ opt-in: `registerLanguage(JavaScriptLanguage)`. Never register it where scripts 
 import {
   createHttpAIClient, nlToSuperScript, nlToSuperScriptChecked, buildChartContext, analyzeChart, registerScriptIndicator,
   type SuperChartInstance,
-} from "@zzyzxlabs/super-chart";
+} from "@super-solution/super-chart";
 
 declare const chart: SuperChartInstance;
 

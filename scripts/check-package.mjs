@@ -65,7 +65,7 @@ import { gunzipSync } from "node:zlib";
 import { untar } from "./check-vendored.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const PACKAGE = "@zzyzxlabs/super-chart";
+const PACKAGE = "@super-solution/super-chart";
 /**
  * Packed tarball budget. A backstop for something packed by accident (a source
  * map build packed to ~721 KB; `.map` files and dist/node_modules/ also fail

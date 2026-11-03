@@ -1,5 +1,5 @@
 {
-  "name": "@zzyzxlabs/super-chart",
+  "name": "@super-solution/super-chart",
   "version": "0.0.53",
   "description": "Super Chart — a TradingView-grade financial charting engine based on KLineChart, with built-in AI and the SuperScript indicator/strategy language. Maintained by ZzyzxLabs.",
   "type": "module",
@@ -94,7 +94,8 @@
   "license": "Apache-2.0",
   "private": false,
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   },
   "scripts": {
     "build-core": "tsc && vite build && vite build --mode bundles",
