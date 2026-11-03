@@ -530,3 +530,5 @@ See [Realtime series](docs/REALTIME-SERIES.md) for the opt-in Web/native batch s
 See [Realtime viewport](docs/REALTIME-VIEW.md) for stable render subscriptions, viewport controls and incremental Heikin Ashi.
 
 See [Realtime inspection](docs/REALTIME-INSPECTION.md) for visible geometry, cursor values and timestamp navigation.
+
+Run the existing dev server and open [/demo/realtime.html](demo/realtime.html) for the offline shared-core demo ([usage](docs/REALTIME-DEMO.md)).

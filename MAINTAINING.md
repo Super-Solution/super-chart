@@ -21,3 +21,5 @@ See docs/REALTIME-SERIES.md for the opt-in batch sink and incremental native ind
 See docs/REALTIME-VIEW.md for stable viewport subscriptions and incremental Heikin Ashi.
 
 See docs/REALTIME-INSPECTION.md for visible geometry, cursor inspection and time navigation.
+
+See docs/REALTIME-DEMO.md for the offline interactive shared-core development demo.
