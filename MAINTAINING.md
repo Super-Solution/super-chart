@@ -8,11 +8,11 @@ The imported v0.0.40 tag remains the original snapshot. Owner-authorized shared-
 
 LICENSE and NOTICE retain the upstream Apache-2.0 notices. Private repository visibility does not replace or narrow those license terms.
 
-This snapshot includes source, existing tests, examples and lockfiles. It excludes monorepo history, node_modules, build output and the inherited hosted CI/package-publish workflows. No new pipeline is installed.
+This snapshot includes source, existing tests, examples and lockfiles. It excludes monorepo history, node_modules, build output and the inherited hosted CI/package-publish workflows. The owner subsequently authorized the manual npm Trusted Publishing workflow documented in docs/NPM-PUBLISHING.md; no push/PR test pipeline is installed.
 
 For local development, use the existing package scripts with the locked dependencies: bun install --frozen-lockfile --ignore-scripts, bun run build, and relevant existing tests. Run browser checks only when relevant; no package is published by these local commands.
 
-Owner authorized public npm publication on 2026-11-03 as @super-solution/super-chart. publishConfig targets registry.npmjs.org with public access. The GitHub repository stays private; making it public or adding release automation requires separate authorization. Existing original-monorepo consumers are unchanged.
+Owner authorized public npm publication on 2026-11-03 as @super-solution/super-chart, followed by manual Trusted Publishing automation. publishConfig targets registry.npmjs.org with public access. The GitHub repository stays private; making it public or adding other automation requires separate authorization. Existing original-monorepo consumers are unchanged.
 
 See docs/NORMALIZATION-BUFFER.md for the subsequent normalization buffer optimization.
 
