@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Super Chart — shared realtime core</title>
+  <style>
+    :root { color-scheme: dark; font: 14px system-ui,sans-serif; background:#10151d; color:#e4eaf1 }
+    body { margin:0; padding:24px; max-width:1200px; margin-inline:auto }
+    a { color:#8ebcff } h1 { margin-bottom:8px } p { color:#aebcca; line-height:1.5 }
+    .controls { display:flex; flex-wrap:wrap; gap:10px; margin:18px 0; align-items:center }
+    button,input,select { font:inherit; padding:8px 12px; border:1px solid #455467; border-radius:6px; background:#192330; color:inherit }
+    button { cursor:pointer } button:disabled { opacity:.45; cursor:default }
+    #plot { position:relative; height:440px; border:1px solid #455467; touch-action:none; outline-offset:4px }
+    canvas { position:absolute; inset:0; width:100%; height:100% } #cursor { pointer-events:none }
+    output { display:block; line-height:1.7; font-variant-numeric:tabular-nums; overflow-wrap:anywhere }
+    .notes { max-width:850px } @media(max-width:600px) { body { padding:12px } #plot { height:340px } }
+  </style>
+</head>
+<body>
+  <a href="/">Existing KLineChart demo</a>
+  <h1>Shared realtime core</h1>
+  <p>Offline synthetic candles · Web/native data APIs · small Canvas example, not a replacement production renderer</p>
+  <div class="controls">
+    <button id="live">Start live</button><button id="burst">300-quote burst</button>
+    <button id="older">Load older history</button><button id="follow">Follow latest</button>
+    <button id="in">Zoom in</button><button id="out">Zoom out</button>
+    <label>Candles <select id="mode"><option value="raw">Raw</option><option value="heikin-ashi">Heikin Ashi</option></select></label>
+    <label>Spacing <select id="spacing"><option value="time">Time</option><option value="category">Equal bars</option></select></label>
+    <label><input id="indicators" type="checkbox" checked /> MA20 / EMA21</label>
+  </div>
+  <div class="controls">
+    <label>Jump to local time <input id="time" type="datetime-local" /></label><button id="seek">Go</button>
+    <button id="dispose">Dispose session</button><a href="./realtime.html">New session</a>
+  </div>
+  <div id="plot" tabindex="0" role="group" aria-label="Synthetic chart. Drag or use arrow keys to pan; wheel or zoom buttons to zoom.">
+    <canvas id="chart" aria-hidden="true"></canvas><canvas id="cursor" aria-hidden="true"></canvas>
+  </div>
+  <output id="readout">Move over a candle to inspect its values.</output>
+  <output id="status" aria-live="polite">Loading…</output>
+  <output id="metrics"></output>
+  <p class="notes">Drag / arrow keys: pan · wheel: zoom at pointer · Go: nearest loaded time.
+  HA prices are synthetic; MA20 / EMA21 always use raw closes. All prices here are generated locally.
+  Pointer inspection reuses the current geometry; it does not rebuild the chart.
+  Timings measure this demo's model/draw work, not device FPS or production performance.</p>
+  <script type="module" src="/demo/realtime.ts"></script>
+</body>
+</html>
