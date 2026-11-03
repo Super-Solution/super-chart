@@ -671,6 +671,40 @@ export function valuewhen (cond: Series, src: Series, occurrence = 0): Series {
 
 /** Pivot high or low: the pivot's value, placed `right` bars later (when it is confirmed). */
 export function pivot (src: Series, left: number, right: number, kind: 'high' | 'low'): Series {
+  const width = left + right + 1
+  if (width >= 64 && width <= src.length && Number.isSafeInteger(left) && Number.isSafeInteger(right) &&
+      left >= 0 && right >= 0 && src.every(v => v == null || Number.isFinite(v))) return pivotWindow(src, width, right, kind)
+  return pivotScan(src, left, right, kind)
+}
+
+/** Linear finite-data path; retain earliest equal extreme and delay confirmation. */
+function pivotWindow (src: Series, width: number, right: number, kind: 'high' | 'low'): Series {
+  const out = nulls(src.length)
+  const deque = new Int32Array(width)
+  let head = 0, size = 0, run = 0
+  for (let end = 0; end < src.length; end++) {
+    const v = src[end]
+    if (v == null) { head = 0; size = 0; run = 0; continue }
+    run++
+    if (size > 0 && deque[head] <= end - width) { head = head + 1 === width ? 0 : head + 1; size-- }
+    while (size > 0) {
+      const tail = head + size - 1
+      const previous = src[deque[tail >= width ? tail - width : tail]] as number
+      // Strict comparison retains the earliest equal extreme, matching ties.
+      if (kind === 'high' ? previous < v : previous > v) size--
+      else break
+    }
+    const tail = head + size
+    deque[tail >= width ? tail - width : tail] = end
+    size++
+    const candidate = end - right
+    if (run >= width && deque[head] === candidate) out[end] = src[candidate]
+  }
+  return out
+}
+
+// Keep the original scan for small windows and unusual bounds/non-finite inputs.
+function pivotScan (src: Series, left: number, right: number, kind: 'high' | 'low'): Series {
   const out = nulls(src.length)
   for (let i = left; i < src.length - right; i++) {
     const v = src[i]

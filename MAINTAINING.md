@@ -25,3 +25,5 @@ See docs/REALTIME-INSPECTION.md for visible geometry, cursor inspection and time
 See docs/REALTIME-DEMO.md for the offline interactive shared-core development demo.
 
 See docs/BOUNDED-TA-STORAGE.md for shared TA auxiliary-memory bounds and measured trade-offs.
+
+See docs/PIVOT-PERFORMANCE.md for large-window pivot complexity and measured trade-offs.
