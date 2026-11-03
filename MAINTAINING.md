@@ -27,3 +27,5 @@ See docs/REALTIME-DEMO.md for the offline interactive shared-core development de
 See docs/BOUNDED-TA-STORAGE.md for shared TA auxiliary-memory bounds and measured trade-offs.
 
 See docs/PIVOT-PERFORMANCE.md for large-window pivot complexity and measured trade-offs.
+
+See docs/MODEL-IDENTITY-PERFORMANCE.md for build-local time-key reuse and measured trade-offs.
