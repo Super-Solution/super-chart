@@ -16,6 +16,8 @@ const mode = element<HTMLSelectElement>('mode')
 const spacing = element<HTMLSelectElement>('spacing')
 const indicators = element<HTMLInputElement>('indicators')
 const live = element<HTMLButtonElement>('live')
+const range = element<HTMLInputElement>('range')
+const rangeLabel = element<HTMLOutputElement>('range-label')
 const span = 60000
 const initialIndex = Math.floor(Date.now() / span)
 const oldestIndex = initialIndex - 24999
@@ -114,6 +116,13 @@ function draw (): void {
   const sorted = [...samples].sort((a, b) => a - b)
   metrics.textContent = `Loaded ${snapshot.length.toLocaleString()} · visible ${snapshot.bars.length} · ${snapshot.following ? 'following' : 'pinned'} · ${snapshot.mode} · notifications ${notifications} · draws ${draws} · model + draw median ${sorted[Math.floor(sorted.length / 2)].toFixed(2)} ms`
   element<HTMLButtonElement>('older').disabled = !snapshot.hasMore
+  range.max = String(Math.max(0, snapshot.length - snapshot.bars.length))
+  range.value = String(snapshot.viewport.i0)
+  range.disabled = snapshot.length <= snapshot.bars.length
+  const first = snapshot.bars[0], last = snapshot.bars[snapshot.bars.length - 1]
+  rangeLabel.textContent = first === undefined ? 'No loaded candles' :
+    new Date(first.timestamp).toLocaleString() + ' – ' + new Date(last.timestamp).toLocaleString()
+  range.setAttribute('aria-valuetext', rangeLabel.textContent)
   inspect()
 }
 function schedule (): void { if (!pendingFrame && !disposed) pendingFrame = requestAnimationFrame(draw) }
@@ -122,6 +131,10 @@ const stopStatus = loader.on('status', value => { status.textContent = value.sta
 function on (target: EventTarget, type: string, action: EventListener, passive = true): void {
   target.addEventListener(type, action, { signal: abort.signal, passive })
 }
+on(range, 'input', () => {
+  const snapshot = view.getSnapshot(), start = Number(range.value)
+  view.setViewport({ i0: start, i1: start + snapshot.bars.length - 1 })
+})
 on(live, 'click', () => { running = !running; updateTimer() })
 on(element('burst'), 'click', () => { for (let i = 0; i < 300; i++) tick(i > 0 && i % 10 === 0) })
 on(element('older'), 'click', () => { view.requestMore() })
