@@ -1,4 +1,4 @@
-> Private development **v0.0.46** in `Super-Solution/super-chart`, based on the imported v0.0.40 snapshot. Shared Web/React Native data lifecycle and computation are available through `./core` and `./native`; rendering and gestures remain host-specific. See [shared-core scope and measurements](docs/SHARED-CORE.md) and [shared loader/lifecycle](docs/SHARED-LOADER.md) and [opt-in native lifecycle](docs/NATIVE-LIFECYCLE.md). [Phase 4](docs/AXIS-KEY-PERFORMANCE.md) reduces repeated axis-key computation; [phase 5](docs/LATEST-HIT-PERFORMANCE.md) removes unused latest-hit history. [Phase 6](docs/SHARED-CANDLE-TRANSFORM.md) shares the Heikin Ashi transform without per-bar check arrays. No package has been published and no automatic CI/release workflow is installed.
+> Private development **v0.0.47** in `Super-Solution/super-chart`, based on the imported v0.0.40 snapshot. Shared Web/React Native data lifecycle and computation are available through `./core` and `./native`; rendering and gestures remain host-specific. See [shared-core scope and measurements](docs/SHARED-CORE.md) and [shared loader/lifecycle](docs/SHARED-LOADER.md) and [opt-in native lifecycle](docs/NATIVE-LIFECYCLE.md). [Phase 4](docs/AXIS-KEY-PERFORMANCE.md) reduces repeated axis-key computation; [phase 5](docs/LATEST-HIT-PERFORMANCE.md) removes unused latest-hit history. [Phase 6](docs/SHARED-CANDLE-TRANSFORM.md) shares the Heikin Ashi transform without per-bar check arrays. No package has been published and no automatic CI/release workflow is installed.
 
 <div align="center">
 
@@ -549,3 +549,5 @@ Apache-2.0. SUPer-Chart is based on **KLineChart Pro** (github.com/klinecharts/p
 KLineChart authors, forked at commit `4234b79`. See [`NOTICE`](./NOTICE) for full attribution and
 [`LICENSE`](./LICENSE) for the license text. Our additions (the SuperScript runtime, the AI layer, and the
 rebranding) are likewise Apache-2.0.
+
+See [Realtime series](docs/REALTIME-SERIES.md) for the opt-in Web/native batch sink and incremental MA20/EMA21.

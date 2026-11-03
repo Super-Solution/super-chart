@@ -606,10 +606,11 @@ export class DataLoader {
     // feed re-anchored to "now") replaces the data as before.
     if (cachedBars !== null && cachedBars.length > 0 && mergeKind(cachedBars, bars) === 'tail') {
       const cutoff = cachedBars[cachedBars.length - 1].timestamp
-      for (const bar of bars) {
-        if (bar.timestamp >= cutoff) {
-          chart.updateData(bar)
-        }
+      const tail = bars.filter(bar => bar.timestamp >= cutoff)
+      if (chart.updateDataBatch !== undefined) {
+        chart.updateDataBatch(tail, this._more)
+      } else {
+        for (const bar of tail) chart.updateData(bar)
       }
     } else {
       chart.applyNewData(bars, this._more)
@@ -796,8 +797,10 @@ export class DataLoader {
     if (chart === null || this._disposed) {
       return
     }
-    for (const bar of bars) {
-      chart.updateData(bar)
+    if (chart.updateDataBatch !== undefined) {
+      chart.updateDataBatch(bars)
+    } else {
+      for (const bar of bars) chart.updateData(bar)
     }
     // An empty history followed by live bars: the chart has data now, and
     // "No data" must not stay over it.

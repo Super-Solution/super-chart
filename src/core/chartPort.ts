@@ -5,6 +5,8 @@ export interface ChartDataPort<Bar = MarketBar> {
   applyNewData: (data: Bar[], more?: boolean) => void
   applyMoreData: (data: Bar[], more?: boolean) => void
   updateData: (data: Bar) => void
+  /** Optional ordered tail batch; equivalent to updateData in order, with one render notification. */
+  updateDataBatch?: (data: Bar[], more?: boolean) => void
   getDataList: () => Bar[]
   loadMore?: (callback: (timestamp: number | null) => void) => void
   setLoadDataCallback?: (callback: (request: HistoryLoadRequest<Bar>) => void) => void
