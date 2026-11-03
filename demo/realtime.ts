@@ -1,3 +1,4 @@
+import { paintChart, chartPng } from './canvasRenderer'
 import { attachChartGestures } from './gestures'
 import { RealtimeSeries, RealtimeView, createRealtimeChartFrame } from '../src/core/index'
 import type { CandleMode, Datafeed, MarketBar, RealtimeChartFrame } from '../src/core/index'
@@ -29,6 +30,9 @@ let draws = 0
 let pendingFrame = 0
 let frame: RealtimeChartFrame | null = null
 let cursorX: number | null = null
+let inspectedFrame: RealtimeChartFrame | null = null
+let inspectedIndex: number | null = null
+let exporting = false
 const abort = new AbortController()
 const samples: number[] = []
 const price = (i: number): number => 100 + 8 * Math.sin(i / 37) + 2 * Math.sin(i / 7)
@@ -77,10 +81,11 @@ function context (canvas: HTMLCanvasElement): CanvasRenderingContext2D {
   return ctx
 }
 function inspect (): void {
+  const hit = frame !== null && cursorX !== null ? frame.inspect(cursorX) : null
+  if (frame === inspectedFrame && (hit?.index ?? null) === inspectedIndex) return
+  inspectedFrame = frame; inspectedIndex = hit?.index ?? null
   const ctx = context(cursor)
-  if (frame === null || cursorX === null) return
-  const hit = frame.inspect(cursorX)
-  if (hit === null) return
+  if (hit === null || frame === null) { readout.textContent = 'Move over a candle to inspect its values.'; return }
   const index = frame.model.xKeys.indexOf(hit.timestamp), x = frame.model.xPositions[index]
   const g = frame.model.geometry
   ctx.strokeStyle = '#9badbf'; ctx.setLineDash([3, 4]); ctx.beginPath(); ctx.moveTo(x, g.top); ctx.lineTo(x, g.bottom); ctx.stroke()
@@ -95,22 +100,7 @@ function draw (): void {
     spacing: spacing.value as 'time' | 'category', indicators: indicators.checked ? ['MA20', 'EMA21'] : [],
     colors: { MA20: '#f4ba53', EMA21: '#8bafff' }
   })
-  const ctx = context(chart), m = frame.model, g = m.geometry
-  ctx.font = '12px system-ui'; ctx.fillStyle = '#aebcca'
-  for (const value of m.yTicks) {
-    const y = m.y(value); ctx.fillText(value.toFixed(2), 3, y + 4)
-    ctx.strokeStyle = '#283444'; ctx.beginPath(); ctx.moveTo(g.left, y); ctx.lineTo(g.right, y); ctx.stroke()
-  }
-  const body = Math.max(1, Math.min(12, g.plotWidth / Math.max(1, m.plottedCandles.length) * 0.65))
-  for (const k of m.plottedCandles) {
-    ctx.fillStyle = ctx.strokeStyle = k.c >= k.o ? '#58c9ac' : '#f28b82'
-    ctx.beginPath(); ctx.moveTo(k.x, k.wickTop); ctx.lineTo(k.x, k.wickBottom); ctx.stroke()
-    ctx.fillRect(k.x - body / 2, k.bodyTop, body, Math.max(1, k.bodyBottom - k.bodyTop))
-  }
-  for (const line of m.plottedSeries) {
-    ctx.strokeStyle = line.source.color ?? '#8bafff'; ctx.beginPath()
-    line.points.forEach((p, i) => { if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y) }); ctx.stroke()
-  }
+  paintChart(context(chart), frame)
   samples.push(performance.now() - started); if (samples.length > 200) samples.shift()
   const sorted = [...samples].sort((a, b) => a - b), snapshot = frame.snapshot
   metrics.textContent = `Loaded ${snapshot.length.toLocaleString()} · visible ${snapshot.bars.length} · ${snapshot.following ? 'following' : 'pinned'} · ${snapshot.mode} · notifications ${notifications} · draws ${++draws} · model + draw median ${sorted[Math.floor(sorted.length / 2)].toFixed(2)} ms`
@@ -143,6 +133,26 @@ function dispose (): void {
   stopGestures(); stopData(); stopStatus(); view.dispose(); loader.dispose()
   document.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button,input,select').forEach(control => { control.disabled = true })
   status.textContent = 'Disposed · feed, subscriptions, observers and controls stopped'
+}
+on(element('export'), 'click', () => { void exportChart() })
+async function exportChart (): Promise<void> {
+  if (disposed || exporting || frame === null) return
+  exporting = true
+  const button = element<HTMLButtonElement>('export'); button.disabled = true
+  try {
+    // Flush any queued viewport/options update before capturing the chart layer.
+    if (pendingFrame) { cancelAnimationFrame(pendingFrame); draw() }
+    const captured = frame
+    const blob = await chartPng(chart)
+    if (disposed) return
+    const url = URL.createObjectURL(blob), link = document.createElement('a')
+    link.href = url; link.download = 'synthetic-chart-' + captured.snapshot.mode + '.png'
+    document.body.append(link); link.click(); link.remove()
+    setTimeout(() => { URL.revokeObjectURL(url) }, 1000)
+    status.textContent = 'Exported synthetic chart · ' + captured.snapshot.mode
+  } catch (error) {
+    if (!disposed) status.textContent = 'Export failed: ' + (error instanceof Error ? error.message : String(error))
+  } finally { exporting = false; if (!disposed) button.disabled = false }
 }
 on(element('dispose'), 'click', dispose)
 on(window, 'pagehide', dispose)
