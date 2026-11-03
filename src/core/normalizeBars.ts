@@ -205,17 +205,19 @@ export function normalizeBars (list: unknown, unit?: TimeUnit): NormalizedBars {
     // order survives and "last one wins" below still means the feed's last.
     bars.sort((a, b) => a.timestamp - b.timestamp)
   }
-  const unique: MarketBar[] = []
+  // Compact only the newly allocated working array; the caller input stays intact.
+  let count = 0
   for (const bar of bars) {
-    const last = unique[unique.length - 1]
+    const last = count > 0 ? bars[count - 1] : undefined
     if (last !== undefined && last.timestamp === bar.timestamp) {
-      unique[unique.length - 1] = bar
+      bars[count - 1] = bar
       issues.duplicates++
     } else {
-      unique.push(bar)
+      bars[count++] = bar
     }
   }
-  return { bars: unique, unit: u, issues }
+  bars.length = count
+  return { bars, unit: u, issues }
 }
 
 /**
