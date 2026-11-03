@@ -1,4 +1,5 @@
-import { RealtimeSeries, RealtimeView, createRealtimeChartFrame, viewportSpan } from '../src/core/index'
+import { attachChartGestures } from './gestures'
+import { RealtimeSeries, RealtimeView, createRealtimeChartFrame } from '../src/core/index'
 import type { CandleMode, Datafeed, MarketBar, RealtimeChartFrame } from '../src/core/index'
 import { DataLoader } from '../src/data/loader'
 
@@ -28,7 +29,6 @@ let draws = 0
 let pendingFrame = 0
 let frame: RealtimeChartFrame | null = null
 let cursorX: number | null = null
-let drag: { id: number, x: number, start: number, end: number, pixelsPerBar: number } | null = null
 const abort = new AbortController()
 const samples: number[] = []
 const price = (i: number): number => 100 + 8 * Math.sin(i / 37) + 2 * Math.sin(i / 7)
@@ -133,42 +133,14 @@ on(mode, 'change', () => { view.setMode(mode.value as CandleMode) })
 on(spacing, 'change', schedule)
 on(indicators, 'change', schedule)
 on(element('seek'), 'click', () => { status.textContent = view.seek(new Date(time.value).getTime()) ? 'Jumped to nearest loaded candle' : 'Enter a valid loaded time' })
-on(plot, 'pointerdown', event => {
-  const e = event as PointerEvent
-  if (!e.isPrimary || e.button !== 0 || frame === null) return
-  const v = view.getSnapshot().viewport
-  drag = { id: e.pointerId, x: e.clientX, start: v.i0, end: v.i1, pixelsPerBar: frame.model.geometry.plotWidth / viewportSpan(v) }
-  plot.setPointerCapture(e.pointerId); plot.focus()
-})
-on(plot, 'pointermove', event => {
-  const e = event as PointerEvent
-  cursorX = e.clientX - plot.getBoundingClientRect().left
-  if (drag !== null && drag.id === e.pointerId) {
-    const delta = Math.round((drag.x - e.clientX) / drag.pixelsPerBar)
-    view.setViewport({ i0: drag.start + delta, i1: drag.end + delta })
-  }
-  inspect()
-})
-for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) on(plot, type, () => { drag = null })
-on(plot, 'pointerleave', () => { if (drag === null) { cursorX = null; context(cursor) } })
-on(plot, 'wheel', event => {
-  const e = event as WheelEvent
-  if (frame === null) return
-  e.preventDefault()
-  const x = e.clientX - plot.getBoundingClientRect().left, g = frame.model.geometry
-  view.zoom(Math.exp(-Math.max(-400, Math.min(400, e.deltaY)) * 0.002), (x - g.left) / g.plotWidth)
-}, false)
-on(plot, 'keydown', event => {
-  const e = event as KeyboardEvent
-  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); view.pan(e.key === 'ArrowLeft' ? -10 : 10) }
-}, false)
+const stopGestures = attachChartGestures(plot, view, () => frame?.model.geometry ?? null, x => { cursorX = x; inspect() })
 const resize = new ResizeObserver(schedule)
 resize.observe(plot)
 function dispose (): void {
   if (disposed) return
   disposed = true; running = false; updateTimer(); abort.abort(); resize.disconnect()
   if (pendingFrame) cancelAnimationFrame(pendingFrame)
-  stopData(); stopStatus(); view.dispose(); loader.dispose()
+  stopGestures(); stopData(); stopStatus(); view.dispose(); loader.dispose()
   document.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button,input,select').forEach(control => { control.disabled = true })
   status.textContent = 'Disposed · feed, subscriptions, observers and controls stopped'
 }

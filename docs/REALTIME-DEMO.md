@@ -16,12 +16,15 @@ replace the production KLineChart or React Native renderer.
   a total 25,000 historical candles before simulated future updates.
 - Start/pause synthetic live updates, or send a 300-quote burst through the actual
   DataLoader frame coalescer. Every ten burst quotes advances one candle.
-- Drag, left/right keys and anchored wheel zoom; buttons also provide zooming.
-  Touch supports one-pointer dragging, not a new multi-touch pinch implementation.
+- Drag, two-pointer pinch/centroid pan and anchored wheel zoom; buttons also
+  provide zooming. Releasing one finger rebases to a one-pointer drag without
+  changing the zoom. Left/right keys pan; Page Up/Down pan most of a window;
+  +/- zoom; Home follows latest; Escape cancels the current gesture.
 - Follow latest, jump to the nearest loaded local time, raw/Heikin Ashi display,
   time/equal-bar spacing and MA20/EMA21 visibility.
 - Cursor inspection uses a separate Canvas overlay and the existing frame. Pointer
-  movement does not rebuild the price model. Backing Canvas buffers resize only
+  movement does not rebuild the price model. Cursor paints coalesce to one per
+  animation frame using the latest position. Backing Canvas buffers resize only
   when dimensions change; CSS/logical positions are converted using devicePixelRatio.
 - Dispose stops the feed timer, pending draw, subscriptions, ResizeObserver and
   event handlers. Controls disable; New session reloads the page. A pagehide/HMR
@@ -52,3 +55,28 @@ browser compositing and is not FPS or a before/after production benchmark.
 Independent source review found no confirmed issues. No tests, screenshot assertions,
 fixtures, pipelines or runtime dependencies were added. Existing library package
 consumer checks are retained; no size threshold is changed.
+
+## Gesture adapter follow-up
+
+Web pointer handling now lives in demo/gestures.ts rather than the data/render host.
+It keeps at most two captured pointers, rebases when a finger joins/leaves or the
+loaded length/plot geometry changes, and converts wheel pixel/line/page units.
+It uses the existing core viewport math; it is a Web demo adapter, not a replacement
+for React Native gestures. Uniform synthetic candle spacing is the demonstrated
+interaction case, not arbitrary gapped-market gesture calibration.
+
+Pointer cancel, lost capture, element/window blur, background visibility and Escape
+clear the active gesture. Disposal removes the adapter listeners and cancels the
+pending cursor frame. Independent review found the initial missing window-blur
+cleanup; this was fixed before submitting the PR.
+
+Manual Chrome touch input (trusted browser pointer events) narrowed 160 candles to
+80 during pinch, translated with two fingers, then emitted pointerup for the second
+finger and continued dragging with the remaining finger while staying at80. The
+initial driver probe omitted a touch from touchMove, which is not a release; the
+final probe explicitly used touchEnd and verified the resulting pointerup.
+Keyboard Home/PageUp/+/Escape and mouse drag were exercised. A dispatched window
+blur followed by mouse movement left notification/draw counts unchanged. A burst
+of120 synthetic hover events caused one cursor-layer clear in the next frame.
+These are bounded manual browser observations, not a new automated regression suite
+or physical-phone/pinch latency measurement. No page errors were recorded.
