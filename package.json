@@ -1,6 +1,6 @@
 {
   "name": "@zzyzxlabs/super-chart",
-  "version": "0.0.44",
+  "version": "0.0.45",
   "description": "Super Chart — a TradingView-grade financial charting engine based on KLineChart, with built-in AI and the SuperScript indicator/strategy language. Maintained by ZzyzxLabs.",
   "type": "module",
   "main": "./dist/klinecharts-pro.cjs",

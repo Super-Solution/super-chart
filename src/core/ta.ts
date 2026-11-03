@@ -639,6 +639,16 @@ export function barssince (cond: Series): Series {
 /** The value of `src` on the bar `cond` was true, `occurrence` hits back (0 = the latest). */
 export function valuewhen (cond: Series, src: Series, occurrence = 0): Series {
   const out = nulls(cond.length)
+  if (occurrence === 0) {
+    // The latest-hit query needs one index, not a growing history of all hits.
+    let latest: number | undefined
+    for (let i = 0; i < cond.length; i++) {
+      const c = cond[i]
+      if (c != null && c !== 0) latest = i
+      out[i] = latest === undefined ? null : src[latest]
+    }
+    return out
+  }
   const hits: number[] = []
   for (let i = 0; i < cond.length; i++) {
     const c = cond[i]
