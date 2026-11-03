@@ -377,29 +377,33 @@ function extreme (src: Series, len: number, max: boolean): Series {
   const n = src.length
   const out = nulls(n)
   if (!isLength(len)) return out
-  const dq = new Int32Array(n) // indices; values monotonic from head to tail
+  if (len > n) return out
+  const dq = new Int32Array(len) // circular deque: at most one window of indices
   let head = 0
-  let tail = 0
+  let size = 0
   let run = 0
   let lastNaN = -1
   for (let i = 0; i < n; i++) {
     const v = src[i]
-    if (v == null) { run = 0; head = 0; tail = 0; continue }
+    if (v == null) { run = 0; head = 0; size = 0; continue }
     run++
+    if (size > 0 && dq[head] <= i - len) { head = head + 1 === len ? 0 : head + 1; size-- }
     if (Number.isNaN(v)) {
       lastNaN = i
     } else {
-      while (tail > head) {
-        const b = src[dq[tail - 1]] as number
-        if (max ? b <= v : b >= v) tail--
+      while (size > 0) {
+        const tail = head + size - 1
+        const b = src[dq[tail >= len ? tail - len : tail]] as number
+        if (max ? b <= v : b >= v) size--
         else break
       }
-      dq[tail++] = i
+      const tail = head + size
+      dq[tail >= len ? tail - len : tail] = i
+      size++
     }
-    while (tail > head && dq[head] <= i - len) head++
     if (run < len) continue
     // Math.max/Math.min return NaN when the window holds one.
-    out[i] = lastNaN > i - len ? NaN : (tail > head ? (src[dq[head]] as number) : (max ? -Infinity : Infinity))
+    out[i] = lastNaN > i - len ? NaN : (size > 0 ? (src[dq[head]] as number) : (max ? -Infinity : Infinity))
   }
   return out
 }
@@ -649,11 +653,17 @@ export function valuewhen (cond: Series, src: Series, occurrence = 0): Series {
     }
     return out
   }
+  if (!Number.isInteger(occurrence) || occurrence < 0 || occurrence >= cond.length) return out
   const hits: number[] = []
+  const capacity = occurrence + 1
+  let next = 0
   for (let i = 0; i < cond.length; i++) {
     const c = cond[i]
-    if (c != null && c !== 0) hits.push(i)
-    const idx = hits[hits.length - 1 - occurrence]
+    if (c != null && c !== 0) {
+      hits[next] = i
+      next = (next + 1) % capacity
+    }
+    const idx = hits.length === capacity ? hits[next] : undefined
     out[i] = idx == null ? null : src[idx]
   }
   return out

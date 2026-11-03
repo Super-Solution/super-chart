@@ -23,3 +23,5 @@ See docs/REALTIME-VIEW.md for stable viewport subscriptions and incremental Heik
 See docs/REALTIME-INSPECTION.md for visible geometry, cursor inspection and time navigation.
 
 See docs/REALTIME-DEMO.md for the offline interactive shared-core development demo.
+
+See docs/BOUNDED-TA-STORAGE.md for shared TA auxiliary-memory bounds and measured trade-offs.
