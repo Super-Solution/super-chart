@@ -1,5 +1,8 @@
 import type { ChartDataPort } from './chartPort'
 import type { MarketBar } from './types'
+import { toHeikinAshi } from './heikinAshi'
+
+export type CandleMode = 'raw' | 'heikin-ashi'
 
 export interface RealtimeSeriesChange {
   kind: 'reset' | 'prepend' | 'tail' | 'availability'
@@ -16,6 +19,7 @@ export interface RealtimeSeriesChange {
  */
 export class RealtimeSeries implements ChartDataPort {
   private _bars: MarketBar[] = []
+  private _ha: MarketBar[] | null = null
   private _ma: Array<number | null> = []
   private _ema: Array<number | null> = []
   private _sum = 0
@@ -34,15 +38,20 @@ export class RealtimeSeries implements ChartDataPort {
   getDataList (): MarketBar[] { return this._bars }
 
   /** Copy only the visible range for React/native render state; end is exclusive. */
-  snapshot (start = 0, end = this._bars.length): {
+  snapshot (start = 0, end = this._bars.length, mode: CandleMode = 'raw'): {
     version: number
     bars: MarketBar[]
     ma20: Array<number | null>
     ema21: Array<number | null>
   } {
+    let candles = this._bars
+    if (mode === 'heikin-ashi') {
+      if (this._ha === null) this._ha = toHeikinAshi(this._bars)
+      candles = this._ha
+    }
     return {
       version: this._version,
-      bars: this._bars.slice(start, end).map(bar => ({ ...bar })),
+      bars: candles.slice(start, end).map(bar => ({ ...bar })),
       ma20: this._ma.slice(start, end),
       ema21: this._ema.slice(start, end)
     }
@@ -115,6 +124,7 @@ export class RealtimeSeries implements ChartDataPort {
 
   /** Explicit history correction: use a complete reset, never an identity-based cache. */
   private _rebuild (): void {
+    if (this._ha !== null) this._ha = []
     this._ma = []
     this._ema = []
     this._sum = 0
@@ -133,6 +143,13 @@ export class RealtimeSeries implements ChartDataPort {
     this._ma[i] = i >= 19 ? this._sum / 20 : null
     this._previous = this._previous === null ? close : close * (2 / 22) + this._previous * (1 - 2 / 22)
     this._ema[i] = i >= 20 ? this._previous : null
+    if (this._ha !== null) {
+      const bar = this._bars[i]
+      const prev = this._ha[i - 1]
+      const close = (bar.open + bar.high + bar.low + bar.close) / 4
+      const open = prev === undefined ? (bar.open + bar.close) / 2 : (prev.open + prev.close) / 2
+      this._ha[i] = { ...bar, open, close, high: Math.max(bar.high, open, close), low: Math.min(bar.low, open, close) }
+    }
   }
 
   private _validate (bars: MarketBar[], equal = false): void {

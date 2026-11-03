@@ -17,3 +17,5 @@ The package name and GitHub Packages publishConfig are retained for compatibilit
 See docs/NORMALIZATION-BUFFER.md for the subsequent normalization buffer optimization.
 
 See docs/REALTIME-SERIES.md for the opt-in batch sink and incremental native indicators.
+
+See docs/REALTIME-VIEW.md for stable viewport subscriptions and incremental Heikin Ashi.
