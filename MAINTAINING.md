@@ -13,3 +13,5 @@ This snapshot includes source, existing tests, examples and lockfiles. It exclud
 For local development, use the existing package scripts with the locked dependencies: bun install --frozen-lockfile --ignore-scripts, bun run build, and relevant existing tests. Run browser checks only when relevant; no package is published by these local commands.
 
 The package name and GitHub Packages publishConfig are retained for compatibility. The repository URL is updated to this repository. Publishing a package, making this repository public, or changing release automation requires a separate owner instruction.
+
+See docs/NORMALIZATION-BUFFER.md for the subsequent normalization buffer optimization.
