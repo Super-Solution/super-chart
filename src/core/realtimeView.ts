@@ -129,7 +129,10 @@ export class RealtimeView {
     // Appends still notify because the range rail and total length changed.
     if (change.kind === 'tail' && oldLength === this._length && change.from > this._viewport.i1 &&
         this._snapshot.hasMore === this._series.hasMore) return
-    this._publish()
+    const visibleUnchanged = (change.kind === 'availability' ||
+      (change.kind === 'tail' && change.from > this._viewport.i1)) &&
+      this._snapshot.viewport.i0 === this._viewport.i0 && this._snapshot.viewport.i1 === this._viewport.i1
+    this._publish(visibleUnchanged)
   }
 
   private _read (): RealtimeViewSnapshot {
@@ -147,8 +150,10 @@ export class RealtimeView {
     })
   }
 
-  private _publish (): void {
-    this._snapshot = this._read()
+  private _publish (visibleUnchanged = false): void {
+    this._snapshot = visibleUnchanged
+      ? Object.freeze({ ...this._snapshot, version: this._series.version, length: this._length, hasMore: this._series.hasMore })
+      : this._read()
     for (const listener of [...this._listeners]) listener()
   }
 }

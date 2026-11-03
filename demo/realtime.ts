@@ -29,6 +29,7 @@ let notifications = 0
 let draws = 0
 let pendingFrame = 0
 let frame: RealtimeChartFrame | null = null
+let layoutKey = ''
 let cursorX: number | null = null
 let inspectedFrame: RealtimeChartFrame | null = null
 let inspectedIndex: number | null = null
@@ -96,14 +97,22 @@ function draw (): void {
   pendingFrame = 0
   if (disposed) return
   const started = performance.now(), rect = plot.getBoundingClientRect()
-  frame = createRealtimeChartFrame(view.getSnapshot(), rect.width, rect.height, {
-    spacing: spacing.value as 'time' | 'category', indicators: indicators.checked ? ['MA20', 'EMA21'] : [],
-    colors: { MA20: '#f4ba53', EMA21: '#8bafff' }
-  })
-  paintChart(context(chart), frame)
-  samples.push(performance.now() - started); if (samples.length > 200) samples.shift()
-  const sorted = [...samples].sort((a, b) => a - b), snapshot = frame.snapshot
-  metrics.textContent = `Loaded ${snapshot.length.toLocaleString()} · visible ${snapshot.bars.length} · ${snapshot.following ? 'following' : 'pinned'} · ${snapshot.mode} · notifications ${notifications} · draws ${++draws} · model + draw median ${sorted[Math.floor(sorted.length / 2)].toFixed(2)} ms`
+  const snapshot = view.getSnapshot()
+  const key = [rect.width, rect.height, window.devicePixelRatio, spacing.value, indicators.checked].join(':')
+  const repaint = frame === null || key !== layoutKey || frame.snapshot.bars !== snapshot.bars ||
+    frame.snapshot.ma20 !== snapshot.ma20 || frame.snapshot.ema21 !== snapshot.ema21
+  if (repaint) {
+    layoutKey = key
+    frame = createRealtimeChartFrame(snapshot, rect.width, rect.height, {
+      spacing: spacing.value as 'time' | 'category', indicators: indicators.checked ? ['MA20', 'EMA21'] : [],
+      colors: { MA20: '#f4ba53', EMA21: '#8bafff' }
+    })
+    paintChart(context(chart), frame)
+    draws++
+    samples.push(performance.now() - started); if (samples.length > 200) samples.shift()
+  }
+  const sorted = [...samples].sort((a, b) => a - b)
+  metrics.textContent = `Loaded ${snapshot.length.toLocaleString()} · visible ${snapshot.bars.length} · ${snapshot.following ? 'following' : 'pinned'} · ${snapshot.mode} · notifications ${notifications} · draws ${draws} · model + draw median ${sorted[Math.floor(sorted.length / 2)].toFixed(2)} ms`
   element<HTMLButtonElement>('older').disabled = !snapshot.hasMore
   inspect()
 }
