@@ -109,3 +109,34 @@ Manual installed-Chrome observations at 1000x900, DPR2:
 - Existing TypeScript configuration, extended locally to include the demo, passed.
   Independent source review found no confirmed issues. No tests, fixtures,
   snapshots or pipelines were added; unchanged core/package checks were not rerun.
+
+## Navigation follow-up
+
+The demo now exposes a native HTML range input over the loaded history. Moving it
+pins the view while preserving the visible candle count. Its bounds/value follow
+current metadata, including prepend and follow-latest; a visible-time label and
+aria-valuetext expose the selected interval. It does not fetch arbitrary dates or
+change the loader's history policy. The slider is disabled when no panning is possible
+and on disposal.
+
+Pointer drag/pinch computes a pending viewport from the gesture baseline, then commits
+at most once per animation frame. Pointer release or a gesture rebase flushes the
+last valid position before continuing; wheel/keyboard navigation flush first.
+Cancellation, blur, hidden state and disposal discard pending motion. Queued motion
+from before a history-length or geometry change is rejected. Wheel zoom remains
+ordered per event to preserve anchor/rounding semantics. Native hosts are unchanged.
+
+Manual Chrome comparison at1000x900:120 same-frame pointer moves produced22 view
+notifications before and1 after (unchanged positions do not notify). Main draws were
+already coalesced and remained one; the benefit is avoiding intermediate snapshot
+copying/freezing, not a claimed rendering FPS improvement. Trusted browser touch
+input still narrowed160 bars to80 and continued with one finger after releasing the
+second. Range selection at10000 became10500 after prepending500 candles, retaining
+the exact displayed time interval; Follow moved it to20340 of20500 loaded candles.
+
+Independent review found Escape initially flushed pending motion before canceling;
+that was fixed. A bounded manual check observed Escape leave index19840 unchanged,
+while pointerup before the next frame committed the last move to19819. TypeScript
+including the demo passed; no page errors were observed in the navigation sequence.
+No tests/pipelines were added. Core/package code is unchanged and its previously
+passing checks were not redundantly rerun. This remains a Web development demo.

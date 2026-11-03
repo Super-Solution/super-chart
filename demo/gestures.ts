@@ -12,6 +12,14 @@ export function attachChartGestures (
   const abort = new AbortController()
   const pointers = new Map<number, { x: number, y: number }>()
   let base: { viewport: Viewport, length: number, x: number, distance: number, left: number, width: number } | null = null
+  let pendingViewport: Viewport | null = null
+  const flushViewport = (): void => {
+    const next = pendingViewport; pendingViewport = null
+    const g = geometry()
+    // Do not commit coordinates queued before history or layout changed.
+    if (next !== null && base !== null && g !== null &&
+        view.getSnapshot().length === base.length && g.left === base.left && g.plotWidth === base.width) view.setViewport(next)
+  }
   let cursorFrame = 0
   let cursorX: number | null = null
   const position = (): { x: number, distance: number } => {
@@ -20,6 +28,7 @@ export function attachChartGestures (
     return b === undefined ? { x: a.x, distance: 0 } : { x: (a.x + b.x) / 2, distance: Math.hypot(b.x - a.x, b.y - a.y) }
   }
   const rebase = (): void => {
+    flushViewport()
     const g = geometry()
     if (pointers.size === 0 || g === null || g.plotWidth <= 0) { base = null; return }
     const snapshot = view.getSnapshot(), p = position()
@@ -27,11 +36,11 @@ export function attachChartGestures (
   }
   const updateCursor = (x: number | null): void => {
     cursorX = x
-    if (cursorFrame === 0) cursorFrame = requestAnimationFrame(() => { cursorFrame = 0; cursor(cursorX) })
+    if (cursorFrame === 0) cursorFrame = requestAnimationFrame(() => { cursorFrame = 0; flushViewport(); cursor(cursorX) })
   }
   const clear = (): void => {
     const ids = [...pointers.keys()]
-    pointers.clear(); base = null
+    pointers.clear(); base = null; pendingViewport = null
     for (const id of ids) if (element.hasPointerCapture(id)) element.releasePointerCapture(id)
     updateCursor(null)
   }
@@ -59,7 +68,7 @@ export function attachChartGestures (
         const anchor = Math.max(0, Math.min(1, (base.x - base.left) / base.width))
         const zoomed = zoomViewport(base.viewport, snapshot.length, factor, anchor)
         const delta = Math.round((base.x - p.x) / base.width * Math.max(0, viewportSpan(zoomed) - 1))
-        view.setViewport({ i0: zoomed.i0 + delta, i1: zoomed.i1 + delta })
+        pendingViewport = { i0: zoomed.i0 + delta, i1: zoomed.i1 + delta }
       }
       updateCursor(position().x)
     } else if (pointers.size === 0) updateCursor(x)
@@ -81,6 +90,7 @@ export function attachChartGestures (
     const e = event as WheelEvent, g = geometry()
     if (g === null || g.plotWidth <= 0) return
     e.preventDefault()
+    flushViewport()
     const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? element.clientHeight : 1
     const delta = Math.max(-400, Math.min(400, e.deltaY * unit))
     const x = e.clientX - element.getBoundingClientRect().left
@@ -90,6 +100,9 @@ export function attachChartGestures (
   on('keydown', event => {
     const e = event as KeyboardEvent
     if (e.altKey || e.ctrlKey || e.metaKey) return
+    if (e.key === 'Escape') { clear(); e.preventDefault(); return }
+    if (!['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', '+', '=', '-', 'Home'].includes(e.key)) return
+    flushViewport()
     const span = viewportSpan(view.getSnapshot().viewport)
     switch (e.key) {
       case 'ArrowLeft': view.pan(-10); break
@@ -99,7 +112,6 @@ export function attachChartGestures (
       case '+': case '=': view.zoom(1.5); break
       case '-': view.zoom(1 / 1.5); break
       case 'Home': view.followLatest(); break
-      case 'Escape': clear(); break
       default: return
     }
     e.preventDefault(); rebase()
