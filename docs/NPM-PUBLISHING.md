@@ -6,10 +6,9 @@ pushes or pull requests, upload Actions artifacts, or use an npm token.
 
 ## One-time npm setup
 
-The package has not yet been published successfully. Current npm documentation
-requires the package to exist before configuring a trusted publisher. Complete
-the initial public release with an interactive npm login and the account's 2FA.
-Do not retry the blocked token publication or publish a placeholder implicitly.
+The initial public version 0.0.53 was staged and approved by the owner on
+2026-11-04; the registry's latest tag now points to 0.0.53. The package therefore
+exists and can be configured for Trusted Publishing without another release.
 
 In the package's npm settings, add this GitHub Actions trusted publisher:
 
