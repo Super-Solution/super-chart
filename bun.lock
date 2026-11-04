@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "@zzyzxlabs/super-chart",
+      "name": "@super-solution/super-chart",
       "devDependencies": {
         "@solidjs/testing-library": "^0.6.0",
         "@testing-library/jest-dom": "^5.16.5",

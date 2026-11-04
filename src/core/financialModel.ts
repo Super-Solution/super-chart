@@ -56,7 +56,7 @@ export function financialGeometry(width: number, height: number, axisGutter = 52
 }
 function numericX(key: ChartX): number { if (typeof key === 'number') return key; const parsed = Number(key); return Number.isFinite(parsed) ? parsed : Date.parse(key); }
 function keyId(key: ChartX, xType: FinancialChartData['xType']): string { return xType === 'category' ? String(key) : String(numericX(key)); }
-function validCandle(c: FinancialCandle): boolean { return [c.o, c.h, c.l, c.c].every(Number.isFinite) && c.h >= Math.max(c.o, c.c) && c.l <= Math.min(c.o, c.c); }
+function validCandle(c: FinancialCandle): boolean { return Number.isFinite(c.o) && Number.isFinite(c.h) && Number.isFinite(c.l) && Number.isFinite(c.c) && c.h >= Math.max(c.o, c.c) && c.l <= Math.min(c.o, c.c); }
 export function chartKeys(data: FinancialChartData): ChartX[] {
   // Scope date parsing to this call. Never retain history by array identity:
   // callers may edit points between builds, and returned models keep no cache.
@@ -100,15 +100,24 @@ function domain(values: number[], zero: boolean): [number, number] {
   return [zero ? Math.min(0, rawMin) : rawMin - padding, zero ? Math.max(0.01, rawMax + padding) : rawMax + padding];
 }
 export function buildFinancialChartModel(data: FinancialChartData, width: number, height: number, axisGutter = 52, viewport?: FinancialViewport, rightGutter = 52): FinancialChartModel {
+  // Build-local identities: shared ISO keys recur across series and stacking.
+  // Numeric/category keys already have cheap conversions; do not cache them.
+  const identities = new Map<string, string>();
+  const identify = (key: ChartX): string => {
+    if (typeof key === 'number' || data.xType === 'category') return keyId(key, data.xType);
+    let id = identities.get(key);
+    if (id === undefined) { id = keyId(key, data.xType); identities.set(key, id); }
+    return id;
+  };
   const allKeys = chartKeys(data);
   const start = Math.max(0, Math.min(viewport?.start ?? 0, Math.max(0, allKeys.length - 1)));
   const end = Math.max(start + 1, Math.min(viewport?.end ?? allKeys.length, allKeys.length));
-  const xKeys = allKeys.slice(start, end), visibleIds = new Set(xKeys.map(key => keyId(key, data.xType)));
-  const sources = data.series ?? [], candles = (data.candles ?? []).filter(c => validCandle(c) && visibleIds.has(keyId(c.t, data.xType)));
+  const xKeys = allKeys.slice(start, end), visibleIds = new Set(xKeys.map(key => identify(key)));
+  const sources = data.series ?? [], candles = (data.candles ?? []).filter(c => validCandle(c) && visibleIds.has(identify(c.t)));
   const hasRightAxis = sources.some(s => s.axis === 'right');
   const geometry = financialGeometry(width, height, axisGutter, hasRightAxis ? rightGutter : 12);
-  const indexByKey = new Map(xKeys.map((key, i) => [keyId(key, data.xType), i]));
-  const visibleSeries = sources.map(source => ({ source, points: source.points.filter(p => visibleIds.has(keyId(p[0], data.xType)) && Number.isFinite(p[1])) }));
+  const indexByKey = new Map(xKeys.map((key, i) => [identify(key), i]));
+  const visibleSeries = sources.map(source => ({ source, points: source.points.filter(p => visibleIds.has(identify(p[0])) && Number.isFinite(p[1])) }));
   const leftValues = candles.flatMap(c => [c.h, c.l]).filter(Number.isFinite), rightValues: number[] = [];
   for (const { source, points } of visibleSeries) {
     const target = source.axis === 'right' ? rightValues : leftValues;
@@ -119,7 +128,7 @@ export function buildFinancialChartModel(data: FinancialChartData, width: number
     for (const { source, points } of visibleSeries) {
       if (source.type !== 'bar' || (source.axis ?? 'left') !== axis) continue;
       for (const point of points) {
-        const id = keyId(point[0], data.xType);
+        const id = identify(point[0]);
         let total = totals.get(id);
         if (total == null) { total = [0, 0]; totals.set(id, total); }
         total[point[1] >= 0 ? 0 : 1] += point[1];
@@ -127,7 +136,7 @@ export function buildFinancialChartModel(data: FinancialChartData, width: number
     }
     const target = axis === 'right' ? rightValues : leftValues;
     for (const key of xKeys) {
-      const total = totals.get(keyId(key, data.xType));
+      const total = totals.get(identify(key));
       target.push(total?.[0] ?? 0, total?.[1] ?? 0);
     }
   } }
@@ -141,8 +150,9 @@ export function buildFinancialChartModel(data: FinancialChartData, width: number
   const y = (value: number, axis: ChartAxis = 'left') => { const lo = axis === 'right' ? rightMin : min, hi = axis === 'right' ? rightMax : max; return geometry.bottom - (value - lo) / (hi - lo) * geometry.plotHeight; };
   const xPositions = xKeys.map((key, i) => x(key, i));
   const xTickIndices = xKeys.length < 3 ? xKeys.map((_, i) => i) : [...new Set([0, Math.floor((xKeys.length - 1) / 2), xKeys.length - 1])];
-  const plottedSeries = visibleSeries.map(({ source, points }) => ({ source, points: points.map(([key, value]) => { const index = indexByKey.get(keyId(key, data.xType)) ?? 0; return { x: x(key, index), y: y(value, source.axis), value, key, index }; }).filter(p => Number.isFinite(p.x) && Number.isFinite(p.y)) }));
-  const plottedCandles = candles.map(k => { const index = indexByKey.get(keyId(k.t, data.xType)) ?? 0; return { ...k, x: x(k.t, index), bodyTop: y(Math.max(k.o, k.c)), bodyBottom: y(Math.min(k.o, k.c)), wickTop: y(k.h), wickBottom: y(k.l), index }; });
+  const plottedSeries = visibleSeries.map(({ source, points }) => ({ source, points: points.map(([key, value]) => { const index = indexByKey.get(identify(key)) ?? 0; return { x: x(key, index), y: y(value, source.axis), value, key, index }; }).filter(p => Number.isFinite(p.x) && Number.isFinite(p.y)) }));
+  const plottedCandles = candles.map(k => { const index = indexByKey.get(identify(k.t)) ?? 0; return { ...k, x: x(k.t, index), bodyTop: y(Math.max(k.o, k.c)), bodyBottom: y(Math.min(k.o, k.c)), wickTop: y(k.h), wickBottom: y(k.l), index }; });
+  identities.clear();
   return { geometry, min, max, yTicks: niceTicks(min, max), rightMin, rightMax, rightTicks: hasRightAxis ? niceTicks(rightMin, rightMax) : [], hasRightAxis, xKeys, allKeys, start, end, xPositions, xTickIndices, plottedSeries, plottedCandles, x, y };
 }
 export function nearestChartIndex(model: FinancialChartModel, touchX: number): number | null {
