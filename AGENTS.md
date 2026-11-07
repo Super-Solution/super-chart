@@ -1,6 +1,6 @@
 # Super Chart agent instructions
 
-Read `MAINTAINING.md` before changing this standalone repository.
+Read `docs/MAINTAINING.md` before changing this standalone repository.
 
 The owner requires permission before adding test cases, assertions, fixtures or
 snapshot baselines. Run relevant existing validation; do not add a CI pipeline.
