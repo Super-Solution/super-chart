@@ -12,10 +12,10 @@
  * limitations under the License.
  */
 
-import { KLineData } from 'klinecharts'
+import type { MarketBar } from './core/types'
 
 import { UNIT_MS } from './data/requestRange'
-import { Datafeed, SymbolInfo, Period, DatafeedSubscribeCallback, HistoryRequest, SearchRequest } from './types'
+import type { Datafeed, SymbolInfo, Period, DatafeedSubscribeCallback, HistoryRequest, SearchRequest } from './core/feed'
 
 /**
  * A reference Datafeed against Polygon.io, kept for the shape of the
@@ -51,7 +51,7 @@ export default class DefaultDatafeed implements Datafeed {
   // Aggregate-minute bars accumulated into the subscribed period's own bucket
   // (Polygon's AM. channel is always one-minute bars; a 1H or 1D chart needs
   // them combined, not applied one by one).
-  private readonly _buckets = new Map<string, KLineData & { bucketStart: number }>()
+  private readonly _buckets = new Map<string, MarketBar & { bucketStart: number }>()
 
   async searchSymbols (search?: string, request?: SearchRequest): Promise<SymbolInfo[]> {
     const query = encodeURIComponent(search ?? '')
@@ -74,7 +74,7 @@ export default class DefaultDatafeed implements Datafeed {
     }))
   }
 
-  async getHistoryKLineData (symbol: SymbolInfo, period: Period, from: number, to: number, request?: HistoryRequest): Promise<KLineData[]> {
+  async getHistoryKLineData (symbol: SymbolInfo, period: Period, from: number, to: number, request?: HistoryRequest): Promise<MarketBar[]> {
     const response = await fetch(
       `https://api.polygon.io/v2/aggs/ticker/${encodeURIComponent(symbol.ticker)}/range/${period.multiplier}/${period.timespan}/${from}/${to}?apiKey=${encodeURIComponent(this._apiKey)}`,
       { signal: request?.signal }
@@ -189,7 +189,7 @@ export default class DefaultDatafeed implements Datafeed {
     if (entry === undefined) {
       return
     }
-    const bar: KLineData = { timestamp: frame.s, open: frame.o, high: frame.h, low: frame.l, close: frame.c, volume: frame.v, turnover: frame.vw }
+    const bar: MarketBar = { timestamp: frame.s, open: frame.o, high: frame.h, low: frame.l, close: frame.c, volume: frame.v, turnover: frame.vw }
     const unit = UNIT_MS[entry.period.timespan]
     const bucketMs = unit !== undefined ? unit * entry.period.multiplier : UNIT_MS.minute
     const bucketStart = Math.floor(bar.timestamp / bucketMs) * bucketMs

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Super Chart — owned workspace</title>
+  <style>
+    :root { color-scheme:dark; font:14px system-ui; color:#d6deea; background:#10151d }
+    body { margin:18px auto; max-width:1440px; padding:0 12px }
+    h1 { font-size:20px } p { line-height:1.5 } a { color:#90b6ff }
+    #workspace { height:calc(100dvh - 130px); min-height:540px; border:1px solid #40516b }
+    @media(max-width:600px) { #workspace { min-height:740px } }
+  </style>
+</head>
+<body>
+  <h1>Super Chart · owned workspace</h1>
+  <p>Synthetic markets and local feed only. Search, switch intervals, draw, or replay history. <a href="/demo/engine.html">Engine workbench</a> <button id="indicators" type="button">Load optional indicators</button></p>
+  <main id="workspace"></main>
+  <script type="module" src="/demo/workspace.ts"></script>
+</body>
+</html>

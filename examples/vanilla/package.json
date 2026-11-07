@@ -1,14 +1,13 @@
 {
   "name": "super-chart-example-vanilla",
   "private": true,
-  "description": "Minimal vanilla integration example (SC-191): consumes @zzyzxlabs/super-chart through its real package exports (never ../src), and shows the patterns every host still has to write by hand until the React adapter (a later batch) lands — an inline container height, a ResizeObserver calling resize(), a guarded datafeed, an equality guard before setSymbol/setPeriod, and dispose() on teardown.",
+  "description": "Owned Super Chart API example, consuming actual package exports.",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@zzyzxlabs/super-chart": "file:../..",
-    "klinecharts": "9.8.12"
+    "@super-solution/super-chart": "file:../.."
   },
   "devDependencies": {
     "typescript": "^4.9.5"

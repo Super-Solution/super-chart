@@ -1,30 +1,56 @@
 import { test, expect, openHarness, pageErrors } from './fixtures'
 
-interface Check { step: string, ok: boolean, detail: string }
-
-// This batch's own findings: rail rebuild-on-pick (SC-011), hotkeys (SC-095),
-// Esc-cancel and stay mode (SC-094), quick measure (SC-125), magnet (SC-103),
-// built-in line hit tolerance (SC-100), and the freehand brush's create-once
-// and pane resolution (SC-009). See pages/drawing-input-suite.js.
-test('drawing input: rail, hotkeys, Esc/stay mode, quick measure, magnet, hit tolerance, brush', async ({ page, kc }) => {
-  test.setTimeout(60_000)
-  await openHarness(page, kc)
-  const results: Check[] = await page.evaluate(async () => {
-    const suite = await import('/e2e/pages/drawing-input-suite.js' as string)
-    return await suite.run()
+// Restores the original segment/Escape and create-once brush checks through
+// the owned input controller. Magnet/stay-mode rail contracts remain separate.
+test('drawing input creates one segment, cancels with Escape and commits a brush stroke once', async ({ page }) => {
+  await openHarness(page)
+  await page.evaluate(async () => {
+    const { H } = window as any
+    const { pro } = H.mount({ id: 'drawing-input' })
+    ;(window as any).pro = pro
+    await H.ready(pro)
   })
-  for (const r of results) {
-    expect.soft(r.ok, `${r.step}${r.detail ? ` :: ${r.detail.slice(0, 300)}` : ''}`).toBe(true)
-  }
-  expect(results.find(r => r.step === 'klinecharts version')?.detail).toBe(kc)
-  // Known issue (2026-09-27): on klinecharts 9.7.2 only, one uncaught TypeError is thrown inside
-  // klinecharts during this suite (not from this package; 9.8.12, the version the wallet ships, is clean).
-  // It is tolerated here by exact message on 9.7.2 only and recorded as an annotation; any other page
-  // error still fails. Root cause is tracked as a follow-up.
-  const KNOWN_972 = "Uncaught TypeError: Cannot read properties of undefined (reading 'x')"
-  const errors = await pageErrors(page)
-  if (kc === "9.7.2" && errors.includes(KNOWN_972)) {
-    test.info().annotations.push({ type: "known-issue", description: `klinecharts 9.7.2: ${KNOWN_972}` })
-  }
-  expect(errors.filter(e => !(kc === "9.7.2" && e === KNOWN_972))).toEqual([])
+  const root = page.locator('#drawing-input [tabindex="0"]')
+  const bounds = (await root.boundingBox())!
+  const tools = page.locator('#drawing-input select[aria-label="Drawing tool"]')
+  await tools.selectOption('segment')
+  await page.mouse.move(bounds.x + 250, bounds.y + 90)
+  await page.mouse.down()
+  await page.mouse.move(bounds.x + 450, bounds.y + 160, { steps: 6 })
+  await page.mouse.up()
+  const first = await page.evaluate(() => (window as any).pro.chart.drawings.getSnapshot().drawings)
+  expect(first.length).toBe(1)
+  expect(first[0].type).toBe('segment')
+  expect(first[0].anchors.length).toBe(2)
+  await tools.selectOption('rectangle')
+  await page.mouse.move(bounds.x + 300, bounds.y + 110)
+  await page.mouse.down()
+  await page.mouse.move(bounds.x + 500, bounds.y + 180, { steps: 4 })
+  await page.keyboard.press('Escape')
+  await page.mouse.up()
+  expect(await page.evaluate(() => (window as any).pro.chart.drawings.getSnapshot().drawings)).toEqual(first)
+
+  // Existing drawing-input-suite.js section 9: one creation per stroke,
+  // no per-move removal/recreation, and selection after release.
+  await page.evaluate(() => {
+    const state = window as any, store = state.pro.chart.drawings
+    const add = store.add.bind(store), remove = store.remove.bind(store)
+    state.brushCalls = { add: 0, remove: 0 }
+    store.add = (...args: any[]) => { state.brushCalls.add++; return add(...args) }
+    store.remove = (...args: any[]) => { state.brushCalls.remove++; return remove(...args) }
+    state.restoreDrawingMethods = () => { store.add = add; store.remove = remove }
+  })
+  await tools.selectOption('brush')
+  await page.mouse.move(bounds.x + 150, bounds.y + 240)
+  await page.mouse.down()
+  await page.mouse.move(bounds.x + 230, bounds.y + 180, { steps: 8 })
+  await page.mouse.up()
+  const brush = await page.evaluate(() => {
+    const state = window as any, snapshot = state.pro.chart.drawings.getSnapshot()
+    state.restoreDrawingMethods()
+    return { calls: state.brushCalls, selected: snapshot.drawings.find((item: any) => item.type === 'brush')?.id === snapshot.selectedId }
+  })
+  expect(brush.calls).toEqual({ add: 1, remove: 0 })
+  expect(brush.selected).toBe(true)
+  expect(await pageErrors(page)).toEqual([])
 })

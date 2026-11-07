@@ -31,6 +31,27 @@ export interface RealtimeChartFrame {
   inspect: (chartX: number) => RealtimeInspection | null
 }
 
+/** Apply an opt-in fractional view to an existing visible-only model. */
+export function applyRealtimeViewport (model: FinancialChartModel, snapshot: RealtimeViewSnapshot, spacing: 'time' | 'category'): void {
+  if (snapshot.dataStart === undefined || snapshot.viewport.i1 <= snapshot.viewport.i0 || snapshot.bars.length < 2) return
+  const dataStart = snapshot.dataStart, g = model.geometry
+  const timeAt = (index: number): number => {
+    const local = index - dataStart, first = Math.max(0, Math.min(snapshot.bars.length - 2, Math.floor(local)))
+    const a = snapshot.bars[first].timestamp, b = snapshot.bars[first + 1].timestamp
+    return a + (b - a) * (local - first)
+  }
+  const firstTime = timeAt(snapshot.viewport.i0), lastTime = timeAt(snapshot.viewport.i1)
+  model.x = (key, index) => g.left + (spacing === 'category'
+    ? (dataStart + index - snapshot.viewport.i0) / (snapshot.viewport.i1 - snapshot.viewport.i0)
+    : (Number(key) - firstTime) / (lastTime - firstTime)) * g.plotWidth
+  model.xPositions = model.xKeys.map((key, index) => model.x(key, index))
+  for (const candle of model.plottedCandles) candle.x = model.x(candle.t, candle.index)
+  for (const item of model.plottedSeries) for (const point of item.points) point.x = model.x(point.key, point.index)
+  const start = Math.max(0, Math.ceil(snapshot.viewport.i0) - dataStart)
+  const end = Math.min(model.xKeys.length - 1, Math.floor(snapshot.viewport.i1) - dataStart)
+  model.xTickIndices = end < start ? [] : [...new Set([start, Math.floor((start + end) / 2), end])]
+}
+
 /**
  * Build only the visible candles/indicator points. Hosts render this shared geometry
  * with their own Canvas/SVG/native view. Inspection uses chart-local x, including
@@ -60,6 +81,7 @@ export function createRealtimeChartFrame (
     candles: snapshot.bars.map(bar => ({ t: bar.timestamp, o: bar.open, h: bar.high, l: bar.low, c: bar.close, v: bar.volume })),
     series
   }, width, height, options.axisGutter)
+  applyRealtimeViewport(model, snapshot, options.spacing ?? 'time')
   return {
     snapshot,
     model,
@@ -73,7 +95,7 @@ export function createRealtimeChartFrame (
       if (row === null || snapshot.bars[row].timestamp !== timestamp) return null
       const finite = (value: number | null): number | null => value !== null && Number.isFinite(value) ? value : null
       return {
-        index: snapshot.viewport.i0 + row,
+        index: (snapshot.dataStart ?? snapshot.viewport.i0) + row,
         timestamp,
         mode: snapshot.mode,
         displayBar: snapshot.bars[row],

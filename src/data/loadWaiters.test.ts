@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { Period, SymbolInfo } from '../types'
+import type { Period, SymbolInfo } from '../core/feed'
 
 import type { FinalPair, LoadOutcome } from './loadWaiters'
 import { LoadWaiterQueue } from './loadWaiters'

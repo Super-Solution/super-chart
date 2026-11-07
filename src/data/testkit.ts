@@ -2,9 +2,9 @@
 // visibility), a klinecharts-like chart and a datafeed whose requests the test
 // resolves by hand. Not part of the package (only *.test.ts import it).
 
-import type { KLineData } from 'klinecharts'
+import type { MarketBar as KLineData } from '../core/types'
 
-import type { Datafeed, Period, SymbolInfo } from '../types'
+import type { Datafeed, Period, SymbolInfo } from '../core/feed'
 
 import type { LoadDataRequest, LoaderChart, LoaderEnv } from './loader'
 

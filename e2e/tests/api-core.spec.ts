@@ -5,17 +5,17 @@ import { test, expect, openHarness, pageErrors } from './fixtures'
 // unhandled rejection), SC-003 (ResizeObserver follows the container, not
 // only the window).
 
-test('setPeriod resolves "loaded" after the new data is drawn; ready resolves once', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('setPeriod resolves "loaded" after the new data is drawn; ready resolves once', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async () => {
     const { H } = window as any
     const { pro } = H.mount()
     await pro.ready
     await H.ready(pro)
-    const before = pro.getChart().getDataList().length
+    const before = pro.getBars().length
     const result = await pro.setPeriod('D')
     await H.sleep(50)
-    const after = pro.getChart().getDataList()
+    const after = pro.getBars()
     return {
       before,
       result,
@@ -29,13 +29,13 @@ test('setPeriod resolves "loaded" after the new data is drawn; ready resolves on
   expect(state.result.bars).toBeGreaterThan(0)
   expect(state.afterLen).toBeGreaterThan(0)
   expect(state.lastPeriodTimespan).toBe('day')
-  expect(state.loadState.status).toBe('idle')
+  expect(state.loadState.status).toBe('ready')
   expect(state.loadState.loaded.period.timespan).toBe('day')
   expect(await pageErrors(page)).toEqual([])
 })
 
-test('setSymbol/setPeriod in the same tick resolve together, and an unreadable period string resolves "invalid" instead of hanging', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('setSymbol/setPeriod in the same tick resolve together, and an unreadable period string is rejected instead of hanging', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async () => {
     const { H } = window as any
     const { pro } = H.mount()
@@ -43,30 +43,31 @@ test('setSymbol/setPeriod in the same tick resolve together, and an unreadable p
     const p1 = pro.setSymbol({ ticker: 'OTHER-USDT', pricePrecision: 2 })
     const p2 = pro.setPeriod('D')
     const [r1, r2] = await Promise.all([p1, p2])
-    const invalid = await pro.setPeriod('4 hours')
+    let invalid: string | null = null
+    try { await pro.setPeriod('4 hours') } catch (error) { invalid = (error as Error).name }
     return { r1, r2, invalid, symbol: pro.getSymbol().ticker, period: pro.getPeriod() }
   })
   expect(state.r1.status).toBe('loaded')
   expect(state.r2).toEqual(state.r1)
   expect(state.symbol).toBe('OTHER-USDT')
   expect(state.period.timespan).toBe('day')
-  expect(state.invalid.status).toBe('invalid')
-  expect(state.invalid.error.code).toBe('INVALID_PERIOD')
+  expect(state.invalid).toBe('RangeError')
   expect(await pageErrors(page)).toEqual([])
 })
 
-test('getState is a JSON round trip and reflects chart type; getContext gives the visible bars', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('getState is a JSON round trip; the owned chart type and visible bars reflect changes', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async () => {
     const { H } = window as any
     const { pro } = H.mount()
     await H.ready(pro)
     const s1 = pro.getState()
     const roundTrip = JSON.parse(JSON.stringify(s1))
-    pro.setStyles({ candle: { type: 'area' } })
-    const s2 = pro.getState()
-    const ctx = pro.getContext()
-    return { s1, roundTrip, chartType1: s1.chartType, chartType2: s2.chartType, ctx }
+    const chartType1 = pro.chart.getRenderOptions().chartType
+    pro.chart.setRenderOptions({ chartType: 'area' })
+    const snapshot = pro.chart.view.getSnapshot()
+    const bars = snapshot.bars
+    return { s1, roundTrip, chartType1, chartType2: pro.chart.getRenderOptions().chartType, ctx: { bars, symbol: pro.getSymbol().ticker } }
   })
   expect(state.roundTrip).toEqual(state.s1)
   expect(state.s1.schema).toBe(1)
@@ -76,8 +77,8 @@ test('getState is a JSON round trip and reflects chart type; getContext gives th
   expect(state.ctx.symbol).toBe('SUPER-USDT')
 })
 
-test('a rejecting searchSymbols shows an error row with Retry, not an endless spinner, and recovers (SC-031)', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('a rejecting searchSymbols shows an error row with Retry, not an endless spinner, and recovers (SC-031)', async ({ page }) => {
+  await openHarness(page)
   await page.evaluate(async () => {
     const { H } = window as any
     const mounted = H.mount({ id: 'search-reject' })
@@ -89,25 +90,24 @@ test('a rejecting searchSymbols shows an error row with Retry, not an endless sp
     }
     ;(window as any).__searchFeed = { setOk: () => { reject = false } }
   })
-  await page.locator('#search-reject .symbol').click()
-  const input = page.locator('#search-reject .klinecharts-pro-symbol-search-modal-input input')
+  await page.locator('#search-reject').getByRole('button', { name: 'SUPER-USDT', exact: true }).click()
+  const input = page.locator('#search-reject [role=dialog] input')
   await input.fill('anything')
   await input.dispatchEvent('change')
-  const errorRow = page.locator('#search-reject .klinecharts-pro-symbol-search-modal-error')
-  const retryButton = errorRow.locator('button')
-  await expect(errorRow).toBeVisible()
+  const dialog = page.locator('#search-reject [role=dialog]')
+  const retryButton = dialog.getByRole('button', { name: 'Retry search', exact: true })
   await expect(retryButton).toBeVisible()
   expect(await pageErrors(page)).toEqual([])
   // Retry, after the feed recovers: the error row is gone and results render.
   await page.evaluate(() => { (window as any).__searchFeed.setOk() })
   await retryButton.click()
-  await expect(errorRow).toHaveCount(0)
-  await expect(page.locator('#search-reject .klinecharts-pro-symbol-search-modal-list li')).toContainText('FOUND-USDT')
+  await expect(retryButton).toHaveCount(0)
+  await expect(dialog.locator('li')).toContainText('FOUND-USDT')
   expect(await pageErrors(page)).toEqual([])
 })
 
-test('the chart follows its container size, not only the window (SC-003)', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('the chart follows its container size, not only the window (SC-003)', async ({ page }) => {
+  await openHarness(page)
   const result = await page.evaluate(async () => {
     const { H } = window as any
     const { pro, container } = H.mount({ id: 'resize-test' })

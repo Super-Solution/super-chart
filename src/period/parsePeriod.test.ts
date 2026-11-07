@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { Period } from '../types'
+import type { Period } from '../core/feed'
 
 import { parsePeriod, periodAllowed, periodKey, resolveTypedPeriod } from './parsePeriod'
 

@@ -12,44 +12,21 @@
  * limitations under the License.
  */
 
-// klinecharts asks the chart's customApi.formatDate for a label in the
-// chart's *display* timezone. That is right for intraday bars, but a daily
-// (or larger) bar is a session, not an instant: TradingView and every
-// exchange read a daily bar's date in the market's own zone, not the
-// viewer's. A UTC-aligned bar (Binance's 00:00Z, US equities' 13:30Z) reads
-// the same date in every zone, so this only shows up for a feed whose bars
-// open at midnight elsewhere (OKX's UTC+8 daily bars), or once the viewer's
-// own zone is west of UTC and the *display* zone is used for day+ bars too.
-//
-// formatBarDate is the whole body of that customApi.formatDate: day, week,
-// month and year bars format in the symbol's timezone (SymbolInfo.timezone,
-// default 'UTC'); minute and hour bars keep the chart's display timezone
-// unchanged. It also passes through the boundary formats ('YYYY', 'YYYY-MM',
-// 'MM-DD') klinecharts asks minute charts for at a day/month/year boundary,
-// instead of always answering with a bare time — without a date there, an
-// intraday chart never shows which day a tick belongs to.
-//
-// This module never imports a runtime value from 'klinecharts' (only `type`
-// imports elsewhere in this package do): the package has no "exports" field
-// and its "main" (a UMD shim) resolves to an empty module under plain Node
-// resolution (confirmed against 9.8.12; vitest's node environment hits this
-// too), so a value import here would silently break every unit test while
-// still working in the Vite-bundled browser build — the trap the root
-// CLAUDE.md warns about. FormatDateType's three cases and klinecharts'
-// formatDate (a template filled from Intl.DateTimeFormat#formatToParts) are
-// small enough to give our own names to and reimplement, byte-for-byte
-// equivalent, so this stays plain, portable and safe to unit test.
+// Day-and-larger bars describe a market session, so their date uses the
+// symbol's timezone (default UTC). Intraday bars use the viewer's display
+// timezone. Minute-axis boundary patterns preserve day/month/year context.
+// This portable formatter is shared by the owned renderer and date checks.
 
-import type { Timespan } from '../types'
+import type { Timespan } from '../core/feed'
 
-/** klinecharts' FormatDateType, renamed so this module needs no runtime import from it. */
+/** The context requesting a financial date label. */
 export type BarDateRequestType = 'xAxis' | 'crosshair' | 'tooltip'
 
 const DTF_OPTIONS: Intl.DateTimeFormatOptions = {
   hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'
 }
 
-/** klinecharts' utils.formatDate: fills a 'YYYY-MM-DD HH:mm' style template from formatToParts. */
+/** Fill a date/time template from timezone-aware calendar parts. */
 function formatDate (dtf: Intl.DateTimeFormat, timestamp: number, format: string): string {
   const parts: Record<string, string> = {}
   for (const { type, value } of dtf.formatToParts(new Date(timestamp))) {
@@ -65,8 +42,6 @@ function formatDate (dtf: Intl.DateTimeFormat, timestamp: number, format: string
   return format.replace(/YYYY|MM|DD|HH|mm|ss/g, key => parts[key] ?? key)
 }
 
-// utils.formatDate splits the exact 'MM/DD/YYYY, HH:mm:ss'-shaped string this
-// produces; a different locale or option set would garble every label.
 const UTC_DTF = new Intl.DateTimeFormat('en', { ...DTF_OPTIONS, timeZone: 'UTC' })
 
 const dtfCache = new Map<string, Intl.DateTimeFormat>()
@@ -87,6 +62,7 @@ function dtfFor (tz: string): Intl.DateTimeFormat {
   } catch {
     dtf = UTC_DTF
   }
+  if (dtfCache.size >= 8) dtfCache.delete(dtfCache.keys().next().value as string)
   dtfCache.set(tz, dtf)
   return dtf
 }
@@ -97,19 +73,19 @@ function isDayOrLarger (timespan: Timespan): boolean {
 }
 
 export interface FormatBarDateParams {
-  /** The chart's display-timezone formatter, exactly as klinecharts passes it in. */
+  /** The viewer's display-timezone formatter. */
   displayDtf: Intl.DateTimeFormat
   /** SymbolInfo.timezone; undefined (and anything Intl rejects) is read as 'UTC'. */
   symbolTimezone: string | undefined
   timespan: Timespan
   timestamp: number
-  /** klinecharts' requested pattern, e.g. 'HH:mm', 'YYYY-MM', 'MM-DD'. */
+  /** Requested axis pattern, e.g. 'HH:mm', 'YYYY-MM', 'MM-DD'. */
   format: string
   type: BarDateRequestType
 }
 
 /**
- * The whole body of ChartPro's customApi.formatDate. Day-and-larger bars are
+ * Day-and-larger bars are
  * read in `symbolTimezone` (default UTC); minute and hour bars keep
  * `displayDtf` unchanged, and a minute chart's boundary-format requests
  * ('YYYY' / 'YYYY-MM' / 'MM-DD') are answered instead of forced to 'HH:mm'.
@@ -117,6 +93,12 @@ export interface FormatBarDateParams {
 export function formatBarDate (p: FormatBarDateParams): string {
   const dtf = isDayOrLarger(p.timespan) ? dtfFor(p.symbolTimezone ?? 'UTC') : p.displayDtf
   switch (p.timespan) {
+    case 'second': {
+      if (p.type === 'xAxis') {
+        return formatDate(dtf, p.timestamp, p.format === 'YYYY' || p.format === 'YYYY-MM' || p.format === 'MM-DD' ? p.format : 'HH:mm:ss')
+      }
+      return formatDate(dtf, p.timestamp, 'YYYY-MM-DD HH:mm:ss')
+    }
     case 'minute': {
       if (p.type === 'xAxis') {
         if (p.format === 'YYYY' || p.format === 'YYYY-MM' || p.format === 'MM-DD') {

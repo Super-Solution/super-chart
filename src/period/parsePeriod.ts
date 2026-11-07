@@ -23,7 +23,7 @@
 //
 // Part of SUPer-Chart (Apache-2.0).
 
-import type { Datafeed, Period } from '../types'
+import type { Datafeed, Period } from '../core/feed'
 
 import { parsePeriod, periodKey, samePeriod } from '../data/keys'
 

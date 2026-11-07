@@ -8,6 +8,10 @@ export interface ChartDataPort<Bar = MarketBar> {
   /** Optional ordered tail batch; equivalent to updateData in order, with one render notification. */
   updateDataBatch?: (data: Bar[], more?: boolean) => void
   getDataList: () => Bar[]
+  /** Optional O(1) tail read so feed routing need not request a full history snapshot per tick. */
+  getLastTimestamp?: () => number | undefined
+  /** Release a host's older-page lock when the loader cancels that page or retry. */
+  cancelHistoryLoad?: () => void
   loadMore?: (callback: (timestamp: number | null) => void) => void
   setLoadDataCallback?: (callback: (request: HistoryLoadRequest<Bar>) => void) => void
 }

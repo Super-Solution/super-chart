@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import {
-  _resetCountdownRegistrationForTest, attachBarCountdown, barRemaining, buildCountdownOverlayTemplate, formatCountdown,
-  nextBarClose, registerCountdownOverlay
-} from './countdown'
-import type { CountdownChart, RegisterOverlayFn } from './countdown'
+import { barRemaining, createBarCountdown, formatCountdown, getBarCountdown, nextBarClose } from '../engine/barCountdown'
+import type { CountdownContext } from '../engine/barCountdown'
 
 describe('nextBarClose', () => {
   it('fixed-duration timespans add multiplier * span', () => {
@@ -69,169 +66,75 @@ describe('formatCountdown', () => {
   })
 })
 
-// ---- attachBarCountdown -----------------------------------------------------
-
-function fakeChart (overrides: Partial<CountdownChart> = {}): CountdownChart & { overlays: Map<string, unknown> } {
-  const overlays = new Map<string, unknown>()
-  let seq = 0
+// Existing countdown lifecycle cases now exercise the owned timer/model. The
+// retired global-overlay registration, private figure and host-overlay-wipe
+// cases have no owned API counterpart and are not counted as validation.
+function context (overrides: Partial<CountdownContext> = {}): CountdownContext {
   return {
-    overlays,
-    getDataList: () => [{ timestamp: 0, open: 100, close: 105 }],
-    getStyles: () => ({ candle: { priceMark: { last: { show: true, upColor: '#0f0', downColor: '#f00', noChangeColor: '#888', text: { show: true, size: 11, paddingTop: 3, paddingBottom: 3 } } } } }),
-    createOverlay: (value) => {
-      const id = `ov${++seq}`
-      overlays.set(id, value)
-      return id
-    },
-    overrideOverlay: ({ id, extendData }) => { overlays.set(id, { ...(overlays.get(id) as object), extendData }) },
-    removeOverlay: (remove) => {
-      const r = remove as { id?: string } | undefined
-      if (r?.id !== undefined) {
-        overlays.delete(r.id)
-      } else {
-        overlays.clear()
-      }
-    },
+    marketKey: 'test-market',
+    lastBar: { timestamp: 0, open: 100, close: 105 },
+    period: { multiplier: 1, timespan: 'hour' },
     ...overrides
   }
 }
 
-function fakeRegisterOverlay (): RegisterOverlayFn {
-  return vi.fn()
-}
-
-describe('attachBarCountdown', () => {
-  it('creates the overlay with the formatted countdown text', () => {
-    const chart = fakeChart()
-    const now = 0
-    const dispose = attachBarCountdown(chart, {
-      getPeriod: () => ({ multiplier: 1, timespan: 'hour' }),
-      registerOverlay: fakeRegisterOverlay(),
-      now: () => now,
-      setTimeout: () => 0,
-      clearTimeout: () => {}
+describe('createBarCountdown', () => {
+  it('creates the current snapshot with the formatted countdown text', () => {
+    const countdown = createBarCountdown({
+      getContext: () => context(), onChange: () => {}, now: () => 0,
+      timer: { setTimeout: () => 0, clearTimeout: () => {} }
     })
-    expect(chart.overlays.size).toBe(1)
-    const [[, overlay]] = chart.overlays
-    // now=0, a 1-hour bar opened at 0: barRemaining(0, hour, 0) === one full hour.
-    expect((overlay as { extendData: { text: string } }).extendData.text).toBe('01:00:00')
-    dispose()
+    expect(countdown.getSnapshot()).not.toBeNull()
+    expect(countdown.getSnapshot()?.text).toBe('01:00:00')
+    countdown.dispose()
   })
 
-  it('removes the overlay once the bar should have closed, and does not recreate it', () => {
-    const chart = fakeChart()
+  it('removes the snapshot once the bar should have closed, and does not recreate it', () => {
     let now = 0
     const scheduled: { fn: (() => void) | null } = { fn: null }
-    const dispose = attachBarCountdown(chart, {
-      getPeriod: () => ({ multiplier: 1, timespan: 'hour' }),
-      registerOverlay: fakeRegisterOverlay(),
-      now: () => now,
-      setTimeout: (fn: () => void) => { scheduled.fn = fn; return 1 },
-      clearTimeout: () => {}
+    const countdown = createBarCountdown({
+      getContext: () => context(), onChange: () => {}, now: () => now,
+      timer: { setTimeout: fn => { scheduled.fn = fn; return 1 }, clearTimeout: () => {} }
     })
-    expect(chart.overlays.size).toBe(1)
-    now = 3_600_001 // the bar has closed
+    expect(countdown.getSnapshot()).not.toBeNull()
+    now = 3_600_001
     scheduled.fn?.()
-    expect(chart.overlays.size).toBe(0)
-    dispose()
+    expect(countdown.getSnapshot()).toBeNull()
+    countdown.dispose()
   })
 
-  it('re-creates the overlay if a host wipes every overlay while the countdown is still active', async () => {
-    const chart = fakeChart()
-    const dispose = attachBarCountdown(chart, {
-      getPeriod: () => ({ multiplier: 1, timespan: 'hour' }),
-      registerOverlay: fakeRegisterOverlay(),
-      now: () => 0,
-      setTimeout: () => 0,
-      clearTimeout: () => {}
+  it('hides when the host disables the countdown', () => {
+    const countdown = createBarCountdown({
+      getContext: () => context({ enabled: false }), onChange: () => {}, now: () => 0,
+      timer: { setTimeout: () => 0, clearTimeout: () => {} }
     })
-    expect(chart.overlays.size).toBe(1)
-    const [id] = [...chart.overlays.keys()]
-    const overlay = chart.overlays.get(id) as { onRemoved?: () => boolean }
-    // Simulate a host calling removeOverlay() with no args: klinecharts would
-    // remove every overlay and fire onRemoved on each, including ours.
-    chart.removeOverlay()
-    expect(chart.overlays.size).toBe(0)
-    overlay.onRemoved?.()
-    // The re-create is queued with queueMicrotask; let it run.
-    await Promise.resolve()
-    expect(chart.overlays.size).toBe(1)
-    dispose()
+    expect(countdown.getSnapshot()).toBeNull()
+    countdown.dispose()
   })
 
-  it('hides when the last-price tag is turned off', () => {
-    const chart = fakeChart({
-      getStyles: () => ({ candle: { priceMark: { last: { show: true, upColor: '#0f0', downColor: '#f00', noChangeColor: '#888', text: { show: false, size: 11, paddingTop: 3, paddingBottom: 3 } } } } })
-    })
-    const dispose = attachBarCountdown(chart, {
-      getPeriod: () => ({ multiplier: 1, timespan: 'hour' }),
-      registerOverlay: fakeRegisterOverlay(),
-      now: () => 0,
-      setTimeout: () => 0,
-      clearTimeout: () => {}
-    })
-    expect(chart.overlays.size).toBe(0)
-    dispose()
-  })
-
-  it('dispose removes the overlay and stops the timer', () => {
-    const chart = fakeChart()
+  it('dispose removes the snapshot and stops the timer', () => {
     const clearTimeout = vi.fn()
-    const dispose = attachBarCountdown(chart, {
-      getPeriod: () => ({ multiplier: 1, timespan: 'hour' }),
-      registerOverlay: fakeRegisterOverlay(),
-      now: () => 0,
-      setTimeout: () => 'handle',
-      clearTimeout
+    const countdown = createBarCountdown({
+      getContext: () => context(), onChange: () => {}, now: () => 0,
+      timer: { setTimeout: () => 'handle', clearTimeout }
     })
-    dispose()
-    expect(chart.overlays.size).toBe(0)
+    countdown.dispose()
+    expect(countdown.getSnapshot()).toBeNull()
     expect(clearTimeout).toHaveBeenCalledWith('handle')
   })
 })
 
-describe('buildCountdownOverlayTemplate', () => {
-  it('createPointFigures never draws in the main pane', () => {
-    expect(buildCountdownOverlayTemplate().createPointFigures()).toEqual([])
+describe('getBarCountdown', () => {
+  it('returns nothing without valid source data', () => {
+    expect(getBarCountdown(null, 0)).toBeNull()
+    expect(getBarCountdown(context({ lastBar: null }), 0)).toBeNull()
+    expect(getBarCountdown(context({ lastBar: { timestamp: 0, open: 100, close: NaN } }), 0)).toBeNull()
   })
 
-  it('createYAxisFigures draws nothing without valid extendData', () => {
-    const template = buildCountdownOverlayTemplate()
-    expect(template.createYAxisFigures({ overlay: { extendData: undefined }, yAxis: { convertToPixel: v => v }, bounding: { width: 100 } })).toEqual([])
-    expect(template.createYAxisFigures({ overlay: { extendData: { text: '' } }, yAxis: { convertToPixel: v => v }, bounding: { width: 100 } })).toEqual([])
-    expect(template.createYAxisFigures({ overlay: { extendData: { text: '01:00', price: 100 } }, yAxis: null, bounding: { width: 100 } })).toEqual([])
-  })
-
-  it('createYAxisFigures draws one ignoreEvent text figure positioned at the price, offset', () => {
-    const template = buildCountdownOverlayTemplate()
-    const figures = template.createYAxisFigures({
-      overlay: { extendData: { text: '01:00', price: 100, color: '#f00', offset: 5 } },
-      yAxis: { convertToPixel: v => v * 2 },
-      bounding: { width: 100 }
-    })
-    expect(figures).toHaveLength(1)
-    expect(figures[0].type).toBe('text')
-    expect(figures[0].ignoreEvent).toBe(true)
-    expect((figures[0].attrs as { x: number, y: number, text: string }).x).toBe(50)
-    expect((figures[0].attrs as { x: number, y: number, text: string }).y).toBe(205) // convertToPixel(100) + offset(5)
-    expect((figures[0].attrs as { text: string }).text).toBe('01:00')
-    expect((figures[0].styles as { backgroundColor: string }).backgroundColor).toBe('#f00')
-  })
-
-  it('needs no default figures: it draws only through createYAxisFigures', () => {
-    const template = buildCountdownOverlayTemplate()
-    expect(template.needDefaultPointFigure).toBe(false)
-    expect(template.needDefaultXAxisFigure).toBe(false)
-    expect(template.needDefaultYAxisFigure).toBe(false)
-  })
-})
-
-describe('registerCountdownOverlay', () => {
-  it('registers exactly once even when called twice', () => {
-    _resetCountdownRegistrationForTest()
-    const register = vi.fn()
-    registerCountdownOverlay(register)
-    registerCountdownOverlay(register)
-    expect(register).toHaveBeenCalledTimes(1)
+  it('provides countdown text and its actual price/direction for the renderer', () => {
+    const snapshot = getBarCountdown(context({ lastBar: { timestamp: 0, open: 105, close: 100 } }), 3_540_000)
+    expect(snapshot?.price).toBe(100)
+    expect(snapshot?.text).toBe('01:00')
+    expect(snapshot?.direction).toBe('down')
   })
 })

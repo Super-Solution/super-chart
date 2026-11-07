@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { createReplayController, indexAtOrBefore, REPLAY_BASE_STEP_MS } from './controller'
-import type { ReplayControllerDeps, ReplayLoaderLike, ReplayTimer } from './controller'
+import { createTimedReplay as createReplayController, indexAtOrBefore, REPLAY_BASE_STEP_MS } from '../engine/timedReplay'
+import type { TimedReplayOptions as ReplayControllerDeps, ReplayLoaderLike, ReplayTimer } from '../engine/timedReplay'
 
 describe('indexAtOrBefore', () => {
   const bars = [{ timestamp: 0 }, { timestamp: 10 }, { timestamp: 20 }, { timestamp: 30 }]
@@ -61,14 +61,14 @@ function manualTimer (): ReplayTimer & { flush: () => void, pending: number } {
 }
 
 function deps (loader: ReplayLoaderLike, timer: ReplayTimer, onChange = vi.fn()): ReplayControllerDeps {
-  return { loader, getDataList: () => Array.from({ length: 20 }, (_, i) => ({ timestamp: i * 1000 })), onChange, timer }
+  return { loader, getMarketKey: () => 'test-market', getDataList: () => Array.from({ length: 20 }, (_, i) => ({ timestamp: i * 1000 })), onChange, timer }
 }
 
 describe('createReplayController', () => {
   it('start() enters replay at the default index and reports active state', () => {
     const loader = fakeLoader()
     const onChange = vi.fn()
-    const { controls } = createReplayController(deps(loader, manualTimer(), onChange))
+    const controls = createReplayController(deps(loader, manualTimer(), onChange))
     expect(controls.start()).toBe(true)
     expect(loader.enterReplay).toHaveBeenCalledWith(undefined)
     expect(controls.getState().active).toBe(true)
@@ -77,7 +77,7 @@ describe('createReplayController', () => {
 
   it('start() while already replaying (a "jump to bar") exits the current replay first, then re-enters at the new index', () => {
     const loader = fakeLoader()
-    const { controls } = createReplayController(deps(loader, manualTimer()))
+    const controls = createReplayController(deps(loader, manualTimer()))
     controls.start({ index: 5 })
     expect(loader.exitReplay).not.toHaveBeenCalled() // the first start(): nothing to exit yet
     controls.start({ index: 12 }) // picking a new bar mid-replay
@@ -88,7 +88,7 @@ describe('createReplayController', () => {
 
   it('start({ index }) passes the index straight through', () => {
     const loader = fakeLoader()
-    const { controls } = createReplayController(deps(loader, manualTimer()))
+    const controls = createReplayController(deps(loader, manualTimer()))
     controls.start({ index: 5 })
     expect(loader.enterReplay).toHaveBeenCalledWith(5)
     expect(controls.getState().index).toBe(5)
@@ -96,14 +96,14 @@ describe('createReplayController', () => {
 
   it('start({ timestamp }) resolves the timestamp to a data index first', () => {
     const loader = fakeLoader()
-    const { controls } = createReplayController(deps(loader, manualTimer()))
+    const controls = createReplayController(deps(loader, manualTimer()))
     controls.start({ timestamp: 7500 }) // bar 7 (7000) is the last at or before 7500
     expect(loader.enterReplay).toHaveBeenCalledWith(7)
   })
 
   it('step(n) steps n bars and reports the new index; a no-op outside replay', () => {
     const loader = fakeLoader()
-    const { controls } = createReplayController(deps(loader, manualTimer()))
+    const controls = createReplayController(deps(loader, manualTimer()))
     controls.step(1) // not replaying yet
     expect(loader.replayStep).not.toHaveBeenCalled()
     controls.start({ index: 5 })
@@ -116,7 +116,7 @@ describe('createReplayController', () => {
   it('play() steps once per REPLAY_BASE_STEP_MS/speed, and pause() stops it', () => {
     const loader = fakeLoader()
     const timer = manualTimer()
-    const { controls } = createReplayController(deps(loader, timer))
+    const controls = createReplayController(deps(loader, timer))
     controls.start({ index: 0 })
     controls.play()
     expect(controls.getState().playing).toBe(true)
@@ -132,16 +132,16 @@ describe('createReplayController', () => {
     const loader = fakeLoader()
     const setTimeoutSpy = vi.fn((fn: () => void) => { return {} })
     const timer: ReplayTimer = { setTimeout: setTimeoutSpy, clearTimeout: vi.fn() }
-    const { controls } = createReplayController(deps(loader, timer))
+    const controls = createReplayController(deps(loader, timer))
     controls.start({ index: 0 })
-    controls.play({ speed: 2 })
+    controls.play(2)
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), REPLAY_BASE_STEP_MS / 2)
   })
 
   it('play() stops automatically once it reaches the newest bar', () => {
     const loader = fakeLoader(3)
     const timer = manualTimer()
-    const { controls } = createReplayController(deps(loader, timer))
+    const controls = createReplayController(deps(loader, timer))
     controls.start({ index: 1 }) // one step from the end
     controls.play()
     timer.flush() // steps to index 2, the last bar
@@ -152,7 +152,7 @@ describe('createReplayController', () => {
   it('exit() stops any running play loop and ends replay', () => {
     const loader = fakeLoader()
     const timer = manualTimer()
-    const { controls } = createReplayController(deps(loader, timer))
+    const controls = createReplayController(deps(loader, timer))
     controls.start({ index: 0 })
     controls.play()
     controls.exit()
@@ -165,7 +165,7 @@ describe('createReplayController', () => {
     const loader = fakeLoader()
     const timer = manualTimer()
     const onChange = vi.fn()
-    const { controls } = createReplayController(deps(loader, timer, onChange))
+    const controls = createReplayController(deps(loader, timer, onChange))
     controls.start({ index: 0 })
     controls.play()
     // Something else (a symbol switch) ends replay directly on the loader.
@@ -177,7 +177,8 @@ describe('createReplayController', () => {
   it('dispose() stops the timer and unsubscribes from the loader', () => {
     const loader = fakeLoader()
     const timer = manualTimer()
-    const { controls, dispose } = createReplayController(deps(loader, timer))
+    const controls = createReplayController(deps(loader, timer))
+    const dispose = controls.dispose
     controls.start({ index: 0 })
     controls.play()
     dispose()
@@ -188,10 +189,10 @@ describe('createReplayController', () => {
     const loader = fakeLoader()
     const timer = manualTimer()
     const clearSpy = vi.spyOn(timer, 'clearTimeout')
-    const { controls } = createReplayController(deps(loader, timer))
+    const controls = createReplayController(deps(loader, timer))
     controls.start({ index: 0 })
     controls.play() // 1x
-    controls.play({ speed: 2 }) // change speed mid-play
+    controls.play(2) // change speed mid-play
     expect(clearSpy).toHaveBeenCalledTimes(1) // the pending 1x step was cancelled
     expect(controls.getState().speed).toBe(2)
     expect(timer.pending).toBe(1) // rescheduled at the new speed
@@ -201,7 +202,7 @@ describe('createReplayController', () => {
     const loader = fakeLoader()
     const timer = manualTimer()
     const setTimeoutSpy = vi.spyOn(timer, 'setTimeout')
-    const { controls } = createReplayController(deps(loader, timer))
+    const controls = createReplayController(deps(loader, timer))
     controls.start({ index: 0 })
     controls.play()
     controls.play()

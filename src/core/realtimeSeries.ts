@@ -30,12 +30,17 @@ export class RealtimeSeries implements ChartDataPort {
   private _more = false
   private _loadMore: ((timestamp: number | null) => void) | null = null
   private readonly _listeners = new Set<(change: RealtimeSeriesChange) => void>()
+  private readonly _referenceIndicators: boolean
+
+  /** Hosts with their own indicator registry can omit the native reference MA/EMA. */
+  constructor (options: { referenceIndicators?: boolean } = {}) { this._referenceIndicators = options.referenceIndicators !== false }
 
   get version (): number { return this._version }
   get hasMore (): boolean { return this._more }
 
   /** Borrowed current data for the loader: do not mutate or retain as a snapshot. */
   getDataList (): MarketBar[] { return this._bars }
+  getLastTimestamp (): number | undefined { return this._bars[this._bars.length - 1]?.timestamp }
 
   /** Copy only the visible range for React/native render state; end is exclusive. */
   snapshot (start = 0, end = this._bars.length, mode: CandleMode = 'raw'): {
@@ -131,18 +136,22 @@ export class RealtimeSeries implements ChartDataPort {
     this._previous = null
     this._sumBeforeLast = 0
     this._emaBeforeLast = null
-    for (let i = 0; i < this._bars.length; i++) this._calculate(i)
+    if (this._referenceIndicators || this._ha !== null) {
+      for (let i = 0; i < this._bars.length; i++) this._calculate(i)
+    }
   }
 
   private _calculate (i: number): void {
-    this._sumBeforeLast = this._sum
-    this._emaBeforeLast = this._previous
-    const close = this._bars[i].close
-    this._sum += close
-    if (i >= 20) this._sum -= this._bars[i - 20].close
-    this._ma[i] = i >= 19 ? this._sum / 20 : null
-    this._previous = this._previous === null ? close : close * (2 / 22) + this._previous * (1 - 2 / 22)
-    this._ema[i] = i >= 20 ? this._previous : null
+    if (this._referenceIndicators) {
+      this._sumBeforeLast = this._sum
+      this._emaBeforeLast = this._previous
+      const close = this._bars[i].close
+      this._sum += close
+      if (i >= 20) this._sum -= this._bars[i - 20].close
+      this._ma[i] = i >= 19 ? this._sum / 20 : null
+      this._previous = this._previous === null ? close : close * (2 / 22) + this._previous * (1 - 2 / 22)
+      this._ema[i] = i >= 20 ? this._previous : null
+    }
     if (this._ha !== null) {
       const bar = this._bars[i]
       const prev = this._ha[i - 1]

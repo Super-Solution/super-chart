@@ -29,3 +29,7 @@ See docs/BOUNDED-TA-STORAGE.md for shared TA auxiliary-memory bounds and measure
 See docs/PIVOT-PERFORMANCE.md for large-window pivot complexity and measured trade-offs.
 
 See docs/MODEL-IDENTITY-PERFORMANCE.md for build-local time-key reuse and measured trade-offs.
+
+The owner has authorized an owned replacement of both the Pro shell and the underlying engine, and explicitly chose a new API with a migration guide over compatibility with upstream internals. The 0.1 package entries use the owned engine. See docs/OWNED-ENGINE.md for implemented behavior and measurements, and docs/OWNED-API-MIGRATION.md for the breaking changes and intentionally retired features. A local candidate version is not a published release.
+
+The owner's testing preference persists: ask before adding test cases, test assertions, fixtures or snapshot baselines. Run relevant existing validation and use bounded manual observations for changed behavior. Do not add CI workflows for this rewrite.

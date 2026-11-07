@@ -4,32 +4,19 @@
   <meta charset="UTF-8">
   <title>super-chart e2e harness</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/dist/klinecharts-pro.css">
   <style>
     html, body { margin: 0; padding: 0; background: #151517; }
     #hostui { padding: 6px; color: #ccc; font: 12px sans-serif; height: 24px; box-sizing: border-box; }
     .chart { width: 1100px; height: 620px; }
   </style>
   <script>
-    // ?kc=<version>&build=esm|umd. The import map must exist before any module
-    // script loads, so it is written here, synchronously.
     (function () {
-      var q = new URLSearchParams(location.search)
-      // server.mjs serves each klinecharts version's ES and UMD builds here.
-      window.__kcBase = '/e2e/kc/' + (q.get('kc') || '9.8.12')
-      // klinecharts' ESM build reads process.env.NODE_ENV, which bundlers
-      // replace; the browser needs it defined.
-      window.process = { env: { NODE_ENV: 'production' } }
       // __errors: messages (every spec asserts it is empty); __errorStacks: the
       // matching stacks, for a spec that must tell one known error from others.
       window.__errors = []
       window.__errorStacks = []
       window.addEventListener('error', function (e) { window.__errors.push(String(e.message)); window.__errorStacks.push(String(e.error && e.error.stack)) })
       window.addEventListener('unhandledrejection', function (e) { window.__errors.push(String(e.reason && e.reason.stack || e.reason)); window.__errorStacks.push(String(e.reason && e.reason.stack)) })
-      var map = document.createElement('script')
-      map.type = 'importmap'
-      map.textContent = JSON.stringify({ imports: { klinecharts: window.__kcBase + '/esm.js' } })
-      document.currentScript.after(map)
     })()
   </script>
 </head>

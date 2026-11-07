@@ -1,34 +1,16 @@
-// Loads klinecharts and the built Super Chart, then exposes helpers on
-// window.H for the specs. build=esm (default) loads dist/klinecharts-pro.js
-// through an import map, the way a bundler resolves the package; build=umd
-// loads the script-tag bundles.
-const q = new URLSearchParams(location.search)
-const build = q.get('build') ?? 'esm'
-
-function loadScript (src) {
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script')
-    s.src = src
-    s.onload = resolve
-    s.onerror = () => reject(new Error(`failed to load ${src}`))
-    document.head.appendChild(s)
-  })
-}
-
-// kcOnlyOverlays: the overlays klinecharts has before Super Chart loads, so a
-// spec can tell which ones importing the package registered.
-let KC, SC, kcOnlyOverlays
+// Load the built owned package, with no upstream runtime or import map.
+const build = new URLSearchParams(location.search).get('build') ?? 'esm'
+let SC
 if (build === 'umd') {
-  await loadScript(`${window.__kcBase}/umd.js`)
-  KC = window.klinecharts
-  kcOnlyOverlays = [...KC.getSupportedOverlays()]
-  await loadScript('/dist/klinecharts-pro.umd.js')
-  SC = window.klinechartspro
-} else {
-  KC = await import('klinecharts')
-  kcOnlyOverlays = [...KC.getSupportedOverlays()]
-  SC = await import('/dist/klinecharts-pro.js')
-}
+  await new Promise((resolve, reject) => {
+    const script = document.createElement('script')
+    script.src = '/dist/super-chart.umd.js'
+    script.onload = resolve
+    script.onerror = () => reject(new Error('Failed to load owned UMD bundle'))
+    document.head.appendChild(script)
+  })
+  SC = window.SuperChart
+} else SC = await import('/dist/super-chart.js')
 
 const SPAN = { minute: 60_000, hour: 3_600_000, day: 86_400_000, week: 604_800_000, month: 2_592_000_000, year: 31_536_000_000 }
 // Use the loader's wall clock; candle values remain deterministic for each timestamp.
@@ -70,18 +52,14 @@ function mount (options = {}) {
     document.getElementById('charts').appendChild(container)
   }
   const feed = makeDatafeed(options.feed)
-  const pro = new SC.SuperChart({
-    container,
+  const { container: ignored, ...workspace } = options.chart ?? {}
+  const pro = new SC.ChartWorkspace(container, {
     symbol: { ticker: 'SUPER-USDT', pricePrecision: 2, volumePrecision: 0 },
     period: { multiplier: 1, timespan: 'hour', text: '1H' },
     periods: [{ multiplier: 1, timespan: 'hour', text: '1H' }, { multiplier: 1, timespan: 'day', text: 'D' }],
     datafeed: feed.datafeed,
-    locale: 'en-US',
-    theme: 'dark',
-    timezone: 'Etc/UTC',
-    mainIndicators: [],
-    subIndicators: ['VOL'],
-    ...options.chart
+    chart: { indicators: [{ name: 'VOL' }] },
+    ...workspace
   })
   return { pro, container, feed }
 }
@@ -91,12 +69,12 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 /** Resolves once the chart has data. */
 async function ready (pro, min = 50) {
   for (let i = 0; i < 100; i++) {
-    const chart = pro.getChart()
-    if (chart !== null && chart.getDataList().length >= min) return chart
+    const chart = pro.chart
+    if (chart !== null && chart.dataPort.getDataList().length >= min) return chart
     await sleep(50)
   }
   throw new Error('chart never got data')
 }
 
-window.H = { KC, SC, build, kcVersion: typeof KC.version === 'function' ? KC.version() : '?', kcOnlyOverlays, makeDatafeed, mount, ready, sleep }
+window.H = { SC, build, makeDatafeed, mount, ready, sleep }
 window.__ready = true

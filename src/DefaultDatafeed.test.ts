@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { KLineData } from 'klinecharts'
+import type { MarketBar as KLineData } from './core/types'
 
 import DefaultDatafeed from './DefaultDatafeed'
-import type { Period, SymbolInfo } from './types'
+import type { Period, SymbolInfo } from './core/feed'
 
 const BTC: SymbolInfo = { ticker: 'BTC', market: 'crypto' }
 const H1: Period = { multiplier: 1, timespan: 'hour', text: '1H' }

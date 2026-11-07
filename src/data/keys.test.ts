@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { Period } from '../types'
+import type { Period } from '../core/feed'
 
 import { parsePeriod, periodKey, resolvePeriod, samePeriod, sameSymbol, symbolKey } from './keys'
 

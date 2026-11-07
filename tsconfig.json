@@ -13,10 +13,17 @@
     "moduleResolution": "Node",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "preserve",
-    "jsxImportSource": "solid-js",
+    "noEmit": true
   },
-  "include": ["src"],
+  "include": [
+    "src/index.ts",
+    "src/core/index.ts",
+    "src/native.ts",
+    "src/superscript-entry.ts",
+    "src/engine/indicatorCatalog.ts",
+    "src/engine/scriptIndicators.ts",
+    "src/engine/annotations.ts",
+    "src/engine/overlayEntry.ts"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

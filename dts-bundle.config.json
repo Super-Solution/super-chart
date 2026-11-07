@@ -8,28 +8,7 @@
       "outFile": "./dist/index.d.ts",
       "output": {
         "noBanner": true,
-        "umdModuleName": "klinechartspro"
-      }
-    },
-    {
-      "filePath": "./src/lite.ts",
-      "outFile": "./dist/lite.d.ts",
-      "output": {
-        "noBanner": true
-      }
-    },
-    {
-      "filePath": "./src/superscript-entry.ts",
-      "outFile": "./dist/superscript.d.ts",
-      "output": {
-        "noBanner": true
-      }
-    },
-    {
-      "filePath": "./src/commands/schema.ts",
-      "outFile": "./dist/commands.d.ts",
-      "output": {
-        "noBanner": true
+        "umdModuleName": "SuperChart"
       }
     },
     {
@@ -42,6 +21,41 @@
     {
       "filePath": "./src/native.ts",
       "outFile": "./dist/native.d.ts",
+      "output": {
+        "noBanner": true
+      }
+    },
+    {
+      "filePath": "./src/superscript-entry.ts",
+      "outFile": "./dist/superscript.d.ts",
+      "output": {
+        "noBanner": true
+      }
+    },
+    {
+      "filePath": "./src/engine/indicatorCatalog.ts",
+      "outFile": "./dist/indicators.d.ts",
+      "output": {
+        "noBanner": true
+      }
+    },
+    {
+      "filePath": "./src/engine/scriptIndicators.ts",
+      "outFile": "./dist/scripts.d.ts",
+      "output": {
+        "noBanner": true
+      }
+    },
+    {
+      "filePath": "./src/engine/annotations.ts",
+      "outFile": "./dist/annotations.d.ts",
+      "output": {
+        "noBanner": true
+      }
+    },
+    {
+      "filePath": "./src/engine/overlayEntry.ts",
+      "outFile": "./dist/overlays.d.ts",
       "output": {
         "noBanner": true
       }

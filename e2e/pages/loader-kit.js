@@ -25,7 +25,7 @@ export function bars (ticker, period, lastTs, n) {
 
 /** The ticker whose level the chart's newest bar is at. */
 export function tickerShown (chart) {
-  const last = chart.getDataList().at(-1)
+  const last = chart.dataPort.getDataList().at(-1)
   if (last === undefined) return null
   for (const [t, level] of Object.entries(LEVEL)) {
     if (Math.abs(last.close / level - 1) < 0.05) return t
@@ -89,17 +89,20 @@ export function mountDeferred (chart = {}) {
   return { pro, container, feed }
 }
 
-/** Count calls to a klinecharts Chart method (the loader calls them on the instance). */
+/** Count calls to the owned data port used by the loader. */
 export function countCalls (chart, method) {
   const counter = { n: 0, args: [] }
-  const original = chart[method].bind(chart)
-  chart[method] = (...args) => { counter.n++; counter.args.push(args); return original(...args) }
+  const name = ({ applyNewData: 'setData', updateData: 'update', updateDataBatch: 'updateBatch' })[method] ?? method
+  const original = chart[name].bind(chart)
+  chart[name] = (...args) => { counter.n++; counter.args.push(args); return original(...args) }
   return counter
 }
 
 export const frame = () => new Promise(resolve => { requestAnimationFrame(() => { resolve() }) })
 
-/** Scroll the chart so its first bar is in view (klinecharts then asks for older data). */
+/** Show the first bar and request the preceding page through the owned view. */
 export function scrollToStart (chart) {
-  chart.scrollToDataIndex(0)
+  const { viewport } = chart.view.getSnapshot()
+  chart.view.setViewport({ i0: 0, i1: viewport.i1 - viewport.i0 })
+  chart.view.requestMore()
 }

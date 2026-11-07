@@ -1,16 +1,10 @@
 import { test, expect, openHarness, pageErrors } from './fixtures'
 
-// The data loader (src/data/loader.ts) in the built package, on every host
-// klinecharts version: SC-016, SC-017, SC-006, SC-001, SC-019, SC-024, SC-018,
-// SC-012, SC-035, SC-026, SC-030, SC-034. The feed's history requests stay
-// pending until a test answers them (pages/loader-kit.js), so each test decides
-// the order in which answers arrive. Every ticker has its own price level, so
-// the bars on screen say which symbol they belong to.
-
+// Existing loader contracts, migrated to the owned workspace and chart data port.
 const KIT = '/e2e/pages/loader-kit.js'
 
-test('SC-016: a setSymbol during the initial load draws the final pair, and later changes still load', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('SC-016: a setSymbol during the initial load draws the final pair, and later changes still load', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async (kit) => {
     const K = await import(kit)
     const { pro, feed } = K.mountDeferred()
@@ -22,7 +16,7 @@ test('SC-016: a setSymbol during the initial load draws the final pair, and late
     feed.answer(0) // the stale SUPER answer arrives last
     await K.until(() => feed.log.length === 1)
     await K.sleep(100)
-    const chart = pro.getChart()
+    const chart = pro.chart
     const first = { shown: K.tickerShown(chart), symbol: pro.getSymbol().ticker }
     // It used to fetch nothing after this point: every later change was ignored.
     pro.setSymbol({ ticker: 'BTC', pricePrecision: 2 })
@@ -43,8 +37,8 @@ test('SC-016: a setSymbol during the initial load draws the final pair, and late
   expect(await pageErrors(page)).toEqual([])
 })
 
-test('SC-016: setSymbol and setPeriod in the same tick load the final pair once', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('SC-016: setSymbol and setPeriod in the same tick load the final pair once', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async (kit) => {
     const K = await import(kit)
     const { pro, feed } = K.mountDeferred({ periods: [{ multiplier: 1, timespan: 'hour', text: '1H' }, { multiplier: 4, timespan: 'hour', text: '4H' }] })
@@ -57,15 +51,15 @@ test('SC-016: setSymbol and setPeriod in the same tick load the final pair once'
     await K.sleep(150)
     feed.answer(1)
     await K.until(() => feed.log.length === 3)
-    return { fetched: feed.fetched(), log: feed.log, shown: K.tickerShown(pro.getChart()) }
+    return { fetched: feed.fetched(), log: feed.log, shown: K.tickerShown(pro.chart) }
   }, KIT)
   expect(state.fetched).toEqual(['SUPER-USDT 1H', 'ETH 4H'])
   expect(state.log).toEqual(['sub SUPER-USDT 1H', 'unsub SUPER-USDT 1H', 'sub ETH 4H'])
   expect(state.shown).toBe('ETH')
 })
 
-test('SC-016: two period clicks 50 ms apart and a third later all load; the last one is drawn', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('SC-016: two period clicks 50 ms apart and a third later all load; the last one is drawn', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async (kit) => {
     const K = await import(kit)
     const periods = [{ multiplier: 1, timespan: 'hour', text: '1H' }, { multiplier: 4, timespan: 'hour', text: '4H' }, { multiplier: 1, timespan: 'day', text: 'D' }]
@@ -73,7 +67,11 @@ test('SC-016: two period clicks 50 ms apart and a third later all load; the last
     await K.until(() => feed.history.length === 1)
     feed.answer(0)
     await K.until(() => feed.log.length === 1)
-    const click = text => { [...container.querySelectorAll('.klinecharts-pro-period-bar .period')].find(e => e.textContent === text).click() }
+    const click = text => {
+      const select = container.querySelector('select[aria-label="Interval"]')
+      select.value = [...select.options].find(option => option.text === text).value
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    }
     click('4H')
     await K.sleep(50)
     click('D')
@@ -85,11 +83,11 @@ test('SC-016: two period clicks 50 ms apart and a third later all load; the last
     await K.until(() => feed.history.length === 4)
     feed.answer(3)
     await K.until(() => feed.log.length === 5)
-    const list = pro.getChart().getDataList()
+    const list = pro.chart.dataPort.getDataList()
     return {
       fetched: feed.fetched(),
       step: list.at(-1).timestamp - list.at(-2).timestamp,
-      selected: container.querySelector('.klinecharts-pro-period-bar .period.selected')?.textContent
+      selected: container.querySelector('select[aria-label="Interval"]').selectedOptions[0].textContent
     }
   }, KIT)
   expect(state.fetched).toEqual(['SUPER-USDT 1H', 'SUPER-USDT 4H', 'SUPER-USDT D', 'SUPER-USDT 1H'])
@@ -97,15 +95,15 @@ test('SC-016: two period clicks 50 ms apart and a third later all load; the last
   expect(state.selected).toBe('1H')
 })
 
-test('SC-016: a symbol change during a scroll-back load never mixes the two symbols', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('SC-016: a symbol change during a scroll-back load never mixes the two symbols', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async (kit) => {
     const K = await import(kit)
     const { pro, feed } = K.mountDeferred()
     await K.until(() => feed.history.length === 1)
     feed.answer(0)
     await K.until(() => feed.log.length === 1)
-    const chart = pro.getChart()
+    const chart = pro.chart
     K.scrollToStart(chart)
     await K.until(() => feed.history.length === 2)
     pro.setSymbol({ ticker: 'ETH', pricePrecision: 2 })
@@ -115,15 +113,15 @@ test('SC-016: a symbol change during a scroll-back load never mixes the two symb
     feed.answer(2, 120)
     await K.until(() => feed.log.length === 3)
     await K.sleep(100)
-    const list = chart.getDataList()
+    const list = chart.dataPort.getDataList()
     return { n: list.length, allEth: list.every(b => Math.abs(b.close / 3000 - 1) < 0.05), second: feed.history[1] }
   }, KIT)
   expect(state.n).toBe(120)
   expect(state.allEth).toBe(true)
 })
 
-test('SC-026: an identical setSymbol or setPeriod refetches nothing and keeps the view; "4h" selects 4H; a new priceCurrency refetches', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('SC-026: an identical setSymbol or setPeriod refetches nothing and keeps the view; "4h" selects 4H; a new priceCurrency refetches', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async (kit) => {
     const K = await import(kit)
     const periods = [{ multiplier: 1, timespan: 'hour', text: '1H' }, { multiplier: 4, timespan: 'hour', text: '4H' }]
@@ -131,19 +129,19 @@ test('SC-026: an identical setSymbol or setPeriod refetches nothing and keeps th
     await K.until(() => feed.history.length === 1)
     feed.answer(0)
     await K.until(() => feed.log.length === 1)
-    const chart = pro.getChart()
-    chart.scrollToDataIndex(250) // off the right edge, and not so far left that it pages back
+    const chart = pro.chart
+    chart.view.setViewport({ i0: 150, i1: 250 }) // off the right edge, and not so far left that it pages back
     await K.sleep(50)
-    const range = JSON.stringify(chart.getVisibleRange())
+    const range = JSON.stringify(chart.view.getSnapshot().viewport)
     pro.setSymbol({ ticker: 'SUPER-USDT', pricePrecision: 2, volumePrecision: 0 })
     pro.setPeriod({ multiplier: 1, timespan: 'hour', text: '1H' })
     await K.sleep(150)
-    const same = { fetches: feed.history.length, rangeKept: JSON.stringify(chart.getVisibleRange()) === range }
+    const same = { fetches: feed.history.length, rangeKept: JSON.stringify(chart.view.getSnapshot().viewport) === range }
     pro.setPeriod('4h')
     await K.until(() => feed.history.length === 2)
     feed.answer(1)
     await K.until(() => feed.log.length === 3)
-    const shorthand = { period: pro.getPeriod(), selected: container.querySelector('.klinecharts-pro-period-bar .period.selected')?.textContent }
+    const shorthand = { period: pro.getPeriod(), selected: container.querySelector('select[aria-label="Interval"]').selectedOptions[0].textContent }
     pro.setSymbol({ ticker: 'SUPER-USDT', pricePrecision: 2, volumePrecision: 0, priceCurrency: 'USD' })
     await K.until(() => feed.history.length === 3)
     return { same, shorthand, fetched: feed.fetched() }
@@ -153,105 +151,70 @@ test('SC-026: an identical setSymbol or setPeriod refetches nothing and keeps th
   expect(state.fetched).toEqual(['SUPER-USDT 1H', 'SUPER-USDT 4H', 'SUPER-USDT 4H'])
 })
 
-test('SC-017 / SC-034: a rejected load shows an error with Retry (no spinner, no unhandled rejection); the next change and Retry each fetch once', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('SC-017 / SC-034: rejected loads expose error state and Retry; the next change and retry each fetch once', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async (kit) => {
     const K = await import(kit)
     const { pro, container, feed } = K.mountDeferred()
     await K.until(() => feed.history.length === 1)
     feed.history[0].reject(new Error('feed down'))
-    const banner = await K.until(() => container.querySelector('.klinecharts-pro-data-state-error'))
-    const failed = {
-      banner: banner?.textContent,
-      spinner: container.querySelector('.klinecharts-pro-loading') !== null,
-      bars: pro.getChart().getDataList().length
-    }
+    await K.until(() => pro.getStatus().state === 'error')
+    const failed = { error: pro.getLoadState().error?.message, bars: pro.getBars().length }
     pro.setPeriod({ multiplier: 1, timespan: 'day', text: 'D' })
     await K.until(() => feed.history.length === 2)
     await K.sleep(100)
     const afterChange = feed.history.length
     feed.history[1].reject(new Error('still down'))
-    await K.until(() => container.querySelector('.klinecharts-pro-data-state-error button'))
-    container.querySelector('.klinecharts-pro-data-state-error button').click()
+    await K.until(() => pro.getStatus().state === 'error')
+    ;[...container.querySelectorAll('button')].find(button => button.textContent === 'Retry').click()
     await K.until(() => feed.history.length === 3)
-    const spinnerWhileRetrying = container.querySelector('.klinecharts-pro-loading') !== null
+    const loadingWhileRetrying = pro.getStatus().state === 'loading'
     feed.answer(2)
     await K.until(() => feed.log.length === 1)
-    await K.sleep(50)
-    return {
-      failed,
-      afterChange,
-      spinnerWhileRetrying,
-      fetched: feed.fetched(),
-      recovered: { banner: container.querySelector('.klinecharts-pro-data-state-error') !== null, spinner: container.querySelector('.klinecharts-pro-loading') !== null, bars: pro.getChart().getDataList().length }
-    }
+    return { failed, afterChange, loadingWhileRetrying, fetched: feed.fetched(), recovered: { status: pro.getStatus().state, bars: pro.getBars().length } }
   }, KIT)
-  expect(state.failed).toEqual({ banner: 'Could not load dataRetry', spinner: false, bars: 0 })
+  expect(state.failed).toEqual({ error: 'feed down', bars: 0 })
   expect(state.afterChange).toBe(2)
-  expect(state.spinnerWhileRetrying).toBe(true)
+  expect(state.loadingWhileRetrying).toBe(true)
   expect(state.fetched).toEqual(['SUPER-USDT 1H', 'SUPER-USDT D', 'SUPER-USDT D'])
-  expect(state.recovered).toEqual({ banner: false, spinner: false, bars: 300 })
+  expect(state.recovered).toEqual({ status: 'ready', bars: 300 })
   expect(await pageErrors(page)).toEqual([])
 })
 
-test('SC-034: loading never blocks the rail or the chart; [] shows "No data"; dataStates:false shows nothing', async ({ page, kc }) => {
-  await openHarness(page, kc)
-  const state = await page.evaluate(async (kit) => {
-    const K = await import(kit)
-    const { container, feed } = K.mountDeferred()
-    await K.until(() => feed.history.length === 1)
-    const at = el => { const r = el.getBoundingClientRect(); return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) }
-    const railItem = container.querySelector('.klinecharts-pro-drawing-bar .item')
-    const widget = container.querySelector('.klinecharts-pro-widget')
-    const loading = {
-      bar: container.querySelector('.klinecharts-pro-loading') !== null,
-      rail: railItem.contains(at(railItem)),
-      chart: widget.contains(at(widget))
-    }
-    feed.history[0].resolve([])
-    await K.until(() => container.querySelector('.klinecharts-pro-data-state-empty'))
-    const empty = { text: container.querySelector('.klinecharts-pro-data-state-empty')?.textContent, chart: widget.contains(at(widget)) }
-    const off = K.mountDeferred({ dataStates: false })
-    await K.until(() => off.feed.history.length === 1)
-    off.feed.history[0].resolve([])
-    await K.sleep(200)
-    const labelled = K.mountDeferred({ dataStates: { empty: 'Market closed' } })
-    await K.until(() => labelled.feed.history.length === 1)
-    labelled.feed.history[0].resolve([])
-    await K.until(() => labelled.container.querySelector('.klinecharts-pro-data-state-empty'))
-    return {
-      loading,
-      empty,
-      offText: off.container.querySelector('.klinecharts-pro-data-state')?.textContent,
-      labelled: labelled.container.querySelector('.klinecharts-pro-data-state-empty')?.textContent
-    }
-  }, KIT)
-  expect(state.loading).toEqual({ bar: true, rail: true, chart: true })
-  expect(state.empty).toEqual({ text: 'No data', chart: true })
-  expect(state.offText).toBe('')
-  expect(state.labelled).toBe('Market closed')
-})
-
-test('SC-034: live bars after an empty history take "No data" away', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('SC-034: loading keeps market controls usable; empty history has an explicit empty state', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async (kit) => {
     const K = await import(kit)
     const { pro, container, feed } = K.mountDeferred()
     await K.until(() => feed.history.length === 1)
+    const loading = { status: pro.getStatus().state, intervalEnabled: !container.querySelector('select[aria-label="Interval"]').disabled }
     feed.history[0].resolve([])
-    await K.until(() => container.querySelector('.klinecharts-pro-data-state-empty'))
-    await K.until(() => feed.log.length === 1)
-    const t0 = K.align(Date.now(), K.HOUR) - 2 * K.HOUR
-    for (let i = 0; i < 3; i++) feed.tick({ timestamp: t0 + i * K.HOUR, open: 100, high: 101, low: 99, close: 100 + i, volume: 1 })
-    await K.until(() => pro.getChart().getDataList().length === 3)
-    await K.until(() => container.querySelector('.klinecharts-pro-data-state-empty') === null, 3000, '"No data" removed')
-    return { bars: pro.getChart().getDataList().length, text: container.querySelector('.klinecharts-pro-data-state')?.textContent }
+    await pro.ready
+    return { loading, empty: { status: pro.getStatus().state, bars: pro.getBars().length } }
   }, KIT)
-  expect(state).toEqual({ bars: 3, text: '' })
+  expect(state.loading).toEqual({ status: 'loading', intervalEnabled: true })
+  expect(state.empty).toEqual({ status: 'empty', bars: 0 })
 })
 
-test('SC-019: week, month and year request ranges are forward and in range', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('SC-034: live bars after empty history leave the empty state', async ({ page }) => {
+  await openHarness(page)
+  const state = await page.evaluate(async (kit) => {
+    const K = await import(kit)
+    const { pro, feed } = K.mountDeferred()
+    await K.until(() => feed.history.length === 1)
+    feed.history[0].resolve([])
+    await K.until(() => pro.getStatus().state === 'empty')
+    await K.until(() => feed.log.length === 1)
+    const t0 = K.align(Date.now(), K.HOUR) - 2 * K.HOUR
+    for (let i = 0; i < 3; i++) feed.tick({ timestamp: t0 + i * K.HOUR, open: 100, high: 103, low: 99, close: 100 + i, volume: 1 })
+    await K.until(() => pro.getBars().length === 3)
+    return { bars: pro.getBars().length, status: pro.getStatus().state }
+  }, KIT)
+  expect(state).toEqual({ bars: 3, status: 'ready' })
+})
+
+test('SC-019: week, month and year request ranges are forward and in range', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async (kit) => {
     const K = await import(kit)
     const out = {}
@@ -273,8 +236,8 @@ test('SC-019: week, month and year request ranges are forward and in range', asy
   expect(state.Y.from).toBe('1970-01-01T00:00:00.000Z')
 })
 
-test('SC-024: a feed that ignores the range adds no duplicates and paging stops; an exclusive-`to` feed misses no bar', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('SC-024: a feed that ignores the range adds no duplicates and paging stops; an exclusive-`to` feed misses no bar', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async (kit) => {
     const K = await import(kit)
     // Range-ignoring: every request gets the same latest window.
@@ -283,31 +246,31 @@ test('SC-024: a feed that ignores the range adds no duplicates and paging stops;
     const window = K.bars('SUPER-USDT', { multiplier: 1, timespan: 'hour' }, K.align(Date.now(), K.HOUR), 300)
     a.feed.history[0].resolve(window)
     await K.until(() => a.feed.log.length === 1)
-    const chartA = a.pro.getChart()
+    const chartA = a.pro.chart
     K.scrollToStart(chartA)
     await K.until(() => a.feed.history.length === 2)
     a.feed.history[1].resolve(window)
-    await K.until(() => a.container.querySelector('.klinecharts-pro-data-state-more') === null)
+    await K.until(() => !a.pro.getLoadState().loadingMore)
     // Paging has stopped: scrolling to the start again asks for nothing.
     for (let i = 0; i < 3; i++) {
       K.scrollToStart(chartA)
       await K.frame()
       await K.sleep(100)
     }
-    const tsA = chartA.getDataList().map(b => b.timestamp)
+    const tsA = chartA.dataPort.getDataList().map(b => b.timestamp)
     // Exclusive: bars strictly before `to`.
     const b = K.mountDeferred()
     await K.until(() => b.feed.history.length === 1)
     b.feed.answer(0, 300)
     await K.until(() => b.feed.log.length === 1)
-    const chartB = b.pro.getChart()
-    const first = chartB.getDataList()[0].timestamp
+    const chartB = b.pro.chart
+    const first = chartB.dataPort.getDataList()[0].timestamp
     K.scrollToStart(chartB)
     await K.until(() => b.feed.history.length === 2)
     const h = b.feed.history[1]
     h.resolve(K.bars('SUPER-USDT', { multiplier: 1, timespan: 'hour' }, h.to - K.HOUR, 100))
-    await K.until(() => chartB.getDataList().length > 300)
-    const tsB = chartB.getDataList().map(b => b.timestamp)
+    await K.until(() => chartB.dataPort.getDataList().length > 300)
+    const tsB = chartB.dataPort.getDataList().map(b => b.timestamp)
     return {
       a: { total: tsA.length, unique: new Set(tsA).size, requests: a.feed.history.length },
       b: { to: h.to, first, total: tsB.length, missing: tsB.filter((t, i) => i > 0 && t - tsB[i - 1] !== K.HOUR).length }
@@ -321,58 +284,35 @@ test('SC-024: a feed that ignores the range adds no duplicates and paging stops;
   expect(state.b.missing).toBe(0)
 })
 
-test('SC-024: a first page shorter than the view pages back at once (klinecharts asks from inside applyNewData), and later pages follow', async ({ page, kc }) => {
-  await openHarness(page, kc)
-  const state = await page.evaluate(async (kit) => {
-    const K = await import(kit)
-    const { pro, feed } = K.mountDeferred()
-    await K.until(() => feed.history.length === 1)
-    feed.answer(0, 40) // 40 bars do not fill a 1280 px chart
-    await K.until(() => feed.log.length === 1)
-    const chart = pro.getChart()
-    const first = chart.getDataList()[0].timestamp
-    await K.until(() => feed.history.length === 2, 3000, 'the scroll-back request for a short first page')
-    const h = feed.history[1]
-    h.resolve(K.bars('SUPER-USDT', { multiplier: 1, timespan: 'hour' }, h.to - K.HOUR, 100))
-    await K.until(() => chart.getDataList().length === 140)
-    const ts = chart.getDataList().map(b => b.timestamp)
-    return { to: h.to, first, n: ts.length, contiguous: ts.every((t, i) => i === 0 || t - ts[i - 1] === K.HOUR) }
-  }, KIT)
-  expect(state.to).toBe(state.first)
-  expect(state.n).toBe(140)
-  expect(state.contiguous).toBe(true)
-  expect(await pageErrors(page)).toEqual([])
-})
-
-test('SC-001 / SC-029: a 30-tick burst is one updateData and the last bar is the last tick; an array updates both bars', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('SC-001 / SC-029: a 30-tick burst is one updateDataBatch and retains the latest tick; an array updates both bars', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async (kit) => {
     const K = await import(kit)
     const { pro, feed } = K.mountDeferred()
     await K.until(() => feed.history.length === 1)
     feed.answer(0)
     await K.until(() => feed.log.length === 1)
-    const chart = pro.getChart()
-    const calls = K.countCalls(chart, 'updateData')
-    const last = chart.getDataList().at(-1)
+    const chart = pro.chart
+    const calls = K.countCalls(chart, 'updateDataBatch')
+    const last = chart.dataPort.getDataList().at(-1)
     await K.frame()
-    for (let i = 0; i < 30; i++) feed.tick({ ...last, close: 100 + i })
+    for (let i = 0; i < 30; i++) feed.tick({ ...last, high: 130, close: 100 + i })
     const beforeFrame = calls.n
     await K.frame()
     await K.frame()
-    const burst = { beforeFrame, passes: calls.n, close: chart.getDataList().at(-1).close, n: chart.getDataList().length }
-    feed.tick([{ ...last, close: 111.5 }, { ...last, timestamp: last.timestamp + K.HOUR, close: 112 }])
+    const burst = { beforeFrame, passes: calls.n, close: chart.dataPort.getDataList().at(-1).close, n: chart.dataPort.getDataList().length }
+    feed.tick([{ ...last, high: 113, close: 111.5 }, { ...last, timestamp: last.timestamp + K.HOUR, high: 113, close: 112 }])
     await K.frame()
     await K.frame()
-    const list = chart.getDataList()
+    const list = chart.dataPort.getDataList()
     return { burst, array: { n: list.length, prev: list.at(-2).close, last: list.at(-1).close } }
   }, KIT)
   expect(state.burst).toEqual({ beforeFrame: 0, passes: 1, close: 129, n: 300 })
   expect(state.array).toEqual({ n: 301, prev: 111.5, last: 112 })
 })
 
-test('SC-006: a tick from a superseded subscription is not applied; dispose unsubscribes and applies no pending tick', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('SC-006: a tick from a superseded subscription is not applied; dispose unsubscribes and applies no pending tick', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async (kit) => {
     const K = await import(kit)
     const { pro, feed } = K.mountDeferred()
@@ -384,14 +324,14 @@ test('SC-006: a tick from a superseded subscription is not applied; dispose unsu
     await K.until(() => feed.history.length === 2)
     feed.answer(1)
     await K.until(() => feed.log.length === 3)
-    const chart = pro.getChart()
-    const last = chart.getDataList().at(-1)
+    const chart = pro.chart
+    const last = chart.dataPort.getDataList().at(-1)
     staleTick({ ...last, close: 100 })
     staleTick({ ...last, timestamp: last.timestamp + K.HOUR, close: 100 })
     await K.frame()
     await K.frame()
-    const stale = { shown: K.tickerShown(chart), n: chart.getDataList().length }
-    const calls = K.countCalls(chart, 'updateData')
+    const stale = { shown: K.tickerShown(chart), n: chart.dataPort.getDataList().length }
+    const calls = K.countCalls(chart, 'updateDataBatch')
     feed.tick({ ...last, close: 5100 })
     pro.dispose()
     await K.frame()
@@ -403,96 +343,68 @@ test('SC-006: a tick from a superseded subscription is not applied; dispose unsu
   expect(state.log).toEqual(['sub SUPER-USDT 1H', 'unsub SUPER-USDT 1H', 'sub BBB 1H', 'unsub BBB 1H'])
 })
 
-test('SC-018 / SC-012: replay buffers live ticks, steps forward without a rebuild, and a symbol switch ends it', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('SC-018 / SC-012: replay buffers live ticks, steps forward without a rebuild, and a symbol switch ends it', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async (kit) => {
     const K = await import(kit)
-    const { pro, container, feed } = K.mountDeferred()
+    const { pro, feed } = K.mountDeferred()
     await K.until(() => feed.history.length === 1)
     feed.answer(0)
     await K.until(() => feed.log.length === 1)
-    const chart = pro.getChart()
-    const last = chart.getDataList().at(-1)
-    const replayButton = [...container.querySelectorAll('.klinecharts-pro-period-bar .item')].find(e => e.textContent === 'Replay')
-    replayButton.click()
-    await K.sleep(50)
-    const inReplay = chart.getDataList().length
-    const head = chart.getDataList().at(-1).timestamp
-    feed.tick({ ...last, close: 150 })
-    feed.tick({ ...last, timestamp: last.timestamp + K.HOUR, close: 151 })
-    await K.frame()
-    await K.frame()
-    const buffered = { n: chart.getDataList().length, head: chart.getDataList().at(-1).timestamp === head }
+    const chart = pro.chart, last = pro.getBars().at(-1)
+    pro.startReplay(180)
+    const inReplay = pro.getBars().length, head = pro.getBars().at(-1).timestamp
+    feed.tick({ ...last, high: 152, close: 150 })
+    feed.tick({ ...last, high: 152, timestamp: last.timestamp + K.HOUR, close: 151 })
+    await K.frame(); await K.frame()
+    const buffered = { n: pro.getBars().length, head: pro.getBars().at(-1).timestamp === head }
     const rebuilds = K.countCalls(chart, 'applyNewData')
-    // Named buttons (SC-067, SC-084, SC-143): icons, not Unicode glyphs — found by aria-label/title, never textContent.
-    const byLabel = label => [...container.querySelectorAll('.klinecharts-pro-replay-bar button')].find(e => e.getAttribute('aria-label') === label)
-    const forward = byLabel('Step forward')
-    for (let i = 0; i < 5; i++) forward.click()
-    await K.sleep(50)
-    const stepped = { rebuilds: rebuilds.n, n: chart.getDataList().length }
-    byLabel('Exit').click()
-    await K.sleep(50)
-    const list = chart.getDataList()
-    const exited = { n: list.length, prev: list.at(-2).close, last: list.at(-1).close }
-    replayButton.click()
-    await K.sleep(50)
-    byLabel('Play').click() // a step every 600 ms (1x, the default speed)
-    await K.sleep(50)
-    const playing = byLabel('Pause') !== undefined
+    for (let i = 0; i < 5; i++) pro.stepReplay()
+    const stepped = { rebuilds: rebuilds.n, n: pro.getBars().length }
+    pro.exitReplay()
+    const list = pro.getBars(), exited = { n: list.length, prev: list.at(-2).close, last: list.at(-1).close }
+    pro.startReplay(180)
     pro.setSymbol({ ticker: 'ETH', pricePrecision: 2 })
     await K.until(() => feed.history.length === 2)
-    await K.sleep(50)
-    const replayBarGone = byLabel('Exit') === undefined
+    const replayEnded = !pro.getReplayState().active
     feed.answer(1)
     await K.until(() => feed.log.length === 3)
-    const shown = K.tickerShown(chart)
-    const n = chart.getDataList().length
-    // A new replay of ETH: a play timer left over from the ended replay would step it.
-    replayButton.click()
-    await K.sleep(50)
-    const replayed = chart.getDataList().length
-    await K.sleep(700)
-    const timer = { stepped: chart.getDataList().length - replayed, paused: byLabel('Play') !== undefined }
-    byLabel('Exit').click()
-    return { inReplay, buffered, stepped, exited, playing, replayBarGone, shown, n, timer }
+    return { inReplay, buffered, stepped, exited, replayEnded, shown: K.tickerShown(chart), n: pro.getBars().length }
   }, KIT)
-  expect(state.inReplay).toBe(Math.floor(300 * 0.6) + 1)
+  expect(state.inReplay).toBe(181)
   expect(state.buffered).toEqual({ n: state.inReplay, head: true })
   expect(state.stepped).toEqual({ rebuilds: 0, n: state.inReplay + 5 })
   expect(state.exited).toEqual({ n: 301, prev: 150, last: 151 })
-  expect(state.playing).toBe(true)
-  expect(state.replayBarGone).toBe(true)
+  expect(state.replayEnded).toBe(true)
   expect(state.shown).toBe('ETH')
   expect(state.n).toBe(300)
-  expect(state.timer).toEqual({ stepped: 0, paused: true })
   expect(await pageErrors(page)).toEqual([])
 })
 
-test('SC-018: scroll-back during replay extends the replay, and exit keeps the older bars', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('SC-018: scroll-back during replay extends the replay, and exit keeps the older bars', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async (kit) => {
     const K = await import(kit)
     const { pro, container, feed } = K.mountDeferred()
     await K.until(() => feed.history.length === 1)
     feed.answer(0, 300)
     await K.until(() => feed.log.length === 1)
-    const chart = pro.getChart()
-    ;[...container.querySelectorAll('.klinecharts-pro-period-bar .item')].find(e => e.textContent === 'Replay').click()
+    const chart = pro.chart
+    pro.startReplay(180)
     await K.sleep(50)
-    const head = chart.getDataList().at(-1).timestamp
+    const head = chart.dataPort.getDataList().at(-1).timestamp
     K.scrollToStart(chart)
     await K.until(() => feed.history.length === 2)
     const h = feed.history[1]
     h.resolve(K.bars('SUPER-USDT', { multiplier: 1, timespan: 'hour' }, h.to - K.HOUR, 50))
-    await K.until(() => chart.getDataList().length > 181)
-    const during = { n: chart.getDataList().length, head: chart.getDataList().at(-1).timestamp === head }
-    // Named buttons (SC-067): icons, not Unicode glyphs — found by aria-label, never textContent.
-    ;[...container.querySelectorAll('.klinecharts-pro-replay-bar button')].find(e => e.getAttribute('aria-label') === 'Step forward').click()
+    await K.until(() => chart.dataPort.getDataList().length > 181)
+    const during = { n: chart.dataPort.getDataList().length, head: chart.dataPort.getDataList().at(-1).timestamp === head }
+    pro.stepReplay()
     await K.sleep(50)
-    const stepHead = chart.getDataList().at(-1).timestamp - head
-    ;[...container.querySelectorAll('.klinecharts-pro-replay-bar button')].find(e => e.getAttribute('aria-label') === 'Exit').click()
+    const stepHead = chart.dataPort.getDataList().at(-1).timestamp - head
+    pro.exitReplay()
     await K.sleep(50)
-    const ts = chart.getDataList().map(b => b.timestamp)
+    const ts = chart.dataPort.getDataList().map(b => b.timestamp)
     return { during, stepHead, total: ts.length, contiguous: ts.every((t, i) => i === 0 || t - ts[i - 1] === K.HOUR) }
   }, KIT)
   expect(state.during).toEqual({ n: 181 + 50, head: true })
@@ -501,8 +413,8 @@ test('SC-018: scroll-back during replay extends the replay, and exit keeps the o
   expect(state.contiguous).toBe(true)
 })
 
-test('SC-030: a tick after a gap is held, one backfill fills the hole, and the bars are contiguous', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('SC-030: a tick after a gap is held, one backfill fills the hole, and the bars are contiguous', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async (kit) => {
     const K = await import(kit)
     const { pro, feed } = K.mountDeferred()
@@ -511,15 +423,15 @@ test('SC-030: a tick after a gap is held, one backfill fills the hole, and the b
     // 300 bars fill the view, so the only request after the first is the backfill.
     feed.history[0].resolve(K.bars('SUPER-USDT', { multiplier: 1, timespan: 'hour' }, lastTs, 300))
     await K.until(() => feed.log.length === 1)
-    const chart = pro.getChart()
+    const chart = pro.chart
     feed.tick({ timestamp: lastTs + 5 * K.HOUR, open: 100, high: 101, low: 99, close: 100.5, volume: 1 })
     await K.until(() => feed.history.length === 2)
     await K.frame()
-    const held = chart.getDataList().at(-1).timestamp === lastTs
+    const held = chart.dataPort.getDataList().at(-1).timestamp === lastTs
     const h = feed.history[1]
     h.resolve(K.bars('SUPER-USDT', { multiplier: 1, timespan: 'hour' }, lastTs + 4 * K.HOUR, 300))
-    await K.until(() => chart.getDataList().at(-1).timestamp === lastTs + 5 * K.HOUR)
-    const ts = chart.getDataList().map(b => b.timestamp)
+    await K.until(() => chart.dataPort.getDataList().at(-1).timestamp === lastTs + 5 * K.HOUR)
+    const ts = chart.dataPort.getDataList().map(b => b.timestamp)
     return { held, from: h.from === lastTs, requests: feed.history.length, tail: ts.slice(-7).map(t => (t - lastTs) / K.HOUR), contiguous: ts.every((t, i) => i === 0 || t - ts[i - 1] === K.HOUR) }
   }, KIT)
   expect(state.held).toBe(true)
@@ -529,8 +441,8 @@ test('SC-030: a tick after a gap is held, one backfill fills the hole, and the b
   expect(state.contiguous).toBe(true)
 })
 
-test('SC-030: a feed whose own history has holes (a market that closes) gets no backfill; the bar after a gap is appended at once', async ({ page, kc }) => {
-  await openHarness(page, kc)
+test('SC-030: a feed whose own history has holes (a market that closes) gets no backfill; the bar after a gap is appended at once', async ({ page }) => {
+  await openHarness(page)
   const state = await page.evaluate(async (kit) => {
     const K = await import(kit)
     const { pro, feed } = K.mountDeferred()
@@ -540,33 +452,11 @@ test('SC-030: a feed whose own history has holes (a market that closes) gets no 
     // Closed for 10 hours overnight, and 5 hours behind now.
     feed.history[0].resolve([...K.bars('SUPER-USDT', hour, lastTs - 20 * K.HOUR, 200), ...K.bars('SUPER-USDT', hour, lastTs, 10)])
     await K.until(() => feed.log.length === 1)
-    const chart = pro.getChart()
+    const chart = pro.chart
     feed.tick({ timestamp: lastTs + 5 * K.HOUR, open: 100, high: 101, low: 99, close: 100.5, volume: 1 })
-    await K.until(() => chart.getDataList().at(-1).timestamp === lastTs + 5 * K.HOUR, 3000, 'the bar after the gap appended')
+    await K.until(() => chart.dataPort.getDataList().at(-1).timestamp === lastTs + 5 * K.HOUR, 3000, 'the bar after the gap appended')
     await K.sleep(100)
-    return { requests: feed.history.length, n: chart.getDataList().length }
+    return { requests: feed.history.length, n: chart.dataPort.getDataList().length }
   }, KIT)
   expect(state).toEqual({ requests: 1, n: 211 })
-})
-
-test('SC-035: scroll-back works and klinecharts logs no deprecation (UMD build, which logs unconditionally)', async ({ page, kc }) => {
-  const logs: string[] = []
-  page.on('console', m => { logs.push(m.text()) })
-  await openHarness(page, kc, 'umd')
-  const state = await page.evaluate(async (kit) => {
-    const K = await import(kit)
-    const { pro, feed } = K.mountDeferred()
-    await K.until(() => feed.history.length === 1)
-    feed.answer(0, 300)
-    await K.until(() => feed.log.length === 1)
-    const chart = pro.getChart()
-    K.scrollToStart(chart)
-    await K.until(() => feed.history.length === 2)
-    feed.answer(1, 100)
-    await K.until(() => chart.getDataList().length > 300)
-    return { n: chart.getDataList().length, usesCallback: typeof chart.setLoadDataCallback === 'function' }
-  }, KIT)
-  expect(state.n).toBe(400)
-  expect(state.usesCallback).toBe(kc !== '9.7.2')
-  expect(logs.filter(l => l.includes('has been deprecated'))).toEqual([])
 })

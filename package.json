@@ -1,36 +1,22 @@
 {
   "name": "@super-solution/super-chart",
-  "version": "0.0.53",
-  "description": "Super Chart — a TradingView-grade financial charting engine based on KLineChart, with built-in AI and the SuperScript indicator/strategy language. Maintained by ZzyzxLabs.",
+  "version": "0.1.0",
+  "description": "Super Chart — owned financial chart engine, Web workspace and renderer-independent React Native core.",
   "type": "module",
-  "main": "./dist/klinecharts-pro.cjs",
-  "module": "./dist/klinecharts-pro.js",
+  "main": "./dist/super-chart.cjs",
+  "module": "./dist/super-chart.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "import": {
         "types": "./dist/index.d.ts",
-        "default": "./dist/klinecharts-pro.js"
+        "default": "./dist/super-chart.js"
       },
       "require": {
         "types": "./dist/index.d.cts",
-        "default": "./dist/klinecharts-pro.cjs"
+        "default": "./dist/super-chart.cjs"
       }
     },
-    "./lite": {
-      "types": "./dist/lite.d.ts",
-      "default": "./dist/lite.js"
-    },
-    "./superscript": {
-      "types": "./dist/superscript.d.ts",
-      "default": "./dist/superscript.js"
-    },
-    "./commands": {
-      "types": "./dist/commands.d.ts",
-      "default": "./dist/commands.js"
-    },
-    "./style.css": "./dist/klinecharts-pro.css",
-    "./dist/*": "./dist/*",
     "./package.json": "./package.json",
     "./core": {
       "types": "./dist/core.d.ts",
@@ -42,37 +28,66 @@
       "react-native": "./dist/native.js",
       "import": "./dist/native.js",
       "default": "./dist/native.js"
+    },
+    "./superscript": {
+      "types": "./dist/superscript.d.ts",
+      "import": "./dist/superscript.js",
+      "default": "./dist/superscript.js"
+    },
+    "./indicators": {
+      "types": "./dist/indicators.d.ts",
+      "import": "./dist/indicators.js",
+      "default": "./dist/indicators.js"
+    },
+    "./scripts": {
+      "types": "./dist/scripts.d.ts",
+      "import": "./dist/scripts.js",
+      "default": "./dist/scripts.js"
+    },
+    "./annotations": {
+      "types": "./dist/annotations.d.ts",
+      "import": "./dist/annotations.js",
+      "default": "./dist/annotations.js"
+    },
+    "./overlays": {
+      "types": "./dist/overlays.d.ts",
+      "import": "./dist/overlays.js",
+      "default": "./dist/overlays.js"
     }
   },
   "typesVersions": {
     "*": {
-      "lite": [
-        "./dist/lite.d.ts"
-      ],
-      "superscript": [
-        "./dist/superscript.d.ts"
-      ],
-      "commands": [
-        "./dist/commands.d.ts"
-      ],
       "core": [
         "./dist/core.d.ts"
       ],
       "native": [
         "./dist/native.d.ts"
+      ],
+      "superscript": [
+        "./dist/superscript.d.ts"
+      ],
+      "indicators": [
+        "./dist/indicators.d.ts"
+      ],
+      "scripts": [
+        "./dist/scripts.d.ts"
+      ],
+      "annotations": [
+        "./dist/annotations.d.ts"
+      ],
+      "overlays": [
+        "./dist/overlays.d.ts"
       ]
     }
   },
-  "sideEffects": [
-    "*.css",
-    "./dist/klinecharts-pro.js",
-    "./dist/klinecharts-pro.cjs",
-    "./dist/klinecharts-pro.umd.js"
-  ],
+  "sideEffects": false,
   "files": [
     "LICENSE",
     "NOTICE",
     "README.md",
+    "docs/OWNED-API-MIGRATION.md",
+    "docs/OWNED-ENGINE.md",
+    "docs/OWNED-DRAWING-CATALOG.md",
     "dist/"
   ],
   "repository": {
@@ -81,7 +96,6 @@
   },
   "keywords": [
     "super-chart",
-    "klinecharts",
     "tradingview",
     "candlestick",
     "finance",
@@ -90,7 +104,7 @@
     "ai",
     "superscript"
   ],
-  "author": "ZzyzxLabs (based on KLineChart Pro by liihuu, Apache-2.0)",
+  "author": "Super Solution",
   "license": "Apache-2.0",
   "private": false,
   "publishConfig": {
@@ -105,13 +119,10 @@
     "dev": "vite",
     "dev:preview": "vite --port 5173 --strictPort",
     "test": "vitest run",
-    "lint": "eslint --max-warnings 380 --ext .ts,.tsx src",
+    "lint": "node scripts/lint.mjs",
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "@solidjs/testing-library": "^0.6.0",
-    "@testing-library/jest-dom": "^5.16.5",
-    "@types/testing-library__jest-dom": "^5.14.5",
     "@typescript-eslint/eslint-plugin": "^5.54.0",
     "dts-bundle-generator": "^7.2.0",
     "eslint": "^8.35.0",
@@ -119,22 +130,8 @@
     "eslint-plugin-import": "^2.27.5",
     "eslint-plugin-n": "^15.6.1",
     "eslint-plugin-promise": "^6.1.1",
-    "klinecharts": "9.8.12",
-    "klinecharts-compat": "npm:klinecharts@9.7.2",
-    "less": "^4.1.3",
-    "less-loader": "^11.1.0",
-    "solid-js": "^1.6.11",
     "typescript": "^4.9.5",
     "vite": "^4.1.1",
-    "vite-plugin-solid": "^2.6.1",
     "vitest": "^0.28.4"
-  },
-  "peerDependencies": {
-    "klinecharts": "^9.7.2"
-  },
-  "peerDependenciesMeta": {
-    "klinecharts": {
-      "optional": true
-    }
   }
 }

@@ -145,6 +145,7 @@ interface Pair {
 
 
 function lastTimestamp (chart: LoaderChart | null): number | undefined {
+  if (chart?.getLastTimestamp !== undefined) return chart.getLastTimestamp()
   const list = chart?.getDataList()
   return list !== undefined && list.length > 0 ? list[list.length - 1].timestamp : undefined
 }
@@ -560,6 +561,9 @@ export class DataLoader {
     const timer = this._env.setTimeout(() => {
       if (this._isCurrent(gen) && this._shownGen !== gen) {
         timedOut = true
+        // The timeout clears the chart. A late successful answer must restore
+        // its complete history instead of merging into that discarded cache.
+        cachedBars = null
         this._failInitial(gen, pair, new Error(`[super-chart] the history request for ${describe(pair)} did not settle within ${this._timeoutMs} ms`), true)
       }
     }, this._timeoutMs)
@@ -683,6 +687,7 @@ export class DataLoader {
     const pending = this._pendingOlderPage
     this._pendingOlderPage = null
     pending?.(null)
+    this._chart?.cancelHistoryLoad?.()
   }
 
   // ---- scroll-back ----------------------------------------------------------

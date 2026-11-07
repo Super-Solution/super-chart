@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Super Chart — owned engine workbench</title>
+  <style>
+    :root { color-scheme:dark; font:14px system-ui; background:#10151d; color:#dce4ed }
+    body { margin:20px auto; padding:0 16px; max-width:1200px }
+    p { line-height:1.6 } nav { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0 }
+    button,select { padding:8px; font:inherit; background:#192330; color:inherit; border:1px solid #455467; border-radius:4px }
+    #chart { height:560px; border:1px solid #455467 } output { display:block; min-height:28px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere }
+    @media(max-width:600px) { #chart { height:340px } }
+  </style>
+</head>
+<body>
+  <h1>Owned engine workbench</h1>
+  <p>Synthetic data. No KLineChart or Solid runtime. This rewrite is not yet the complete Pro replacement.</p>
+  <nav>
+    <label>Style <select id="style"><option value="candles">Candles</option><option value="ohlc">OHLC</option><option value="line">Line</option><option value="area">Area</option></select></label>
+    <label>Prices <select id="mode"><option value="raw">Raw</option><option value="heikin-ashi">Heikin Ashi (synthetic)</option></select></label>
+    <label>Scale <select id="scale"><option value="linear">Linear</option><option value="log">Log</option><option value="percentage">Percentage</option></select></label>
+    <label><input id="reverse" type="checkbox"> Reverse price axis</label>
+    <button id="live">Start live</button><button id="burst">300 updates</button><button id="follow">Follow latest</button>
+    <button id="export">Export PNG</button><button id="dispose">Dispose</button>
+    <button id="overlays">Show volume profile and zones</button>
+  </nav>
+  <nav>
+    <label>Indicator <select id="indicator"><option>MA</option><option>EMA</option><option>BOLL</option><option>VOL</option><option>MACD</option><option>RSI</option><option>KDJ</option></select></label>
+    <button id="add-indicator">Add indicator</button><button id="load-pack">Load technical pack</button><button id="load-classic">Load classic indicators</button>
+    <select id="indicator-list" aria-label="Active indicators"></select><button id="remove-indicator">Remove indicator</button>
+    <label>Drawing <select id="drawing"><option value="">Select / pan</option><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option><option value="segment">Segment</option><option value="ray">Ray</option><option value="rectangle">Rectangle</option><option value="fibonacci">Fibonacci</option></select></label>
+    <button id="undo">Undo</button><button id="redo">Redo</button><button id="lock">Lock / unlock selected</button><button id="remove-drawing">Delete selected</button>
+  </nav>
+  <div id="chart"></div>
+  <output id="readout"></output><output id="drawings-state"></output><output id="metrics"></output><output id="status">Loading engine…</output>
+  <p>Drag / pinch / wheel / arrow keys / +/- / Home. Only the visible range is rendered. Pointer inspection paints a separate layer. Reduced-motion preferences disable inertia.</p>
+  <script type="module" src="/demo/engine.ts"></script>
+</body>
+</html>

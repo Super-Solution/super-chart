@@ -1,7 +1,7 @@
-import type { KLineData } from 'klinecharts'
+import type { MarketBar as KLineData } from '../core/types'
 import { describe, expect, it } from 'vitest'
 
-import type { SymbolInfo } from '../types'
+import type { SymbolInfo } from '../core/feed'
 
 import { HistoryCache, historyKey, mergeKind } from './historyCache'
 

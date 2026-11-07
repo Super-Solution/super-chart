@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { KLineData } from 'klinecharts'
+import type { MarketBar as KLineData } from '../core/types'
 
 import { DataLoader, hasHoles } from './loader'
 import type { DataLoadError, DataStatus, LoaderOptions } from './loader'

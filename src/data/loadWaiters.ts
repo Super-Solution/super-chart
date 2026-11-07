@@ -31,7 +31,7 @@
 // (a Solid effect over the symbol/period signals, in production; a plain
 // call in tests). It never calls the datafeed or touches klinecharts.
 
-import type { Period, SymbolInfo } from '../types'
+import type { Period, SymbolInfo } from '../core/feed'
 
 export type LoadOutcome =
   | { status: 'loaded', symbol: SymbolInfo, period: Period, bars: number }

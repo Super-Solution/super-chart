@@ -104,6 +104,7 @@ export interface RecentsStore {
  */
 export function createRecentsStore (config: RecentsConfig, storage?: Pick<Storage, 'getItem' | 'setItem'>): RecentsStore {
   const max = config.max ?? 8
+  if (!Number.isSafeInteger(max) || max < 0 || max > 100) throw new RangeError('Recent-symbol limit must be from 0 to 100')
   const key = config.persistKey !== undefined ? `sc-recent-symbols:${config.persistKey}` : null
   const read = (): string[] => {
     if (key === null || storage === undefined) {
@@ -111,14 +112,14 @@ export function createRecentsStore (config: RecentsConfig, storage?: Pick<Storag
     }
     try {
       const raw = storage.getItem(key)
-      return raw === null ? parseTickerArray(config.seed ?? []) : parseTickerArray(JSON.parse(raw))
+      return raw === null || raw.length > 65536 ? parseTickerArray(config.seed ?? []) : parseTickerArray(JSON.parse(raw))
     } catch {
       return parseTickerArray(config.seed ?? [])
     }
   }
-  let mem = read()
+  let mem = [...new Set(read().filter(value => value.length <= 4096))].slice(0, max)
   return {
-    list: () => mem,
+    list: () => mem.slice(),
     push: (ticker: string) => {
       mem = [ticker, ...mem.filter(t => t !== ticker)].slice(0, max)
       if (key !== null && storage !== undefined) {

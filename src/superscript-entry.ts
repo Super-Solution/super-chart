@@ -1,11 +1,10 @@
 /**
- * SUPer-Chart — server-safe SuperScript entry (`@zzyzxlabs/super-chart/superscript`).
+ * Super Chart — server-safe SuperScript entry (`@super-solution/super-chart/superscript`).
  *
  * The SuperScript runtime and the AI helpers, with no klinecharts, no DOM and
  * no Solid: this entry imports and runs in plain Node, so an MCP tool or a
  * backend can compile and run scripts without installing a canvas chart
- * library. To draw a script on a chart, use `registerScriptIndicator` from the
- * `.` or `./lite` entry in the browser.
+ * library. To draw a script, use `createEngineScriptIndicator` from `/scripts`.
  *
  * Only SuperScript runs by default. The JavaScript language evaluates its
  * source with `new Function`, which on a server is full code execution, so this
@@ -14,8 +13,8 @@
  * browser entries no longer register JavaScript either.) A tool that takes a
  * language id from a model or a user should still pin it to `"superscript"`.
  *
- * The language registry is shared with the browser entries (one module in the
- * build), so a language registered here is visible to them too.
+ * The registry is shared with this entry's language runtime. The owned `/scripts`
+ * bridge accepts SuperScript only and does not execute arbitrary registered code.
  *
  * Maintained by ZzyzxLabs. Apache-2.0.
  */
@@ -87,7 +86,7 @@ export function listLanguages (): ScriptLanguage[] {
 export function runScript (source: string, bars: Bar[], languageId = SuperScriptLanguage.id, params?: ScriptParams): ScriptResult {
   const lang = getLanguage(languageId)
   if (lang === undefined) {
-    throw new Error(`language "${languageId}" is not enabled on @zzyzxlabs/super-chart/superscript; ` +
+    throw new Error(`language "${languageId}" is not enabled on @super-solution/super-chart/superscript; ` +
       'only "superscript" runs by default. Register another language with registerLanguage() from this entry first.')
   }
   return lang.compile(source).run(bars, params)
