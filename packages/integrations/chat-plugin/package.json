@@ -1,0 +1,44 @@
+{
+  "name": "@supersolutions/super-chart-chat-plugin",
+  "version": "0.1.0",
+  "description": "super-chat plugin: shows and drives Super Chart charts as chat cards, with an agent tool surface.",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Super-Solution/super-chart.git",
+    "directory": "packages/integrations/chat-plugin"
+  },
+  "homepage": "https://github.com/Super-Solution/super-chart#readme",
+  "bugs": {
+    "url": "https://github.com/Super-Solution/super-chart/issues"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "tag": "latest"
+  },
+  "dependencies": {
+    "@supersolutions/super-chart-core": "0.1.0",
+    "@supersolutions/super-chart-web": "0.1.0",
+    "@supersolutions/super-protocol": "0.1.0"
+  },
+  "author": "SUPER SOLUTION LABS INC"
+}

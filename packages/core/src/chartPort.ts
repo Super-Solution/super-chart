@@ -1,0 +1,23 @@
+import type { MarketBar } from './types'
+
+/** Small renderer-owned data sink. The core owns no canvas or native view. */
+export interface ChartDataPort<Bar = MarketBar> {
+  applyNewData: (data: Bar[], more?: boolean) => void
+  applyMoreData: (data: Bar[], more?: boolean) => void
+  updateData: (data: Bar) => void
+  /** Optional ordered tail batch; equivalent to updateData in order, with one render notification. */
+  updateDataBatch?: (data: Bar[], more?: boolean) => void
+  getDataList: () => Bar[]
+  /** Optional O(1) tail read so feed routing need not request a full history snapshot per tick. */
+  getLastTimestamp?: () => number | undefined
+  /** Release a host's older-page lock when the loader cancels that page or retry. */
+  cancelHistoryLoad?: () => void
+  loadMore?: (callback: (timestamp: number | null) => void) => void
+  setLoadDataCallback?: (callback: (request: HistoryLoadRequest<Bar>) => void) => void
+}
+
+export interface HistoryLoadRequest<Bar = MarketBar> {
+  type: string
+  data: Bar | null
+  callback: (data: Bar[], more?: boolean) => void
+}

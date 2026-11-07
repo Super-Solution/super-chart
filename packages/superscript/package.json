@@ -1,0 +1,53 @@
+{
+  "name": "@supersolutions/super-chart-superscript",
+  "version": "0.1.0",
+  "description": "SuperScript language runtime, AI helpers and the script-to-indicator bridge for Super Chart. Runs in plain Node.",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Super-Solution/super-chart.git",
+    "directory": "packages/superscript"
+  },
+  "homepage": "https://github.com/Super-Solution/super-chart#readme",
+  "bugs": {
+    "url": "https://github.com/Super-Solution/super-chart/issues"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./scripts": {
+      "types": "./dist/scripts.d.ts",
+      "import": "./dist/scripts.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "scripts": [
+        "./dist/scripts.d.ts"
+      ]
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "tag": "latest"
+  },
+  "dependencies": {
+    "@supersolutions/super-chart-core": "0.1.0"
+  },
+  "author": "SUPER SOLUTION LABS INC"
+}

@@ -1,0 +1,16 @@
+{
+  "name": "super-chart-example-vanilla",
+  "private": true,
+  "description": "Owned Super Chart API example, consuming actual package exports.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supersolutions/super-chart-core": "file:../../packages/core",
+    "@supersolutions/super-chart-web": "file:../../packages/bindings/web"
+  },
+  "devDependencies": {
+    "typescript": "^4.9.5"
+  }
+}

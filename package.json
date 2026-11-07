@@ -1,0 +1,43 @@
+{
+  "name": "super-chart-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Super Chart monorepo: core, superscript, web and the super-chat plugin.",
+  "type": "module",
+  "license": "GPL-3.0-or-later",
+  "author": "SUPER SOLUTION LABS INC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Super-Solution/super-chart.git"
+  },
+  "workspaces": [
+    "packages/*",
+    "packages/*/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs && node scripts/check-package.mjs",
+    "build:js": "node scripts/build.mjs --no-dts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "node scripts/lint.mjs",
+    "check:package": "node scripts/check-package.mjs",
+    "dev": "vite"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^5.54.0",
+    "dts-bundle-generator": "^7.2.0",
+    "esbuild": "^0.17.18",
+    "eslint": "^8.35.0",
+    "eslint-config-standard-with-typescript": "^34.0.0",
+    "eslint-plugin-import": "^2.27.5",
+    "eslint-plugin-n": "^15.6.1",
+    "eslint-plugin-promise": "^6.1.1",
+    "typescript": "^4.9.5",
+    "vite": "^4.1.1",
+    "vitest": "^0.28.4"
+  }
+}

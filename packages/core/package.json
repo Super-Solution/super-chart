@@ -1,0 +1,58 @@
+{
+  "name": "@supersolutions/super-chart-core",
+  "version": "0.1.0",
+  "description": "Renderer-free chart core: market data, loader, indicators, drawings, frame and workspace models. No DOM.",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Super-Solution/super-chart.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/Super-Solution/super-chart#readme",
+  "bugs": {
+    "url": "https://github.com/Super-Solution/super-chart/issues"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./native": {
+      "types": "./dist/native.d.ts",
+      "react-native": "./dist/native.js",
+      "import": "./dist/native.js"
+    },
+    "./indicators": {
+      "types": "./dist/indicators.d.ts",
+      "import": "./dist/indicators.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "native": [
+        "./dist/native.d.ts"
+      ],
+      "indicators": [
+        "./dist/indicators.d.ts"
+      ]
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "tag": "latest"
+  },
+  "author": "SUPER SOLUTION LABS INC"
+}

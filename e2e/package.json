@@ -1,0 +1,12 @@
+{
+  "name": "super-chart-e2e",
+  "private": true,
+  "description": "Existing functional browser cases over the built owned Super Chart, using installed Google Chrome. This separate package is not published.",
+  "type": "module",
+  "scripts": {
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

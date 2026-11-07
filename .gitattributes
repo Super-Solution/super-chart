@@ -1,0 +1,6 @@
+# This directory is also the whole of ZzyzxLabs/SUPer-Chart (a mirror of it),
+# and its build output is committed to frontend/sup-wallet/vendor. Both must
+# be byte-identical on every platform, so it is LF everywhere: a Windows
+# checkout with core.autocrlf=true would otherwise write CRLF, and the build
+# embeds source text in its source maps.
+* text=auto eol=lf

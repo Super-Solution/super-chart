@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {},
+    "preserveSymlinks": true,
+    "baseUrl": ".",
+    "rootDir": "src"
+  },
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/testkit.ts",
+    "src/ta.legacy.fixture.ts"
+  ]
+}
