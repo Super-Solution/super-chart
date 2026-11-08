@@ -187,8 +187,12 @@ const PREC = new Map<string, number>([['or', 1], ['||', 1], ['and', 2], ['&&', 2
 /** From the start of `a` to the end of `b` when both are on one line, else `fallback`. */
 const span = (a: Span, b: Span, fallback: Span): Span => (a.line === b.line && b.endCol >= a.col ? { line: a.line, col: a.col, endCol: b.endCol } : fallback)
 
+/** Deepest nesting of brackets, calls, ternaries and prefix operators a script may use. Real scripts stay in single digits. */
+const MAX_NESTING = 200
+
 class Parser {
   private pos = 0
+  private depth = 0
   constructor (private readonly toks: Token[], private readonly inputs: { count: number }) {}
 
   peek (o = 0): Token | undefined { return this.toks[this.pos + o] }
@@ -228,15 +232,26 @@ class Parser {
     }
   }
 
+  /** Count one level of recursion; a script nested past MAX_NESTING is a diagnostic, not a stack overflow. */
+  private enter (at: Token | undefined): void {
+    if (++this.depth > MAX_NESTING) {
+      const where = at ?? this.toks[this.toks.length - 1]
+      fail('UNSUPPORTED', `this expression is nested more than ${MAX_NESTING} levels deep`, where, 'split it into several named steps')
+    }
+  }
+
   expr (): Expr {
+    this.enter(this.peek())
     const c = this.binary(1)
     if (this.isOp('?')) {
       const q = this.next()
       const a = this.expr()
       this.expect(':')
       const b = this.expr()
+      this.depth--
       return { k: 'tern', c, a, b, at: span(c.at, b.at, q) }
     }
+    this.depth--
     return c
   }
 
@@ -257,7 +272,9 @@ class Parser {
     const t = this.peek()
     if (t !== undefined && ((t.k === 'op' && (t.v === '-' || t.v === '+' || t.v === '!')) || (t.k === 'id' && t.v === 'not'))) {
       this.pos++
+      this.enter(t)
       const arg = this.unary()
+      this.depth--
       return { k: 'unary', op: t.v === '!' ? 'not' : t.v, arg, at: span(t, arg.at, t) }
     }
     return this.postfix()

@@ -139,9 +139,22 @@ const SUPERLIB = {
 // SuperScript
 // --------------------------------------------------------------------------
 
+/** A tree too deep for the call stack (a chain of thousands of operators) is reported like any other unsupported script. */
+function tooDeep(e: unknown): SuperScriptError | undefined {
+  if (!(e instanceof RangeError)) return undefined;
+  const d = diag("error", "UNSUPPORTED", "this script is too large or too deeply nested to process", { line: 1, col: 1, endCol: 1 }, "split long expressions into several named steps");
+  return new SuperScriptError(d);
+}
+
 function compileSuperScript(source: string, options: CompileOptions = {}): CompiledScript {
-  const program = parse(source);
-  const checked = check(program);
+  let program: ReturnType<typeof parse>;
+  let checked: ReturnType<typeof check>;
+  try {
+    program = parse(source);
+    checked = check(program);
+  } catch (e) {
+    throw tooDeep(e) ?? e;
+  }
   const diagnostics = checked.diagnostics;
   const firstError = diagnostics.find((d) => d.severity === "error");
   if (firstError !== undefined) throw new SuperScriptError(firstError, diagnostics);
@@ -151,7 +164,12 @@ function compileSuperScript(source: string, options: CompileOptions = {}): Compi
     meta: meta(),
     diagnostics,
     run(bars: Bar[], params?: ScriptParams): ScriptResult {
-      const r = evaluate(program, bars, params);
+      let r: ReturnType<typeof evaluate>;
+      try {
+        r = evaluate(program, bars, params);
+      } catch (e) {
+        throw tooDeep(e) ?? e;
+      }
       return { meta: meta(), plots: r.plots, diagnostics };
     },
   };
@@ -166,6 +184,8 @@ export function checkSuperScript(source: string): Diagnostic[] {
   try {
     return check(parse(source)).diagnostics;
   } catch (e) {
+    const deep = tooDeep(e);
+    if (deep !== undefined) return deep.diagnostics;
     return [diag("error", "UNSUPPORTED", `internal error: ${String(e)}`, { line: 1, col: 1, endCol: 1 })];
   }
 }
