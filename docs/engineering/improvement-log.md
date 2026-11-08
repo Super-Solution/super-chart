@@ -11,6 +11,21 @@ Run under the owner's "library excellence" directive. Constraints held throughou
 no publish, no licence change, no history rewrite, no new runtime dependency, no CI. The directive's "add tests"
 authorisation is what allows the tests below. Newest round first within this section.
 
+### Round 3: chat plugin card registry and indicator tool
+
+* The plugin (the only code an agent drives directly) had no tests at all. Audited `createChartChatPlugin`.
+* Found: cards register under `spec.id` and `teardown()` deleted by id. Two cards with one id (an agent that reuses
+  `id: "btc"` every turn, with the older message unmounted by a virtualised chat list afterwards) made the older
+  card's unmount drop the newer card's registration, so every tool then answered "No chart is on screen" while the
+  chart was visible. Fixed: only the entry a card still owns is released.
+* Found: `chart_indicators` removed first, then added one by one, so a refused indicator (bad parameters) left the
+  earlier ones of the same call behind and a retry stacked duplicates. Now adds run first and are rolled back on a
+  failure; removals only touch indicators that existed before the call and happen after every add succeeded.
+* Not changed (design, noted): a theme switch rebuilds a feed-backed card from its original spec, which discards a
+  market the agent set through `chart_set_market`.
+* Tests: `chat-plugin/src/index.test.ts` against a stand-in `ChartWorkspace` (no DOM): registry ownership, tool
+  argument validation, all-or-nothing indicators. Two of four fail without the fixes.
+
 ### Round 2: non-finite viewport input, reproducible type-checking
 
 * Found: `zoomViewport(v, n, factor, NaN)` and `clampViewport({i0: NaN, ...})` returned a `{NaN, NaN}` window
