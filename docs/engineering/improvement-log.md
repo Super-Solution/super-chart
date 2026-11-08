@@ -11,6 +11,25 @@ Run under the owner's "library excellence" directive. Constraints held throughou
 no publish, no licence change, no history rewrite, no new runtime dependency, no CI. The directive's "add tests"
 authorisation is what allows the tests below. Newest round first within this section.
 
+### Round 5: the indicator servers get a shared contract test
+
+* Probe first: a randomised stress of the browser workspace (25 runs of 40 random operations: market changes
+  racing history loads that fail 8% of the time, scroll-back, in-order, repeated and stale live ticks, replay start
+  and exit, dispose) found nothing: bars always ordered, unique and finite, the shown market always the last one
+  requested, every subscription released on dispose, no page errors. The loader's generation scheme holds up.
+* Found: the two indicator servers (Go, Python) had a documented contract and no test of it in the repository (the
+  log's earlier "remaining" item), and `go test ./...` reported "no test files" for the server. The only parity
+  evidence was a manual run.
+* Added: `conformance/indicators-server.v1.json`, 22 refusals with status and error code. Go
+  (`server/server_test.go`) and Python (`tests/test_server_contract.py`, through the ASGI app) both replay all 341
+  conformance cases through `POST /v1/indicators` and check the whole refusal table; Go also covers chaining
+  (`m.hist`), columnar-versus-row equality, overflow-to-null and bearer authorisation. Mutating the Go catalog
+  (sma wired to ema) fails the replay.
+* No server code changed: both already satisfied the contract. Left open: the catalog is still written out by hand in
+  Go and Python (and the private Rust backend); a shared catalog document would remove that.
+* Validation: `go vet`, `go test ./...`, `ruff check`, `ruff format --check`, `mypy src` and `pytest` (32 tests + 341
+  subtests) pass. `mypy tests` reports 8 pre-existing annotation errors in `test_conformance.py`, untouched.
+
 ### Round 4: a workspace chrome a host can restyle (and a light one)
 
 * Found: every colour of the workspace chrome (toolbars, selects, search panel, notices) was a hard-coded hex in
