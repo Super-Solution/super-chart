@@ -11,6 +11,27 @@ Run under the owner's "library excellence" directive. Constraints held throughou
 no publish, no licence change, no history rewrite, no new runtime dependency, no CI. The directive's "add tests"
 authorisation is what allows the tests below. Newest round first within this section.
 
+### Round 4: a workspace chrome a host can restyle (and a light one)
+
+* Found: every colour of the workspace chrome (toolbars, selects, search panel, notices) was a hard-coded hex in
+  inline styles, so a host could not restyle it without forking, and the chat plugin's light cards sat on a dark
+  toolbar (the README listed it as a known limit). `tokens.ts` was ~190 lines of retired klinecharts-pro tokens
+  (`--klinecharts-pro-*`, `base.less`, tests that no longer exist); only four annotation tones were used.
+* Changed: chrome colours read `--super-chart-{background,text,surface,border,divider,danger}` with the original
+  dark values as the fallback (default look verified pixel-for-pixel by computed style). New `theme: 'dark' | 'light'`
+  option and `setTheme()` apply a preset to the chrome and the canvas colours (`chart.render` still wins at
+  construction); `WORKSPACE_THEMES` and `WORKSPACE_CHROME_VARS` are exported with their types. The chat plugin passes
+  its card theme through. `tokens.ts` shrank to the annotation tones. Additive only: no existing option or default
+  changed.
+* Decision: presets are two (dark, light), not five. The directive's style templates (terminal, editorial,
+  enterprise, ...) are only worth shipping once the chrome has a real component layer; custom properties already let
+  a host build them.
+* Checked in a real browser: default, `light`, host-set properties and `setTheme` computed colours; light screenshot.
+* Tests: `e2e/tests/workspace-theme.spec.ts` (added to the config's match list). Also made the brush stroke in
+  `drawing-input.spec.ts` start inside the plot at any harness height (it used y = 240 while the plot ends near 238
+  here, so the stroke never started: a failure on an unchanged tree). All 71 browser cases pass locally with the
+  installed Chromium.
+
 ### Round 3: chat plugin card registry and indicator tool
 
 * The plugin (the only code an agent drives directly) had no tests at all. Audited `createChartChatPlugin`.

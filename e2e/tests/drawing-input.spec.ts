@@ -41,9 +41,10 @@ test('drawing input creates one segment, cancels with Escape and commits a brush
     state.restoreDrawingMethods = () => { store.add = add; store.remove = remove }
   })
   await tools.selectOption('brush')
-  await page.mouse.move(bounds.x + 150, bounds.y + 240)
+  // Inside the plot at any viewport: the plot's lower edge depends on the harness height and fonts.
+  await page.mouse.move(bounds.x + 150, bounds.y + 200)
   await page.mouse.down()
-  await page.mouse.move(bounds.x + 230, bounds.y + 180, { steps: 8 })
+  await page.mouse.move(bounds.x + 230, bounds.y + 150, { steps: 8 })
   await page.mouse.up()
   const brush = await page.evaluate(() => {
     const state = window as any, snapshot = state.pro.chart.drawings.getSnapshot()

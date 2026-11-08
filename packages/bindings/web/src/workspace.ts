@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/promise-function-async -- Load methods validate synchronously and return the shared queue promise without an async wrapper. */
 import { EngineChart, type EngineChartOptions, type EngineConfiguration } from './chart'
 import { ENGINE_CHART_TYPES, DRAWING_TYPES, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, parseWorkspaceDocument, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1 } from '@supersolutions/super-chart-core'
+import { WORKSPACE_CHROME_VARS, WORKSPACE_THEMES, chromeColor, type WorkspaceChromeKey, type WorkspaceThemeName } from './theme'
 import { moveActiveIndex, decideEnter, createRecentsStore, visibleRecents, type RecentsStore } from './symbolSearchNav'
 
 export interface WorkspaceSearchOptions {
@@ -18,6 +19,11 @@ export interface ChartWorkspaceOptions {
   period: Period
   periods?: readonly Period[]
   chart?: EngineChartOptions
+  /**
+   * `light` or `dark` for the chrome and the canvas colours; `chart.render` colours still win. Leave it out to keep the
+   * dark default and restyle through the `--super-chart-*` CSS custom properties instead (see `WORKSPACE_CHROME_VARS`).
+   */
+  theme?: WorkspaceThemeName
   loader?: Omit<LoaderOptions, 'datafeed' | 'env'>
   search?: WorkspaceSearchOptions
   /** Period-close estimate. Disable or supply the exchange's real session close. */
@@ -33,6 +39,10 @@ const DEFAULT_PERIODS: readonly Period[] = [
 ]
 const pairKey = (symbol: SymbolInfo, period: Period): string => `${symbolKey(symbol)}:${periodKey(period)}`
 const label = (value: string): string => value.replace(/-/g, ' ')
+function validTheme (theme: unknown): WorkspaceThemeName {
+  if (theme !== 'dark' && theme !== 'light') throw new TypeError('Workspace theme must be "dark" or "light"')
+  return theme
+}
 function validSymbol (symbol: SymbolInfo): SymbolInfo {
   if (typeof symbol?.ticker !== 'string' || symbol.ticker.trim() === '') throw new TypeError('A symbol ticker is required')
   return { ...symbol }
@@ -137,8 +147,9 @@ export class ChartWorkspace {
     if (!this.periods.some(period => periodKey(period) === periodKey(this.period))) this.periods.push(this.period)
     this.scale = { ...options.chart?.layout?.priceScale }
     this.root = this.node('div')
-    this.root.style.cssText = 'display:flex;flex-direction:column;position:relative;width:100%;height:100%;min-height:280px;background:#10151d;color:#d6deea;font:13px system-ui;box-sizing:border-box;'
+    this.root.style.cssText = `display:flex;flex-direction:column;position:relative;width:100%;height:100%;min-height:280px;background:${chromeColor('background')};color:${chromeColor('text')};font:13px system-ui;box-sizing:border-box;`
     this.root.setAttribute('aria-label', 'Chart workspace')
+    if (options.theme !== undefined) this.applyChromeTheme(validTheme(options.theme))
     this.listen(this.root, 'click', event => {
       const button = event.target instanceof this.win.Element ? event.target.closest('button') : null
       if (!this.disposed && button instanceof this.win.HTMLButtonElement && !button.disabled) this.actions.get(button)?.()
@@ -245,7 +256,7 @@ export class ChartWorkspace {
 
     this.searchPanel = this.node('div'); this.searchPanel.hidden = true
     this.searchPanel.setAttribute('role', 'dialog'); this.searchPanel.setAttribute('aria-label', 'Find a symbol')
-    this.searchPanel.style.cssText = 'position:absolute;z-index:4;top:44px;left:8px;right:8px;max-width:480px;padding:12px;border:1px solid #40516b;background:#17202c;box-sizing:border-box;'
+    this.searchPanel.style.cssText = `position:absolute;z-index:4;top:44px;left:8px;right:8px;max-width:480px;padding:12px;border:1px solid ${chromeColor('border')};background:${chromeColor('surface')};box-sizing:border-box;`
     this.searchInput = this.node('input'); this.searchInput.type = 'search'; this.searchInput.placeholder = 'Symbol or name'; this.searchInput.setAttribute('aria-label', 'Symbol or name')
     this.searchInput.autocomplete = 'off'; this.searchInput.style.cssText = 'width:75%;padding:6px;'
     this.searchStatus = this.node('div'); this.searchStatus.setAttribute('role', 'status')
@@ -264,7 +275,7 @@ export class ChartWorkspace {
 
     const stage = this.node('div'); stage.style.cssText = 'flex:1;min-height:160px;position:relative;'
     this.chartHost = this.node('div'); this.chartHost.style.cssText = 'position:absolute;inset:0;'
-    this.notice = this.node('div'); this.notice.setAttribute('role', 'alert'); this.notice.style.cssText = 'padding:0 8px;color:#f4b8ae;'
+    this.notice = this.node('div'); this.notice.setAttribute('role', 'alert'); this.notice.style.cssText = `padding:0 8px;color:${chromeColor('danger')};`
     this.statusNode = this.node('div'); this.statusNode.setAttribute('role', 'status'); this.statusNode.style.cssText = 'padding:4px 8px;'
     stage.append(this.chartHost)
     this.retryButton = this.button('Retry', () => this.reload())
@@ -286,7 +297,7 @@ export class ChartWorkspace {
     try {
       this.chart = new EngineChart(this.chartHost, {
         ...options.chart,
-        render: { ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone },
+        render: { ...(options.theme === undefined ? {} : WORKSPACE_THEMES[options.theme].render), ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone },
         onToolComplete: () => {
           this.drawingSelect.value = ''; options.chart?.onToolComplete?.()
         }
@@ -526,6 +537,21 @@ export class ChartWorkspace {
     const state = this.loader.status
     const loading = this.pending && (this.waitingStart || state.state !== 'error')
     return { ...state, state: loading ? 'loading' : state.state, error: loading || state.error === null ? null : { ...state.error, symbol: { ...state.error.symbol }, period: { ...state.error.period } } }
+  }
+
+  /**
+   * Switch the chrome and the canvas colours to a preset. The preset's six canvas colours replace the current ones,
+   * including any the host passed in `chart.render`; set those again afterwards through `chart.setRenderOptions`.
+   */
+  setTheme (theme: WorkspaceThemeName): void {
+    if (this.disposed) return
+    const name = validTheme(theme)
+    this.applyChromeTheme(name)
+    this.chart.setRenderOptions({ ...WORKSPACE_THEMES[name].render })
+  }
+
+  private applyChromeTheme (theme: WorkspaceThemeName): void {
+    for (const key of Object.keys(WORKSPACE_CHROME_VARS) as WorkspaceChromeKey[]) this.root.style.setProperty(WORKSPACE_CHROME_VARS[key], WORKSPACE_THEMES[theme].chrome[key])
   }
 
   dispose (): void {
@@ -824,20 +850,20 @@ export class ChartWorkspace {
   private listen (target: EventTarget, type: string, listener: EventListener): void { target.addEventListener(type, listener, { signal: this.abort.signal }) }
   private button (text: string, action: () => unknown): HTMLButtonElement {
     const button = this.node('button'); button.type = 'button'; button.textContent = text
-    button.style.cssText = 'padding:5px 8px;border:1px solid #40516b;border-radius:4px;background:#17202c;color:inherit;font:inherit;cursor:pointer;'
+    button.style.cssText = `padding:5px 8px;border:1px solid ${chromeColor('border')};border-radius:4px;background:${chromeColor('surface')};color:inherit;font:inherit;cursor:pointer;`
     this.actions.set(button, action); return button
   }
 
   private select (name: string, values: ReadonlyArray<readonly [string, string]>, selected: string): HTMLSelectElement {
     const select = this.node('select'); select.setAttribute('aria-label', name)
-    select.style.cssText = 'padding:4px;border:1px solid #40516b;background:#17202c;color:inherit;font:inherit;max-width:160px;'
+    select.style.cssText = `padding:4px;border:1px solid ${chromeColor('border')};background:${chromeColor('surface')};color:inherit;font:inherit;max-width:160px;`
     for (const [value, text] of values) { const option = this.node('option'); option.value = value; option.textContent = text; select.append(option) }
     select.value = selected; return select
   }
 
   private row (name: string): HTMLDivElement {
     const row = this.node('div'); row.setAttribute('role', 'toolbar'); row.setAttribute('aria-label', name)
-    row.style.cssText = 'display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:6px 8px;border-bottom:1px solid #283444;'; return row
+    row.style.cssText = `display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:6px 8px;border-bottom:1px solid ${chromeColor('divider')};`; return row
   }
 
   private field (name: string, control: HTMLElement): HTMLLabelElement {

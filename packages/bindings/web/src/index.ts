@@ -4,6 +4,8 @@ export type { EngineChartOptions, EngineConfiguration } from './chart'
 export { paintEngineFrame, paintEngineCursor } from './canvasRenderer'
 export { ChartWorkspace, ChartWorkspace as SuperChart } from './workspace'
 export type { ChartWorkspaceOptions, WorkspaceSearchOptions } from './workspace'
+export { WORKSPACE_THEMES, WORKSPACE_CHROME_VARS } from './theme'
+export type { WorkspaceTheme, WorkspaceThemeName, WorkspaceChromeKey } from './theme'
 export { DrawingImageRenderer, createDrawingImage } from './drawingMedia'
 export type { EngineLayer } from './layer'
 

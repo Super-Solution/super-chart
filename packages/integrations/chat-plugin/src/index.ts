@@ -178,6 +178,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
           symbol: spec.symbol,
           period: spec.period,
           periods,
+          theme: context.theme,
           chart: { mode: engine.mode, render: { ...RENDER_THEME[context.theme], chartType: engine.chartType as never } }
         })
         for (const definition of [...TECHNICAL_INDICATOR_DEFINITIONS, ...CLASSIC_INDICATOR_DEFINITIONS]) workspace.registerIndicator(definition)
