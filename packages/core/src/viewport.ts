@@ -26,6 +26,8 @@ export function defaultViewport(n: number, want: number = DEFAULT_BARS): Viewpor
 
 export function clampViewport(v: Viewport, n: number): Viewport {
   if (n <= 0) return { i0: 0, i1: 0 };
+  // A NaN edge (a gesture over a zero-width plot, a bad host value) would otherwise leak through every Math.min/max below.
+  if (Number.isNaN(v.i0) || Number.isNaN(v.i1)) return defaultViewport(n);
   const minSpan = Math.min(MIN_BARS, n);
   let i0 = Math.round(v.i0);
   let i1 = Math.round(v.i1);
@@ -52,7 +54,7 @@ export function viewportSpan(v: Viewport): number {
  * chart's centre.
  */
 export function zoomViewport(v: Viewport, n: number, factor: number, anchorFrac: number): Viewport {
-  if (n <= 0 || !Number.isFinite(factor) || factor <= 0) return clampViewport(v, n);
+  if (n <= 0 || !Number.isFinite(factor) || factor <= 0 || Number.isNaN(anchorFrac)) return clampViewport(v, n);
   const span = viewportSpan(v);
   const minSpan = Math.min(MIN_BARS, n);
   const nextSpan = Math.max(minSpan, Math.min(n, Math.round(span / factor)));

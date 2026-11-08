@@ -5,6 +5,37 @@ repository's own rules apply (see [`../MAINTAINING.md`](../MAINTAINING.md) and `
 added and no test case, fixture or snapshot baseline is added without the owner's permission, so validation
 below is the existing suites plus bounded manual observation.
 
+## Directive rounds (2026-11-08, second series of 15)
+
+Run under the owner's "library excellence" directive. Constraints held throughout: public API stays compatible,
+no publish, no licence change, no history rewrite, no new runtime dependency, no CI. The directive's "add tests"
+authorisation is what allows the tests below. Newest round first within this section.
+
+### Round 2: non-finite viewport input, reproducible type-checking
+
+* Found: `zoomViewport(v, n, factor, NaN)` and `clampViewport({i0: NaN, ...})` returned a `{NaN, NaN}` window
+  (every `Math.min/max` propagates NaN). A gesture over a zero-width plot yields exactly that fraction.
+  `RealtimeView` and the continuous variants already guard, so the chart itself was safe; the exported
+  `/native` helpers were not.
+* Found: with no lockfile, a fresh `npm install` resolves `@types/node` to a release whose `.d.ts` files TypeScript
+  4.9 cannot parse, so `npm run typecheck` fails on a clean checkout (`skipLibCheck` is off). A direct
+  devDependency `@types/node@^20.19.0` keeps it green (lint is back to its recorded 128 warnings too).
+* Changed: `viewport.ts` (NaN anchor ignored, NaN edge falls back to the default window), root `package.json`.
+* Tests: `core/src/viewport.test.ts` (fails without the fix).
+
+### Round 1: hostile SuperScript structure
+
+* Probe: 18 hostile scripts through `runScript`. Names such as `constructor`/`__proto__` are inert, absurd periods
+  are bounded, 5,000 plots and 40,000 lines scale linearly. But 20,000 nested brackets, prefix operators, calls or
+  ternaries, and a 100,000-term `a + a + ...` chain, escaped as a raw `RangeError: Maximum call stack size exceeded`
+  from `compile()`/`run()` (and as an "internal error" string from `checkSuperScript`). Scripts come from models, so
+  the AI repair loop, which reads `SuperScriptError.diagnostics`, got nothing to act on.
+* Fix: the parser caps nesting at 200 levels with an `UNSUPPORTED` diagnostic that has a position and a hint; any
+  remaining stack overflow (long operator chains build a deep left-leaning tree) is converted to a
+  `SuperScriptError` in `compile`, `run` and `checkSuperScript`. No new diagnostic code, so exhaustive switches in
+  consumers keep compiling. Real scripts nest in single digits.
+* Tests: `superscript/src/runtime/limits.test.ts` (5 of 6 fail without the fix).
+
 ## Iteration 1 (2026-11-08)
 
 ### Discovered
