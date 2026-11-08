@@ -33,7 +33,9 @@ const fail = (res, status, code, message) => send(res, status, { error: { code, 
 const integer = (text, fallback) => (text === null ? fallback : /^-?\d{1,16}$/.test(text) ? Number(text) : NaN)
 
 createServer((req, res) => {
-  const url = new URL(req.url ?? '/', 'http://localhost')
+  let url
+  try { url = new URL(req.url ?? '/', 'http://localhost') } // a target such as `//[` is not a URL; without this one request would crash the process
+  catch { return fail(res, 400, 'bad_request', 'Malformed request target.') }
   if (req.method === 'OPTIONS') return res.writeHead(204, { allow: 'GET, HEAD, OPTIONS' }).end()
   if (req.method !== 'GET' && req.method !== 'HEAD') return fail(res, 405, 'method_not_allowed', 'Use GET.')
   if (url.pathname === '/healthz') return send(res, 200, { status: 'ok' })

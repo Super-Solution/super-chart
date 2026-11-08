@@ -101,3 +101,14 @@ below is the existing suites plus bounded manual observation.
   with the owner's permission. Left alone: `fn` given as a non-string answers `unknown_indicator` in Python
   and `invalid_request` in Go (both 400).
 * Gate: `ruff check`, `ruff format --check`, strict `mypy` and `pytest` (9 tests) pass; Go untouched.
+
+### Round 15 (2026-11-08) — the datafeed example server survives a malformed request target
+
+* Audit: the CSV datafeed example added earlier this session (`examples/datafeed-http/serve.mjs`). Nothing in a
+  request reaches the filesystem (series are loaded at start-up), limits are range-checked and unknown routes
+  are 404. One crash: `new URL(req.url, base)` throws on a request target such as `//[`, and the exception
+  was not caught, so a single request stopped the process (checked: the old server was down afterwards).
+* Fix: a malformed target answers 400.
+* No test: the example is outside the test suites by design; verified by hand against the old and new file.
+* Gate: `npm run typecheck && npm run lint && npm test && npm run build` pass (467 tests).
+* Rounds 1 to 15 are complete across the four repositories; see each repository's log for its entries.
