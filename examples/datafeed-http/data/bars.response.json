@@ -1,0 +1,9 @@
+{
+  "ticker": "SAMPLE-USD",
+  "period": "1h",
+  "bars": [
+    {"timestamp": 1792454400000, "open": 100.0, "high": 100.37, "low": 99.5, "close": 99.74, "volume": 1912.4},
+    {"timestamp": 1792458000000, "open": 99.74, "high": 100.08, "low": 99.15, "close": 99.29, "volume": 863.7}
+  ],
+  "noData": true
+}

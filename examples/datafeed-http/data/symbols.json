@@ -1,0 +1,15 @@
+{
+  "symbols": [
+    {
+      "ticker": "SAMPLE-USD",
+      "name": "Sample asset (fictional data)",
+      "exchange": "EXAMPLE",
+      "market": "spot",
+      "type": "crypto",
+      "priceCurrency": "USD",
+      "pricePrecision": 2,
+      "volumePrecision": 1,
+      "timezone": "UTC"
+    }
+  ]
+}

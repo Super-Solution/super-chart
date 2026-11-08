@@ -1,0 +1,16 @@
+{
+  "name": "super-chart-example-datafeed-http",
+  "private": true,
+  "description": "A Datafeed over the HTTP contract in docs/DATAFEED-HTTP.md, and a CSV-backed server for it.",
+  "type": "module",
+  "scripts": {
+    "serve": "node serve.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supersolutions/super-chart-core": "file:../../packages/core"
+  },
+  "devDependencies": {
+    "typescript": "^4.9.5"
+  }
+}
