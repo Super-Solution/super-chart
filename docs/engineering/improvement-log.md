@@ -71,3 +71,19 @@ below is the existing suites plus bounded manual observation.
 * `linreg`, `correlation`, `valuewhen` and the pivot indicators are TypeScript-only, and so are the SuperScript
   runtime and the drawings.
 * 128 lint style warnings in the TypeScript packages.
+
+## Rounds of 15 (audit, fix, local gate, push)
+
+### Round 4 (2026-11-08) — a throwing chart no longer escapes the history load
+
+* Audit: `normalizeBars`, `historyCache` and the initial-load path of `dataLoader`. Normalisation and
+  the cache hold up (input is never mutated, clean input is returned as is, hostile keys are copied
+  as data). One gap in `_start`: the `.then(onFulfilled, onRejected)` pair did not cover a throw from
+  `_show` (klinecharts refusing the bars). That was an unhandled rejection, no live subscription and
+  no `error` event for the host.
+* Fix: `_show` is wrapped; a throw is warned and reported through `_failInitial` like any other failed
+  initial load (the status goes to `error`, the host's error listener fires). A second throw while
+  reporting is warned, never rethrown.
+* No test added: `AGENTS.md` requires the owner's permission first. A test for this (a chart double
+  whose `applyNewData` throws, expecting status `error` and one error event) is ready to write on a yes.
+* Gate: `npm run typecheck && npm run lint && npm test && npm run build` pass (466 tests).

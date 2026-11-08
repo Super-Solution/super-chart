@@ -554,7 +554,19 @@ export class DataLoader {
       this._env.clearTimeout(timer)
       if (this._isCurrent(gen)) {
         // Also after a timeout: a late answer is still the answer.
-        this._show(gen, pair, list, cachedBars)
+        try {
+          this._show(gen, pair, list, cachedBars)
+        } catch (e) {
+          // The chart refused the bars (or a hook threw after the status moved on). Left
+          // alone this was an unhandled rejection with no live subscription and no error
+          // reported to the host; surface it like any other failed initial load instead.
+          this._env.warn(`[super-chart] showing the history of ${describe(pair)} threw.`, e)
+          try {
+            this._failInitial(gen, pair, e, false)
+          } catch (inner) {
+            this._env.warn('[super-chart] reporting that failure threw as well.', inner)
+          }
+        }
       }
     }, error => {
       this._env.clearTimeout(timer)
