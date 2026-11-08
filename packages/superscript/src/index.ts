@@ -1,5 +1,5 @@
 /**
- * Super Chart — server-safe SuperScript entry (`@super-solution/super-chart/superscript`).
+ * Super Chart — server-safe SuperScript entry (`@supersolutions/super-chart-superscript`).
  *
  * The SuperScript runtime and the AI helpers, with no klinecharts, no DOM and
  * no Solid: this entry imports and runs in plain Node, so an MCP tool or a
@@ -86,7 +86,7 @@ export function listLanguages (): ScriptLanguage[] {
 export function runScript (source: string, bars: Bar[], languageId = SuperScriptLanguage.id, params?: ScriptParams): ScriptResult {
   const lang = getLanguage(languageId)
   if (lang === undefined) {
-    throw new Error(`language "${languageId}" is not enabled on @super-solution/super-chart/superscript; ` +
+    throw new Error(`language "${languageId}" is not enabled on @supersolutions/super-chart-superscript; ` +
       'only "superscript" runs by default. Register another language with registerLanguage() from this entry first.')
   }
   return lang.compile(source).run(bars, params)

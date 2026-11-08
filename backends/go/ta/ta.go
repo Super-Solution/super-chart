@@ -3,12 +3,12 @@
 
 // Package ta holds the Super Chart technical-analysis kernels in Go.
 //
-// Ports of packages/core/src/ta.ts: Sum, SMA, EMA, RMA, RSI, MACD, Stdev, Bollinger, TrueRange and
-// ATR. A Series is a slice of nullable floats (nil is null). Windows restart after a nil, results are
-// nil until a window is ready, and an unusable length (not a positive integer) gives all nil, exactly
-// like the reference. conformance/indicators.v1.json is the shared test data.
+// Ports of packages/core/src/ta.ts: the 33 kernels listed in conformance/README.md (moving averages,
+// oscillators, bands, signals, volume indicators and SAR). A Series is a slice of nullable floats (nil is
+// null). Windows restart after a nil, results are nil until a window is ready, and an unusable length (not a
+// positive integer) gives all nil, exactly like the reference. conformance/indicators.v1.json is the shared test data.
 //
-// Not covered: the other indicators in ta.ts (wma, hma, vwma, linreg, pivot, sar, mfi, ...).
+// Not covered: the other indicators in ta.ts (linreg, correlation, valuewhen, the pivots, ...).
 package ta
 
 import "math"

@@ -4,7 +4,7 @@
 
 The original text below describes the old single package.
 
-The package is `@super-solution/super-chart`; the GitHub repository stays private.
+The previous single package was `@super-solution/super-chart` (see the split note above); the GitHub repository stays private.
 The owner authorized a manual Trusted Publishing workflow. It does not run on
 pushes or pull requests, upload Actions artifacts, or use an npm token.
 

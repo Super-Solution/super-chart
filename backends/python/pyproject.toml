@@ -24,6 +24,9 @@ dependencies = []
 [project.urls]
 Repository = "https://github.com/Super-Solution/super-chart"
 
+[project.scripts]
+super-chart-server = "super_chart.server:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
 

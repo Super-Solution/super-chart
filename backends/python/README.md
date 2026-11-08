@@ -13,6 +13,12 @@ pytest                    # or: PYTHONPATH=src python -m unittest discover -s te
 ruff check . && mypy
 ```
 
+## HTTP server
+
+`python -m super_chart.server` (or `super-chart-server`) serves the kernels over HTTP with the standard library;
+`super_chart.server.create_app()` is an ASGI app for uvicorn or hypercorn. Environment and contract in
+[`../../docs/INDICATORS-SERVER.md`](../../docs/INDICATORS-SERVER.md).
+
 Not covered: `linreg`, `correlation`, `valuewhen`, the pivot indicators and non-finite inputs (JSON cannot carry
 them). See the conformance README for the exact scope.
 
