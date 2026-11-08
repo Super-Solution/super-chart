@@ -86,3 +86,18 @@ below is the existing suites plus bounded manual observation.
   reporting is warned, never rethrown.
 * Test added after the owner approved it: `dataLoader.test.ts`, "a chart that throws while drawing the history is reported as one initial error" (fails without the fix, with an unhandled rejection).
 * Gate: `npm run typecheck && npm run lint && npm test && npm run build` pass (467 tests).
+
+### Round 11 (2026-11-08) — Python indicators server parity with Go
+
+* Audit: a differential run of the Go and Python indicator servers over 40 edge requests (case-insensitive
+  keys, duplicate keys, nulls, string numbers, unknown fields, deep nesting, overflowing numbers, BOM). Error
+  codes and results agree except for four bodies the Python server mishandled:
+  `1e400` parsed to infinity and was computed on; a whole number of 400 digits raised `OverflowError`; JSON
+  nested 50,000 deep raised `RecursionError` out of `handle_compute`; and a UTF-8 BOM or a UTF-16 body was
+  accepted because `json.loads(bytes)` sniffs the encoding. Go answers 400 to all four.
+* Fix: the body is decoded as strict UTF-8 before parsing, non-finite floats and integers beyond a double
+  are rejected, and `RecursionError` becomes a 400.
+* Tests: `backends/python/tests/test_server_requests.py` (five hostile bodies plus a good request), added
+  with the owner's permission. Left alone: `fn` given as a non-string answers `unknown_indicator` in Python
+  and `invalid_request` in Go (both 400).
+* Gate: `ruff check`, `ruff format --check`, strict `mypy` and `pytest` (9 tests) pass; Go untouched.

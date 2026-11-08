@@ -248,6 +248,22 @@ def _reject_constant(name: str) -> Any:
     raise ValueError(f"{name} is not valid JSON")
 
 
+def _finite_float(text: str) -> float:
+    value = float(text)
+    if not math.isfinite(value):  # 1e400 is inf to Python; the Go decoder refuses it, so does this one
+        raise ValueError("number out of range")
+    return value
+
+
+def _finite_int(text: str) -> int:
+    value = int(text)
+    try:
+        float(value)
+    except OverflowError:  # a whole number too large for a double
+        raise ValueError("number out of range") from None
+    return value
+
+
 def _fields(obj: Mapping[str, Any], allowed: tuple[str, ...], where: str, strict: bool) -> dict[str, Any]:
     """Match member names case-insensitively, like the Go decoder does, and optionally refuse unknown ones."""
     out: dict[str, Any] = {}
@@ -371,9 +387,14 @@ def handle_compute(body: bytes, cfg: Config | None = None) -> dict[str, Any]:
     """Run one POST /v1/indicators request body and return the response document, or raise ApiError."""
     cfg = cfg or Config()
     try:
-        req = json.loads(body, parse_constant=_reject_constant)
+        # Decode as UTF-8 first: json.loads(bytes) would also accept a BOM and UTF-16/32, which the Go server refuses.
+        req = json.loads(
+            body.decode("utf-8"), parse_constant=_reject_constant, parse_float=_finite_float, parse_int=_finite_int
+        )
     except ValueError as exc:
         raise _bad("invalid_request", f"the body is not valid JSON: {exc}") from None
+    except RecursionError:
+        raise _bad("invalid_request", "the body is not valid JSON: nested too deeply") from None
     if not isinstance(req, dict):
         raise _bad("invalid_request", "the request must be a JSON object")
     top = _fields(req, ("bars", "indicators"), "the request", strict=True)
