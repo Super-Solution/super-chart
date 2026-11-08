@@ -144,6 +144,23 @@ describe('SC-017: a rejected or hung request always settles the state', () => {
     expect(t.errors.length).toBe(1)
   })
 
+  it('a chart that throws while drawing the history is reported as one initial error, not an unhandled rejection', async () => {
+    const t = setup()
+    const draw = t.c.chart.applyNewData.bind(t.c.chart)
+    t.c.chart.applyNewData = (data, more) => {
+      if (data.length > 0) throw new Error('chart refused the bars')
+      draw(data, more)
+    }
+    t.loader.request(sym('SUPER'), H1)
+    await settle()
+    t.feed.last().resolve(hours(20, LAST))
+    await settle()
+    expect(t.loader.status.state).toBe('error')
+    expect(t.c.list).toEqual([])
+    expect(t.errors.map(e => [e.phase, e.timeout, String(e.error)])).toEqual([['initial', false, 'Error: chart refused the bars']])
+    expect(t.env.warnings.some(w => w.includes('threw'))).toBe(true)
+  })
+
   it('a hung request becomes an error after the timeout; a late answer is still shown', async () => {
     const t = setup({ loader: { loadTimeoutMs: 20_000 } })
     t.loader.request(sym('SUPER'), H1)

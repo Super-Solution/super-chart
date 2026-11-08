@@ -84,6 +84,5 @@ below is the existing suites plus bounded manual observation.
 * Fix: `_show` is wrapped; a throw is warned and reported through `_failInitial` like any other failed
   initial load (the status goes to `error`, the host's error listener fires). A second throw while
   reporting is warned, never rethrown.
-* No test added: `AGENTS.md` requires the owner's permission first. A test for this (a chart double
-  whose `applyNewData` throws, expecting status `error` and one error event) is ready to write on a yes.
-* Gate: `npm run typecheck && npm run lint && npm test && npm run build` pass (466 tests).
+* Test added after the owner approved it: `dataLoader.test.ts`, "a chart that throws while drawing the history is reported as one initial error" (fails without the fix, with an unhandled rejection).
+* Gate: `npm run typecheck && npm run lint && npm test && npm run build` pass (467 tests).
