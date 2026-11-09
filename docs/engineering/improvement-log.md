@@ -11,6 +11,19 @@ Run under the owner's "library excellence" directive. Constraints held throughou
 no publish, no licence change, no history rewrite, no new runtime dependency, no CI. The directive's "add tests"
 authorisation is what allows the tests below. Newest round first within this section.
 
+### Round 10: the examples are type-checked against the built packages
+
+* Probe first, no defect: price-scale extremes in a browser (flat, 1e-9, 1e12, 1e300, negative, zero, a single
+  1e6 spike, 1e-6/1e9 alternating) in linear, log and percentage modes: every tick and range finite, no page
+  error. Log and percentage scales with data they cannot represent (non-positive prices, a zero reference price)
+  are refused on purpose by `validateBars` with a `RangeError` the workspace shows as a notice, so the odd
+  default axis of an empty log scale never sits over data.
+* Gap: `examples/vanilla` and `examples/datafeed-http` are what a new user copies, and nothing built them, so an
+  API rename would break the examples silently. They already type-check today; the check now keeps it so.
+* Added to `scripts/check-package.mjs` (runs inside `npm run build`): `tsc -p` on each example against the built
+  `dist` declarations. Verified it fails: renaming `getBars` to `getBarz` in the vanilla example reports the file,
+  line and a "did you mean `getBars`" hint.
+
 ### Round 9: the package check type-checks a consumer of every entry
 
 * Probes first, no defect: TA kernels at 300,000 bars run in 1-70 ms each; SuperScript with every length-taking

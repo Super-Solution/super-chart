@@ -2,7 +2,8 @@
 // Verifies the built packages: manifest/registry agreement, layering, licence,
 // banned runtime dependencies, export targets, packed contents and a plain-Node
 // import of every entry that must run without a DOM, and a type-check of a consumer
-// that imports every entry under both classic and NodeNext module resolution.
+// that imports every entry under both classic and NodeNext module resolution, and a type-check of
+// each example against the built packages.
 // Usage: node scripts/check-package.mjs   (after `node scripts/build.mjs`)
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
@@ -97,6 +98,13 @@ if (existsSync(tsc)) {
       if (r.status !== 0) fail(`a TypeScript consumer of every entry fails under ${label} resolution: ${r.stdout.split('\n').find(l => l.includes('error')) ?? r.stderr.slice(0, 200)}`)
     }
   } finally { rmSync(scratch, { recursive: true, force: true }) }
+  // The examples consume the built packages the way a user would, so they cannot drift from the API unnoticed.
+  for (const example of ['vanilla', 'datafeed-http']) {
+    const project = join(root, 'examples', example)
+    if (!existsSync(join(project, 'tsconfig.json'))) continue
+    const r = spawnSync(process.execPath, [tsc, '-p', project], { cwd: root, encoding: 'utf8' })
+    if (r.status !== 0) fail(`examples/${example} does not type-check against the built packages: ${r.stdout.split('\n').find(l => l.includes('error')) ?? r.stderr.slice(0, 200)}`)
+  }
 }
 if (problems.length > 0) { console.error(problems.map(p => `FAIL ${p}`).join('\n')); process.exit(1) }
 console.log('package checks passed')
