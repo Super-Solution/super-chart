@@ -11,6 +11,22 @@ Run under the owner's "library excellence" directive. Constraints held throughou
 no publish, no licence change, no history rewrite, no new runtime dependency, no CI. The directive's "add tests"
 authorisation is what allows the tests below. Newest round first within this section.
 
+### Round 7: the example datafeed adapter stops leaking pollers and waiting on hung servers
+
+* Audited `examples/datafeed-http/httpDatafeed.ts`, the adapter people copy first. Two defects, both reproduced
+  with a scratch Node harness against a local server before the fix:
+  * Requests had no timeout, so a server that accepts the connection and never answers stalled history and the
+    live poll for good (the poll loop never reached its next tick). Now every request has an abort deadline
+    (`timeoutMs`, default 15 s) and the caller's own abort still wins.
+  * `subscribe` keyed subscriptions by ticker only: subscribing the same ticker twice (a reconnect, a
+    period change) left the first timer running with no handle to stop it, and `unsubscribe` for one period
+    cancelled the other. Subscriptions are now keyed by market and period, a repeat `subscribe` replaces the
+    earlier timer, and an in-flight poll answer that lands after `unsubscribe` is dropped instead of delivered.
+* Observed after the fix: one timer per market however often it is re-subscribed, 0 bars delivered after
+  `unsubscribe`, a hung server polled on every interval instead of once, and unsubscribing one market leaves the
+  other polling.
+* Docs: the example README lists `timeoutMs`. The public contract in `DATAFEED-HTTP.md` is unchanged.
+
 ### Round 6: `buildChartContext` takes the workspace the package actually ships
 
 * Audited the AI helpers (`createHttpAIClient`, `nlToSuperScript[Checked]`, `buildChartContext`): timeouts, abort
