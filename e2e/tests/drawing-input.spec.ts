@@ -55,3 +55,24 @@ test('drawing input creates one segment, cancels with Escape and commits a brush
   expect(brush.selected).toBe(true)
   expect(await pageErrors(page)).toEqual([])
 })
+
+test('an unknown drawing tool is refused instead of arming a tool that swallows the gestures', async ({ page }) => {
+  await openHarness(page)
+  const result = await page.evaluate(async () => {
+    const { H } = window as any
+    const { pro } = H.mount({ id: 'drawing-bogus-tool' })
+    await H.ready(pro)
+    const message = (action: () => void): string | null => { try { action() } catch (error) { return (error as Error).message } return null }
+    return {
+      bogus: message(() => pro.chart.setDrawingTool('bogus')),
+      empty: message(() => pro.chart.setDrawingTool('')),
+      valid: message(() => pro.chart.setDrawingTool('segment')),
+      brush: message(() => pro.chart.setDrawingTool('brush')),
+      cleared: message(() => pro.chart.setDrawingTool(null))
+    }
+  })
+  expect(result.bogus).toMatch(/Unknown drawing tool "bogus"/)
+  expect(result.empty).toMatch(/Unknown drawing tool ""/)
+  expect([result.valid, result.brush, result.cleared]).toEqual([null, null, null])
+  expect(await pageErrors(page)).toEqual([])
+})

@@ -11,6 +11,23 @@ Run under the owner's "library excellence" directive. Constraints held throughou
 no publish, no licence change, no history rewrite, no new runtime dependency, no CI. The directive's "add tests"
 authorisation is what allows the tests below. Newest round first within this section.
 
+### Round 12: an unknown drawing tool is refused
+
+* Probed 37 misuse calls on a live workspace (symbols, periods, bar limits, document restore, indicator
+  parameters, render and layout options, drawings, replay, every call after `dispose`). Almost all already fail
+  with a specific `TypeError`/`RangeError` (and after `dispose` with "Chart workspace is disposed"); the page
+  error log stayed empty.
+* Found: `chart.setDrawingTool('bogus')` returned normally. The input controller then treated `'bogus'` as an armed
+  tool, so every pointer gesture was consumed (no panning) and nothing was ever drawn, with no message anywhere.
+  A typo in a host or an agent-supplied tool name looked like a frozen chart.
+* Changed: `setDrawingTool` accepts `null` or a member of `DRAWING_TYPES` and throws
+  `RangeError: Unknown drawing tool "bogus"` otherwise. Every tool the workspace UI offers is in that list.
+* Test: an e2e case in `drawing-input.spec.ts` (refused: `'bogus'`, `''`; accepted: `'segment'`, `'brush'`, `null`).
+  The full e2e set passes (72).
+* Left alone: `setRenderOptions({ upColor: 'not-a-color' })` is accepted and the canvas keeps the previous colour
+  (a CSS colour cannot be validated without a DOM in the core); an indicator period larger than the series is
+  accepted and yields an empty line, which is the correct result.
+
 ### Round 11: `new ChartWorkspace(...)` names its misuse
 
 * Probe first, no defect: 20,000 single- and double-field mutations of a 63-drawing document through
