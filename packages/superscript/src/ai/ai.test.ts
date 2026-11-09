@@ -160,6 +160,21 @@ describe("buildChartContext and analyzeChart", () => {
   const symbol = { ticker: "BTC-USDT", pricePrecision: 2, volumePrecision: 0 };
   const period = { multiplier: 1, timespan: "hour", text: "1H" };
 
+  it("reads a ChartWorkspace directly: the bars on screen from its viewport and its display time zone", () => {
+    const bars = makeBars(500, (i) => 64_000 + 300 * Math.sin(i / 7));
+    const workspace = {
+      getBars: () => bars, getSymbol: () => symbol, getPeriod: () => period,
+      chart: { view: { getSnapshot: () => ({ viewport: { i0: 100.4, i1: 265.2 } }) }, getRenderOptions: () => ({ timeZone: "Asia/Taipei" }) },
+    };
+    const ctx = buildChartContext(workspace);
+    // Fractional edges include every bar the viewport touches: 100 .. 266.
+    expect([ctx.bars[0].timestamp, ctx.bars[ctx.bars.length - 1].timestamp]).toEqual([bars[100].timestamp, bars[266].timestamp]);
+    expect(ctx.format?.timezone).toBe("Asia/Taipei");
+    expect([ctx.symbol, ctx.period]).toEqual(["BTC-USDT", "1H"]);
+    const viaParts = buildChartContext({ chart: fakeChart(bars, 100, 267), symbol, period, timezone: "Asia/Taipei" });
+    expect(ctx).toEqual(viaParts);
+  });
+
   it("takes the visible range (from/to clamped to the data), not the newest bars", () => {
     const bars = makeBars(500, (i) => 64_000 + 300 * Math.sin(i / 7));
     const ctx = buildChartContext({ chart: fakeChart(bars, 100, 266), symbol, period, timezone: "Asia/Taipei" });

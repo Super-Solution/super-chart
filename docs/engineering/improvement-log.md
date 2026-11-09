@@ -11,6 +11,19 @@ Run under the owner's "library excellence" directive. Constraints held throughou
 no publish, no licence change, no history rewrite, no new runtime dependency, no CI. The directive's "add tests"
 authorisation is what allows the tests below. Newest round first within this section.
 
+### Round 6: `buildChartContext` takes the workspace the package actually ships
+
+* Audited the AI helpers (`createHttpAIClient`, `nlToSuperScript[Checked]`, `buildChartContext`): timeouts, abort
+  wiring, error bodies, repair loop bounds and the model-reply path all hold (a model reply is only ever compiled by
+  the SuperScript compiler, never evaluated as JavaScript).
+* Found: `buildChartContext` accepted `ChartProLike` (needs `getChart()` and `getTimezone()`), an interface the
+  owned engine retired, so `analyzeChart` on a `ChartWorkspace` needed a hand-written adapter (the e2e case writes
+  one). Added `ChartWorkspaceLike`; `buildChartContext(workspace)` now reads the viewport (fractional bar edges
+  widened to whole bars) and the render time zone itself. `ChartProLike` and the parts form stay, so nothing
+  breaks. A real `ChartWorkspace` type-checks against the new interface (checked with a scratch compile; the
+  superscript package cannot import web, so the repo cannot hold that assertion).
+* Tests: one case in `ai/ai.test.ts` (workspace input equals the equivalent parts input).
+
 ### Round 5: the indicator servers get a shared contract test
 
 * Probe first: a randomised stress of the browser workspace (25 runs of 40 random operations: market changes
