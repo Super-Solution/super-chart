@@ -11,6 +11,19 @@ Run under the owner's "library excellence" directive. Constraints held throughou
 no publish, no licence change, no history rewrite, no new runtime dependency, no CI. The directive's "add tests"
 authorisation is what allows the tests below. Newest round first within this section.
 
+### Round 8: documentation samples use the package names that exist
+
+* Method: extracted every `ts` block from the README, `docs/` and package READMEs and type-checked it against the
+  workspace sources (host variables declared as ambient); also checked every relative Markdown link (0 broken).
+* Found: four how-to pages (`REALTIME-SERIES`, `REALTIME-VIEW`, `REALTIME-INSPECTION`, `NATIVE-LIFECYCLE`) imported
+  from `@zzyzxlabs/super-chart/core` and `/native`, packages that no longer exist, so a copied sample failed at the
+  first line. `SHARED-CORE` said the same and still described a KLineChart peer that the owned engine removed.
+* Changed: imports now read `@supersolutions/super-chart-core` and `@supersolutions/super-chart-core/native`;
+  `SHARED-CORE` is marked as a historical phase-1 page with its stale sentence corrected. After the change every
+  sample type-checks except for context the sample leaves out on purpose (`react-native`, the host's own `symbol`).
+* Left alone on purpose: `OWNED-API-MIGRATION` (already carries a banner pointing at the mapping in `PACKAGES.md`)
+  and `e2e/tests/bundle.spec.ts` (a retained legacy spec outside the Playwright match list, documented as such).
+
 ### Round 7: the example datafeed adapter stops leaking pollers and waiting on hung servers
 
 * Audited `examples/datafeed-http/httpDatafeed.ts`, the adapter people copy first. Two defects, both reproduced
