@@ -11,6 +11,21 @@ Run under the owner's "library excellence" directive. Constraints held throughou
 no publish, no licence change, no history rewrite, no new runtime dependency, no CI. The directive's "add tests"
 authorisation is what allows the tests below. Newest round first within this section.
 
+### Round 9: the package check type-checks a consumer of every entry
+
+* Probes first, no defect: TA kernels at 300,000 bars run in 1-70 ms each; SuperScript with every length-taking
+  builtin at 1e9, 2147483647, 1e15, 0, -5 and 1.5 either answers instantly or fails with a clear "must be a whole
+  number >= 1" diagnostic (no slow case, no hang); the loader's older-page path drops pages that do not move
+  backwards and stops on an empty one, so a feed that ignores the range cannot loop it.
+* Gap: `scripts/check-package.mjs` proved each entry imports in plain Node, but nothing proved the shipped `.d.ts`
+  files are usable by a TypeScript consumer. A bundled declaration that leaks a source path (`../../core/src/...`)
+  or a broken `exports`/`typesVersions` entry would only surface in a user's project.
+* Added to the check: a scratch consumer (under `node_modules/.cache`, removed afterwards) importing every
+  `exports` entry of the four packages, compiled with `skipLibCheck: false` under classic (`Node`) and `NodeNext`
+  resolution. Verified it fails: appending a declaration that imports `../../core/src/nope` to `web/dist/index.d.ts`
+  fails both passes with the file and line. It runs as part of `npm run build` (no new CI, no new dependency; it is
+  skipped when `typescript` is not installed).
+
 ### Round 8: documentation samples use the package names that exist
 
 * Method: extracted every `ts` block from the README, `docs/` and package READMEs and type-checked it against the

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // Verifies the built packages: manifest/registry agreement, layering, licence,
 // banned runtime dependencies, export targets, packed contents and a plain-Node
-// import of every entry that must run without a DOM.
+// import of every entry that must run without a DOM, and a type-check of a consumer
+// that imports every entry under both classic and NodeNext module resolution.
 // Usage: node scripts/check-package.mjs   (after `node scripts/build.mjs`)
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { PACKAGES, VERSION, AUTHOR, LICENSE, nameOf } from './packages.mjs'
 
@@ -73,6 +74,29 @@ for (const [dir, sub] of NODE_SAFE) {
   const spec = nameOf(dir) + sub
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', `const m = await import(${JSON.stringify(spec)}); if (Object.keys(m).length === 0) throw new Error('no exports')`], { cwd: root, encoding: 'utf8' })
   if (r.status !== 0) fail(`plain Node cannot import ${spec}: ${r.stderr.split('\n').find(l => l.trim() !== '') ?? ''}`)
+}
+
+// Type-level consumer check: the declaration files must be self-contained and every export-map entry must resolve
+// to types under classic and NodeNext resolution, with skipLibCheck off so a broken bundled .d.ts fails here.
+// The scratch directory sits under node_modules/.cache so it finds the workspace links.
+const tsc = join(root, 'node_modules', 'typescript', 'bin', 'tsc')
+if (existsSync(tsc)) {
+  const specs = PACKAGES.flatMap(pkg => {
+    const manifest = JSON.parse(readFileSync(join(root, pkg.path, 'package.json'), 'utf8'))
+    return Object.keys(manifest.exports ?? {}).map(sub => pkg.name + sub.slice(1))
+  })
+  const cache = join(root, 'node_modules', '.cache')
+  mkdirSync(cache, { recursive: true })
+  const scratch = mkdtempSync(join(cache, 'consumer-'))
+  try {
+    writeFileSync(join(scratch, 'package.json'), '{"type":"module"}\n')
+    writeFileSync(join(scratch, 'consumer.ts'), specs.map((spec, i) => `import * as m${i} from ${JSON.stringify(spec)}\n`).join('') + `export const all = [${specs.map((_, i) => `m${i}`).join(', ')}]\n`)
+    for (const [label, module, moduleResolution] of [['classic', 'ESNext', 'Node'], ['NodeNext', 'NodeNext', 'NodeNext']]) {
+      writeFileSync(join(scratch, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module, moduleResolution, strict: true, skipLibCheck: false, noEmit: true, lib: ['DOM', 'ES2022'], types: [] }, include: ['consumer.ts'] }))
+      const r = spawnSync(process.execPath, [tsc, '-p', scratch], { cwd: root, encoding: 'utf8' })
+      if (r.status !== 0) fail(`a TypeScript consumer of every entry fails under ${label} resolution: ${r.stdout.split('\n').find(l => l.includes('error')) ?? r.stderr.slice(0, 200)}`)
+    }
+  } finally { rmSync(scratch, { recursive: true, force: true }) }
 }
 if (problems.length > 0) { console.error(problems.map(p => `FAIL ${p}`).join('\n')); process.exit(1) }
 console.log('package checks passed')
