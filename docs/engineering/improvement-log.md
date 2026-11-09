@@ -11,6 +11,53 @@ Run under the owner's "library excellence" directive. Constraints held throughou
 no publish, no licence change, no history rewrite, no new runtime dependency, no CI. The directive's "add tests"
 authorisation is what allows the tests below. Newest round first within this section.
 
+### Round 15: loader options that size requests and timers are checked
+
+* Probe of the loader's numeric options (`count`, `loadTimeoutMs`, `syncMinIntervalMs`, `syncTimeoutMs`,
+  `moreRetryMs`, `tickThrottleMs`), which `ChartWorkspace` passes through unchecked. Read against `requestRange` and
+  the timer calls: `count: NaN` makes the range start `NaN`, which `requestRange` turns into `0`, so the datafeed is
+  asked for its entire history; `count: 0` or a negative count asks for the empty range and the chart stays blank
+  with no message; any timer above 2,147,483,647 ms (including `Infinity`, which someone might use to mean "no
+  timeout") fires at once, so every initial load ends as a timeout error.
+* Changed: the `DataLoader` constructor checks them and names the option in a `RangeError`:
+  `Loader option count must be an integer from 1 to 1000000, got NaN`. Timer options must be finite and in range
+  (a fraction of a millisecond is still accepted); `tickThrottleMs` must be finite (negative is still clamped to 0).
+  Every value that worked before, including defaults, `1`, `1000000`, `2 ** 31 - 1`, `0` for the sync interval and
+  fractional timeouts, still works.
+* Tests: two cases in `dataLoader.test.ts` (the refusals, and the values that must keep working). Full gate and the
+  73 e2e cases pass.
+
+## Scorecard after round 15 (directive section 24)
+
+The directive asks for evidence, not invented numbers. The repository had no scorecard before this series, so there
+is no earlier score to compare with and none is made up. Each row gives the assessment now and what it rests on;
+the scores are a reviewer's judgement of that evidence, on the directive's weights (the repository has UI, so no
+weight is moved).
+
+| Dimension (weight) | Now | Evidence |
+| --- | ---: | --- |
+| Correctness and reliability (20%) | 8.5 | Five rounds of fuzzing and probing (viewport, SuperScript structure, loader, drawings import, annotations, TA kernels, price scales) found and fixed 9 real defects and none open that the probes could reach. A 20,000-case drawing import fuzz and a 25 x 40 loader stress run clean. Not covered: long-running soak, real-network feeds. |
+| Architecture and modularity (15%) | 8.5 | Layering is enforced at build time and in `dist`; the declarations are now also compiled by a TypeScript consumer of every entry under two resolution modes. No change to the layering was needed. |
+| API design and developer experience (15%) | 8.0 | Misuse of the constructor, drawing tool, render options, loader options, `volumeProfile` now fails with a named error; `buildChartContext` takes the shipped workspace; doc samples type-check against the shipped names; examples are compiled in the build. Remaining: `timespan` typos only warn, by design; several error strings are not machine-readable codes. |
+| Performance and efficiency (15%) | 8.0 | TA kernels at 300,000 bars take 1 to 70 ms each; extreme SuperScript parameters never run long; the example feed no longer leaks timers. No new benchmark was needed or added; no performance claim is made beyond these measurements. |
+| Extensibility and customisation (10%) | 8.0 | The workspace chrome is themable by CSS custom properties with a light preset (R4); `ChartWorkspaceLike` lets any host object feed the AI helper. |
+| Component design and visual quality (10%) | 7.5 | Light and dark chrome verified by screenshot and an e2e case; accessibility attributes of the workspace were read and left as they were (labelled dialog, toolbar, status and alert regions). No full screen-reader pass was done. |
+| Testing and maintainability (10%) | 8.5 | Vitest 467 to 489 cases (23 to 27 files); 3 new declared e2e cases (73 pass); the Go and Python indicator servers replay 341 shared conformance cases and a 22-row refusal table; the package check now type-checks consumers and examples. |
+| Documentation and integration (5%) | 8.0 | Stale package names fixed in five pages, a historical page marked, README and example README updated, this log kept per round. |
+
+Weighted: 8.2 of 10. The number is a summary of the table above, not a target; every point in it maps to a change or a
+probe listed in the rounds.
+
+### What remains (not done in this series)
+
+* `@supersolutions/super-protocol` is unpublished, so a clean `npm install` returns 404; a lockfile and the first
+  publish wait for the owner (outside this series' mandate).
+* The packages declare `engines.node >= 22` although the web and core packages target browsers and React Native;
+  consumers on older Node see an engine warning only. Worth a decision by the owner.
+* Several error messages would be better as stable codes for programmatic handling.
+* No visual regression baseline exists (adding a snapshot baseline needs the owner's permission under `AGENTS.md`).
+* Retained legacy e2e specs (`bundle`, `chrome`, `theme`, ...) describe removed interfaces and stay out of the run.
+
 ### Round 14: `volumeProfile` can no longer be poisoned or made to exhaust memory
 
 * Probes first. `EngineAnnotations.setAnnotations` under 20,000 junk documents: only `TypeError`/`RangeError` with a

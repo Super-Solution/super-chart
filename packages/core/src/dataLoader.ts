@@ -153,6 +153,19 @@ function describe (pair: Pair): string {
   return `${String(pair.symbol?.ticker)} ${String(pair.period?.text ?? `${pair.period?.multiplier} ${pair.period?.timespan}`)}`
 }
 
+/** The longest delay setTimeout honours; a larger one fires at once. */
+const MAX_TIMER_MS = 2_147_483_647
+
+function optionInt (name: string, value: number, min: number, max: number): number {
+  if (!Number.isSafeInteger(value) || value < min || value > max) throw new RangeError(`Loader option ${name} must be an integer from ${min} to ${max}, got ${String(value)}`)
+  return value
+}
+
+function optionMs (name: string, value: number, min: number, max: number): number {
+  if (!Number.isFinite(value) || value < min || value > max) throw new RangeError(`Loader option ${name} must be from ${min} to ${max} milliseconds, got ${String(value)}`)
+  return value
+}
+
 export class DataLoader {
   private readonly _env: LoaderEnv
   private readonly _datafeed: Datafeed
@@ -215,11 +228,16 @@ export class DataLoader {
   constructor (options: LoaderOptions) {
     this._env = createRuntimeEnvironment(options.env)
     this._datafeed = options.datafeed
-    this._count = options.count ?? 500
-    this._timeoutMs = options.loadTimeoutMs ?? 20_000
-    this._syncMinMs = options.syncMinIntervalMs ?? 30_000
-    this._syncTimeoutMs = options.syncTimeoutMs ?? 10_000
-    this._moreRetry = options.moreRetryMs ?? { base: 1000, max: 30_000 }
+    // These size requests and timers. A NaN or negative count used to ask a feed for its whole history or for nothing,
+    // and a timer past the 32-bit limit fires at once, so each is checked and named instead.
+    this._count = optionInt('count', options.count ?? 500, 1, 1_000_000)
+    this._timeoutMs = optionMs('loadTimeoutMs', options.loadTimeoutMs ?? 20_000, 1, MAX_TIMER_MS)
+    this._syncMinMs = optionMs('syncMinIntervalMs', options.syncMinIntervalMs ?? 30_000, 0, Number.MAX_SAFE_INTEGER)
+    this._syncTimeoutMs = optionMs('syncTimeoutMs', options.syncTimeoutMs ?? 10_000, 1, MAX_TIMER_MS)
+    this._moreRetry = options.moreRetryMs === undefined
+      ? { base: 1000, max: 30_000 }
+      : { base: optionMs('moreRetryMs.base', options.moreRetryMs.base, 1, MAX_TIMER_MS), max: optionMs('moreRetryMs.max', options.moreRetryMs.max, 1, MAX_TIMER_MS) }
+    if (options.tickThrottleMs !== undefined && !Number.isFinite(options.tickThrottleMs)) throw new RangeError('Loader option tickThrottleMs must be a finite number of milliseconds')
     this._coalescer = new TickCoalescer(bars => { this._applyTicks(bars) }, this._env, Math.max(0, options.tickThrottleMs ?? 0))
     this._cache = options.historyCache === undefined || options.historyCache === false ? null : new HistoryCache(options.historyCache)
   }
