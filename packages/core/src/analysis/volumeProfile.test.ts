@@ -81,4 +81,24 @@ describe('volumeProfile', () => {
     const litRows = p.rows.filter(r => r.volume > 0).length
     expect(litRows).toBe(24)
   })
+
+  it('one bar with a non-finite volume or range cannot poison the profile', () => {
+    const good: VolumeProfileBar[] = Array.from({ length: 50 }, (_, i) => ({ high: 101 + (i % 10), low: 100 + (i % 10), volume: 10 }))
+    const clean = volumeProfile(good)
+    for (const bad of [{ high: 105, low: 104, volume: NaN }, { high: 105, low: 104, volume: Infinity }, { high: NaN, low: 104, volume: 5 }, { high: Infinity, low: 104, volume: 5 }, { high: 105, low: -Infinity, volume: 5 }]) {
+      const p = volumeProfile([...good, bad])
+      expect(p.rows.length).toBe(clean.rows.length)
+      expect(p.rows.every(r => Number.isFinite(r.volume) && Number.isFinite(r.priceLow) && Number.isFinite(r.priceHigh))).toBe(true)
+      expect([p.poc, p.vah, p.val].every(Number.isFinite)).toBe(true)
+      expect(p.rows.reduce((s, r) => s + r.volume, 0)).toBeCloseTo(500, 6)
+    }
+  })
+
+  it('refuses a row count or value area that cannot size a profile', () => {
+    const bars: VolumeProfileBar[] = [{ high: 2, low: 1, volume: 1 }]
+    for (const rows of [0, -3, 1.5, NaN, Infinity, 10_001, 1e9]) expect(() => volumeProfile(bars, { rows })).toThrow(/rows must be an integer/)
+    for (const valueArea of [0, -1, 1.01, 5, NaN]) expect(() => volumeProfile(bars, { valueArea })).toThrow(/value area/)
+    expect(volumeProfile(bars, { rows: 10_000 }).rows.length).toBe(10_000)
+    expect(volumeProfile(bars, { rows: 1, valueArea: 1 }).rows.length).toBe(1)
+  })
 })

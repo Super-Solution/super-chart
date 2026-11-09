@@ -11,6 +11,26 @@ Run under the owner's "library excellence" directive. Constraints held throughou
 no publish, no licence change, no history rewrite, no new runtime dependency, no CI. The directive's "add tests"
 authorisation is what allows the tests below. Newest round first within this section.
 
+### Round 14: `volumeProfile` can no longer be poisoned or made to exhaust memory
+
+* Probes first. `EngineAnnotations.setAnnotations` under 20,000 junk documents: only `TypeError`/`RangeError` with a
+  message, every result shaped `{ applied, rejected }`, 0.1 s. `detectFairValueGaps` and `detectOrderBlocks` with a
+  non-finite value in any one field of a 300-bar series: results stay finite and unchanged, except an impossible
+  `low: Infinity` in the gap detector (not a bar the chart pipeline lets through), left alone.
+* Found in the exported `volumeProfile` (a public core function; the chart's own overlay sanitises its input first,
+  so only direct callers were exposed):
+  * one bar with a `NaN` or infinite `volume` turned every row's volume into `NaN` and moved the point of control
+    to the wrong row (50 good bars plus one bad bar gave `total: null`);
+  * `rows` was unchecked: `-3`, `1.5` and `NaN` threw an unhelpful `Invalid array length`, and `rows: 1e9` or `5e7`
+    ran the process out of heap (`FATAL ERROR: ... heap out of memory`), which an agent- or user-supplied profile
+    setting could trigger.
+* Changed: a bar without a finite `high`/`low` is skipped, a non-finite or non-positive volume counts as none, and
+  `rows` must be an integer from 1 to 10,000 and `valueArea` above 0 and at most 1, otherwise a `RangeError` says
+  so. The in-repo callers (24 rows, 70 % value area, overlay rows capped at 200 and a 0-1 value area) are
+  unaffected, and the profile of clean data is unchanged to the last digit.
+* Tests: two cases in `analysis/volumeProfile.test.ts` (five kinds of bad bar leave the 24 rows, POC, value area
+  and the 500 total intact; seven bad row counts and five bad value areas are refused while 1 and 10,000 rows work).
+
 ### Round 13: render options that do nothing now say so
 
 * Follow-up to the R12 probe: `setRenderOptions({ upColor: 'not-a-color' })` returned normally. The real keys are
