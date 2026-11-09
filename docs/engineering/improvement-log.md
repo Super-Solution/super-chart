@@ -11,6 +11,24 @@ Run under the owner's "library excellence" directive. Constraints held throughou
 no publish, no licence change, no history rewrite, no new runtime dependency, no CI. The directive's "add tests"
 authorisation is what allows the tests below. Newest round first within this section.
 
+### Round 11: `new ChartWorkspace(...)` names its misuse
+
+* Probe first, no defect: 20,000 single- and double-field mutations of a 63-drawing document through
+  `DrawingStore.importJson` (1,937 accepted, 18,063 refused, every refusal a `TypeError`): no other exception type,
+  every accepted document re-exports to byte-identical JSON after a second import, every anchor finite, 7.7 s total.
+* Probed 17 kinds of constructor misuse in a browser. Four failed with an engine-internal message:
+  `null` host: "Cannot read properties of null (reading 'ownerDocument')"; a non-element host: "... reading
+  'defaultView'"; no options: "... reading 'loader'"; and a missing `datafeed` (or one without
+  `getHistoryKLineData`) was accepted and only failed later, away from the cause.
+* Changed: the constructor checks its three required inputs first and says what is wrong: "ChartWorkspace needs a
+  host HTMLElement to mount into", "ChartWorkspace needs options: { datafeed, symbol, period }", "options.datafeed
+  must implement getHistoryKLineData(symbol, period, from, to)". Only the one method without which nothing can load
+  is required, so a datafeed that omits `searchSymbols`/`subscribe` keeps working as before. Valid input is
+  unaffected. Left as is on purpose: an unknown `timespan` (warns once and degrades, by design) and a negative
+  `pricePrecision`.
+* Tests: `web/src/workspaceArguments.test.ts` (4 cases, node, no DOM). The R4 theme e2e case passed a bare `{}` as
+  datafeed to reach its theme check; it now passes a minimal one.
+
 ### Round 10: the examples are type-checked against the built packages
 
 * Probe first, no defect: price-scale extremes in a browser (flat, 1e-9, 1e12, 1e300, negative, zero, a single

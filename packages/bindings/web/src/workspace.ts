@@ -122,6 +122,10 @@ export class ChartWorkspace {
   private pendingRestore: { generation: number, key: string, configuration: EngineConfiguration, applied: boolean } | null = null
 
   constructor (host: HTMLElement, options: ChartWorkspaceOptions) {
+    // Name the misuse instead of failing on the first property read.
+    if (host === null || typeof host !== 'object' || host.ownerDocument == null) throw new TypeError('ChartWorkspace needs a host HTMLElement to mount into')
+    if (options === null || typeof options !== 'object') throw new TypeError('ChartWorkspace needs options: { datafeed, symbol, period }')
+    if (typeof options.datafeed?.getHistoryKLineData !== 'function') throw new TypeError('options.datafeed must implement getHistoryKLineData(symbol, period, from, to)')
     this.doc = host.ownerDocument
     if (this.doc.defaultView === null) throw new Error('Workspace host needs an active document')
     this.win = this.doc.defaultView as Window & typeof globalThis

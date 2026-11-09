@@ -36,7 +36,7 @@ test('workspace chrome follows theme presets and host custom properties', async 
   expect(colors.switched).toEqual(colors.plain)
   const rejected = await page.evaluate(() => {
     const { H } = window as any
-    try { new H.SC.ChartWorkspace(document.createElement('div'), { theme: 'neon', datafeed: {}, symbol: { ticker: 'x' }, period: { multiplier: 1, timespan: 'day', text: 'D' } }) } catch (error) { return (error as Error).message }
+    try { new H.SC.ChartWorkspace(document.createElement('div'), { theme: 'neon', datafeed: { getHistoryKLineData: async () => [] }, symbol: { ticker: 'x' }, period: { multiplier: 1, timespan: 'day', text: 'D' } }) } catch (error) { return (error as Error).message }
     return null
   })
   expect(rejected).toMatch(/theme must be/)
