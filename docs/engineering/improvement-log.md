@@ -11,6 +11,21 @@ Run under the owner's "library excellence" directive. Constraints held throughou
 no publish, no licence change, no history rewrite, no new runtime dependency, no CI. The directive's "add tests"
 authorisation is what allows the tests below. Newest round first within this section.
 
+### Round 13: render options that do nothing now say so
+
+* Follow-up to the R12 probe: `setRenderOptions({ upColor: 'not-a-color' })` returned normally. The real keys are
+  `up`/`down`/`background`/`grid`/`text`/`line`, so the call was doubly wrong, and the canvas silently kept its
+  previous colour. A renamed or misspelt colour option was indistinguishable from a working one.
+* Changed (in `EngineChart.validateRender`, which the constructor, `setRenderOptions` and layout changes share):
+  * a colour option that is not a string the browser parses as a CSS colour (`CSS.supports('color', value)`) throws
+    `RangeError: Render option up is not a CSS colour: "not-a-colour"`, matching how `chartType`, `timeZone` and
+    `baseline` already behave;
+  * an unknown option key is warned about once per chart with the list of known keys, not thrown, so a host that
+    passes extra keys today keeps working.
+  The theme presets and every colour the e2e suite uses (hex, `rgb()`, `rgba()`, `transparent`, named) pass.
+* Test: one e2e case in `lifecycle.spec.ts` (refusal, unchanged state after a refusal, five accepted forms, the
+  warning appears exactly once for a repeated typo). Full e2e set: 73 passed.
+
 ### Round 12: an unknown drawing tool is refused
 
 * Probed 37 misuse calls on a live workspace (symbols, periods, bar limits, document restore, indicator

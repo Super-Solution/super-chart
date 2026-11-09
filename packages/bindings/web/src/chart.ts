@@ -39,6 +39,9 @@ function copyLayout (layout: EngineLayout): EngineLayout {
   }
 }
 
+const RENDER_COLOR_KEYS = ['background', 'grid', 'text', 'up', 'down', 'line'] as const
+const RENDER_OPTION_KEYS: readonly string[] = ['chartType', 'baseline', ...RENDER_COLOR_KEYS, 'font', 'pricePrecision', 'timeZone', 'timespan', 'symbolTimezone', 'showTimeAxis', 'formatPrice']
+
 /** Owned Canvas renderer. The migration guide lists intentionally retired Pro APIs. */
 export class EngineChart {
   private readonly series = new RealtimeSeries({ referenceIndicators: false })
@@ -67,6 +70,7 @@ export class EngineChart {
   private readonly context: CanvasRenderingContext2D
   private readonly cursorContext: CanvasRenderingContext2D
   private readonly resizeObserver: ResizeObserver
+  private readonly warnedRenderKeys = new Set<string>()
   private readonly abort: AbortController
   private readonly unsubscribers: Array<() => void> = []
   private readonly stopGestures: ReturnType<typeof attachEngineGestures>
@@ -430,6 +434,18 @@ export class EngineChart {
     if (options.timeZone !== undefined) new Intl.DateTimeFormat('en', { timeZone: options.timeZone }).format(0)
     if (options.chartType !== undefined && !ENGINE_CHART_TYPES.includes(options.chartType)) throw new RangeError('Unknown chart type')
     if (options.baseline !== undefined && !Number.isFinite(options.baseline)) throw new RangeError('Baseline must be a finite price')
+    // A colour the canvas cannot parse is dropped without a word and the previous colour stays; a misspelt key is ignored the same way.
+    const supports = (this.win as Window & { CSS?: { supports?: (property: string, value: string) => boolean } }).CSS?.supports
+    for (const key of RENDER_COLOR_KEYS) {
+      const value = options[key]
+      if (value !== undefined && (typeof value !== 'string' || (supports !== undefined && !supports.call(this.win.CSS, 'color', value)))) throw new RangeError(`Render option ${key} is not a CSS colour: ${JSON.stringify(value)}`)
+    }
+    for (const key of Object.keys(options)) {
+      if (!RENDER_OPTION_KEYS.includes(key) && !this.warnedRenderKeys.has(key)) {
+        this.warnedRenderKeys.add(key)
+        this.win.console.warn(`[super-chart] unknown render option ${JSON.stringify(key)} was ignored; known options: ${RENDER_OPTION_KEYS.join(', ')}.`)
+      }
+    }
   }
 
   private readonly pixelRatioChanged = (): void => { this.watchPixelRatio(); this.schedule() }

@@ -62,3 +62,29 @@ test('an unknown chart type is refused at runtime (JSON callers bypass the types
   expect(state.rejected).toBe(true)
   expect(state.after).toBe(state.before)
 })
+
+test('a colour the canvas cannot parse is refused and a misspelt render option is reported once', async ({ page }) => {
+  await openHarness(page)
+  const warnings: string[] = []
+  page.on('console', message => { if (message.type() === 'warning') warnings.push(message.text()) })
+  const state = await page.evaluate(async () => {
+    const { H } = window as any
+    const { pro } = H.mount()
+    await H.ready(pro)
+    const attempt = (options: unknown): string | null => { try { pro.chart.setRenderOptions(options); return null } catch (error) { return (error as Error).message } }
+    const before = pro.chart.getRenderOptions().up
+    const bad = attempt({ up: 'not-a-colour' })
+    const wrongType = attempt({ down: 12 })
+    const after = pro.chart.getRenderOptions().up
+    const accepted = [attempt({ up: '#26a69a' }), attempt({ down: 'rgb(239, 83, 80)' }), attempt({ grid: 'rgba(0,0,0,0.1)' }), attempt({ background: 'transparent' }), attempt({ line: 'tomato' })]
+    const typo = attempt({ upColor: '#fff' })
+    const typoAgain = attempt({ upColor: '#fff' })
+    return { before, bad, wrongType, after, accepted, typo, typoAgain }
+  })
+  expect(state.bad).toMatch(/Render option up is not a CSS colour/)
+  expect(state.wrongType).toMatch(/Render option down is not a CSS colour/)
+  expect(state.after).toBe(state.before)
+  expect(state.accepted).toEqual([null, null, null, null, null])
+  expect([state.typo, state.typoAgain]).toEqual([null, null])
+  expect(warnings.filter(text => text.includes('unknown render option "upColor"'))).toHaveLength(1)
+})
