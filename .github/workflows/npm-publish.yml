@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Exact version already committed in all five packages
+        description: Exact version already committed in all five packages (X.Y.Z publishes to latest; X.Y.Z-next.N publishes to next)
         required: true
         type: string
 
@@ -37,6 +37,7 @@ jobs:
         run: |
           node --input-type=module -e "
             import fs from 'node:fs'
+            if (!/^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-next\\.(0|[1-9]\\d*))?\$/.test(process.env.RELEASE_VERSION)) throw new Error('Unsupported release version: use X.Y.Z or X.Y.Z-next.N')
             for (const dir of ['core', 'superscript', 'bindings/web', 'bindings/react', 'integrations/chat-plugin']) {
               const p = JSON.parse(fs.readFileSync('packages/' + dir + '/package.json', 'utf8'))
               if (p.version !== process.env.RELEASE_VERSION) throw new Error(p.name + ' is ' + p.version + ', not ' + process.env.RELEASE_VERSION)
@@ -47,7 +48,10 @@ jobs:
         run: npm run build
       - name: Publish with npm Trusted Publishing
         # Dependency order: core, then superscript and web, then the React binding and the plugin.
+        # The tag always comes from the version, never from the manifests' publishConfig: a
+        # prerelease (X.Y.Z-next.N) goes to `next` and must never reach `latest`.
         run: |
+          tag="$( [[ "$RELEASE_VERSION" == *-* ]] && echo next || echo latest )"
           for dir in core superscript bindings/web bindings/react integrations/chat-plugin; do
-            npm publish "./packages/$dir" --registry=https://registry.npmjs.org/ --access=public --provenance --tag=latest --ignore-scripts
+            npm publish "./packages/$dir" --registry=https://registry.npmjs.org/ --access=public --provenance --tag="$tag" --ignore-scripts
           done

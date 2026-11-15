@@ -51,6 +51,12 @@ self-hosted runners. Because the source is public, each release is published wit
 provenance (`--provenance`); every package's `repository.url` must keep pointing at
 this repository or npm rejects the publish.
 
+The version must be `X.Y.Z` (published to `latest`) or `X.Y.Z-next.N` (published to `next`);
+anything else fails before the build. The workflow derives the tag from the version and
+passes it to `npm publish --tag`, which overrides each manifest's `publishConfig.tag`
+(`latest`), so a prerelease can never reach `latest`. Publishing by hand without `--tag`
+would still use the manifest's `latest`: do not.
+
 Confirm the released version and `latest` tag in the public registry after a run.
 If publishing fails, inspect that run before dispatching again.
 
