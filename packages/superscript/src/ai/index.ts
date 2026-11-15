@@ -238,6 +238,20 @@ export interface ChartProLike {
   getTimezone: () => string;
 }
 
+/**
+ * A `ChartWorkspace` from super-chart-web, or anything shaped like one: `buildChartContext(workspace)` reads the
+ * bars on screen from its viewport and the display time zone from its render options.
+ */
+export interface ChartWorkspaceLike {
+  getBars: (options?: { limit?: number }) => readonly Bar[];
+  getSymbol: () => SymbolLike;
+  getPeriod: () => PeriodLike;
+  chart: {
+    view: { getSnapshot: () => { viewport: { i0: number, i1: number } } };
+    getRenderOptions?: () => { timeZone?: string };
+  };
+}
+
 export interface ChartContextParts {
   chart: ChartDataSource;
   symbol: SymbolLike;
@@ -267,11 +281,13 @@ export interface ChartContextOptions {
  * is short and exact. Works with a SuperChart or `{ chart, symbol, period }`
  * around any klinecharts Chart (./lite).
  */
-export function buildChartContext(source: ChartProLike | ChartContextParts, opts: ChartContextOptions = {}): ChartContext {
+export function buildChartContext(source: ChartProLike | ChartWorkspaceLike | ChartContextParts, opts: ChartContextOptions = {}): ChartContext {
   const parts: { chart: ChartDataSource | null, symbol: SymbolLike, period: PeriodLike | string, timezone?: string } =
     "getChart" in source
       ? { chart: source.getChart(), symbol: source.getSymbol(), period: source.getPeriod(), timezone: source.getTimezone() }
-      : source;
+      : "getBars" in source
+        ? workspaceParts(source)
+        : source;
   const chart = parts.chart;
   if (chart === null) throw new Error("buildChartContext: the chart has not mounted yet (getChart() is null)");
   const dl = chart.getDataList();
@@ -329,6 +345,23 @@ export function buildChartContext(source: ChartProLike | ChartContextParts, opts
   const ctx: ChartContext = { symbol: parts.symbol.ticker, period, bars: rows, format };
   if (opts.indicators !== undefined) ctx.indicators = opts.indicators;
   return ctx;
+}
+
+function workspaceParts(workspace: ChartWorkspaceLike): ChartContextParts {
+  const timezone = workspace.chart.getRenderOptions?.().timeZone;
+  return {
+    chart: {
+      getDataList: () => workspace.getBars(),
+      getVisibleRange: () => {
+        const { i0, i1 } = workspace.chart.view.getSnapshot().viewport;
+        // The continuous viewport holds fractional bar coordinates; [from, to) must cover every bar it touches.
+        return { from: Math.floor(i0), to: Math.ceil(i1) + 1 };
+      },
+    },
+    symbol: workspace.getSymbol(),
+    period: workspace.getPeriod(),
+    ...(timezone !== undefined ? { timezone } : {}),
+  };
 }
 
 /** OHLCV buckets of k bars from the first bar (only the last can be short), so row i starts i*k bars in. */

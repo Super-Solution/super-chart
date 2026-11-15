@@ -8,7 +8,7 @@ The native entry still exports the same shared DataLoader as core. New createNat
 
 ```ts
 import { AppState } from 'react-native'
-import { createNativeDataLoader } from '@zzyzxlabs/super-chart/native'
+import { createNativeDataLoader } from '@supersolutions/super-chart-core/native'
 
 const loader = createNativeDataLoader({
   datafeed,

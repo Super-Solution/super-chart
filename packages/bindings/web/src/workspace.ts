@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/promise-function-async -- Load methods validate synchronously and return the shared queue promise without an async wrapper. */
 import { EngineChart, type EngineChartOptions, type EngineConfiguration } from './chart'
 import { ENGINE_CHART_TYPES, DRAWING_TYPES, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, parseWorkspaceDocument, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1 } from '@supersolutions/super-chart-core'
+import { WORKSPACE_CHROME_VARS, WORKSPACE_THEMES, type WorkspaceChromeKey, type WorkspaceThemeName } from './theme'
 import { DrawingDocuments, type WorkspaceDrawingCacheOptions } from './drawingDocuments'
 import { WORKSPACE_STYLE } from './workspaceStyle'
 import { moveActiveIndex, decideEnter, createRecentsStore, visibleRecents, type RecentsStore } from './symbolSearchNav'
@@ -29,6 +30,11 @@ export interface ChartWorkspaceOptions {
   period: Period
   periods?: readonly Period[]
   chart?: EngineChartOptions
+  /**
+   * `light` or `dark` for the chrome and the canvas colours; `chart.render` colours still win. Leave it out to keep the
+   * dark default and restyle through the existing `--sc-*` CSS custom properties (see `WORKSPACE_CHROME_VARS`).
+   */
+  theme?: WorkspaceThemeName
   loader?: Omit<LoaderOptions, 'datafeed' | 'env'>
   search?: WorkspaceSearchOptions
   ui?: WorkspaceAppearanceOptions
@@ -46,6 +52,10 @@ const DEFAULT_PERIODS: readonly Period[] = [
 ]
 const pairKey = (symbol: SymbolInfo, period: Period): string => `${symbolKey(symbol)}:${periodKey(period)}`
 const label = (value: string): string => value.replace(/-/g, ' ')
+function validTheme (theme: unknown): WorkspaceThemeName {
+  if (theme !== 'dark' && theme !== 'light') throw new TypeError('Workspace theme must be "dark" or "light"')
+  return theme
+}
 function validSymbol (symbol: SymbolInfo): SymbolInfo {
   if (typeof symbol?.ticker !== 'string' || symbol.ticker.trim() === '') throw new TypeError('A symbol ticker is required')
   return { ...symbol }
@@ -133,6 +143,10 @@ export class ChartWorkspace {
   private pendingRestore: { generation: number, key: string, configuration: EngineConfiguration, applied: boolean } | null = null
 
   constructor (host: HTMLElement, options: ChartWorkspaceOptions) {
+    // Name the misuse instead of failing on the first property read.
+    if (host === null || typeof host !== 'object' || host.ownerDocument == null) throw new TypeError('ChartWorkspace needs a host HTMLElement to mount into')
+    if (options === null || typeof options !== 'object') throw new TypeError('ChartWorkspace needs options: { datafeed, symbol, period }')
+    if (typeof options.datafeed?.getHistoryKLineData !== 'function') throw new TypeError('options.datafeed must implement getHistoryKLineData(symbol, period, from, to)')
     this.doc = host.ownerDocument
     if (this.doc.defaultView === null) throw new Error('Workspace host needs an active document')
     this.win = this.doc.defaultView as Window & typeof globalThis
@@ -165,6 +179,7 @@ export class ChartWorkspace {
     const density = options.ui?.density ?? 'compact'
     if (density !== 'compact' && density !== 'comfortable') throw new TypeError('Unknown workspace density')
     this.root.dataset.density = density
+    if (options.theme !== undefined) this.applyChromeTheme(validTheme(options.theme))
     for (const [name, value] of Object.entries(options.ui?.variables ?? {})) {
       if (!/^--sc-[a-z0-9-]+$/.test(name) || typeof value !== 'string') throw new TypeError('Workspace variables must use --sc- names and string values')
       this.root.style.setProperty(name, value)
@@ -387,7 +402,7 @@ export class ChartWorkspace {
     try {
       this.chart = new EngineChart(this.chartHost, {
         ...options.chart,
-        render: { ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone },
+        render: { ...(options.theme === undefined ? {} : WORKSPACE_THEMES[options.theme].render), ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone },
         onToolComplete: () => {
           this.drawingSelect.value = ''; options.chart?.onToolComplete?.()
         }
@@ -628,6 +643,22 @@ export class ChartWorkspace {
     const state = this.loader.status
     const loading = this.pending && (this.waitingStart || state.state !== 'error')
     return { ...state, state: loading ? 'loading' : state.state, error: loading || state.error === null ? null : { ...state.error, symbol: { ...state.error.symbol }, period: { ...state.error.period } } }
+  }
+
+  /**
+   * Switch the chrome and the canvas colours to a preset. The preset's six canvas colours replace the current ones,
+   * including any the host passed in `chart.render`; set those again afterwards through `chart.setRenderOptions`.
+   * Preset chrome variables likewise replace earlier values; other `ui.variables` stay untouched.
+   */
+  setTheme (theme: WorkspaceThemeName): void {
+    if (this.disposed) return
+    const name = validTheme(theme)
+    this.applyChromeTheme(name)
+    this.chart.setRenderOptions({ ...WORKSPACE_THEMES[name].render })
+  }
+
+  private applyChromeTheme (theme: WorkspaceThemeName): void {
+    for (const key of Object.keys(WORKSPACE_CHROME_VARS) as WorkspaceChromeKey[]) this.root.style.setProperty(WORKSPACE_CHROME_VARS[key], WORKSPACE_THEMES[theme].chrome[key])
   }
 
   dispose (): void {

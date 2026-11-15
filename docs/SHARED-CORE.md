@@ -1,3 +1,5 @@
+> **Historical page.** Written for phase 1 of the shared core, before the owned engine and the package split. Paths such as `src/core/…` are the old single-package layout; the current layout is in [PACKAGES.md](PACKAGES.md).
+
 # Shared core, phase 1 (private, 0.0.41)
 
 ## Scope and current integration
@@ -18,7 +20,7 @@ The original Mobile mathematical model, viewport transitions and MA20/EMA21 calc
 - src/core/nativeIndicators.ts: existing native MA20/EMA21 compatibility. Native EMA starts at the first close, while the standard Web TA EMA uses an SMA seed. This difference remains explicit rather than silently changing historical results.
 - src/data/* and src/ta/index.ts retain compatibility facades for existing Web imports. src/indicators/* remain the thin KLineChart template adapters. Phase 1 retained the existing Web load protocol/engine bridge. Phase 2 moves the same state machine into core and leaves a thin browser adapter; see SHARED-LOADER.md.
 
-Import the renderer-free API from @zzyzxlabs/super-chart/core or @zzyzxlabs/super-chart/native. Both entries use plain JavaScript/TypeScript, with no DOM, React, Solid, browser Worker or KLineChart runtime import. KLineChart is an optional peer for core/native consumers; Web hosts must still install the supported KLineChart peer themselves. The existing main/lite/superscript entry contracts remain unchanged.
+Import the renderer-free API from `@supersolutions/super-chart-core` or `@supersolutions/super-chart-core/native`. Both entries use plain JavaScript/TypeScript, with no DOM, React, Solid or browser Worker import. (This page records phase 1; the KLineChart peer it mentions was removed with the owned engine, see [OWNED-API-MIGRATION.md](OWNED-API-MIGRATION.md).)
 
 The native entry is ESM and has a react-native export condition. It is not a claim of validation on every Metro/Hermes/iOS/Android combination. No WASM, new native dependency or native build is introduced.
 

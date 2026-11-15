@@ -32,7 +32,7 @@ export function fullViewport(n: number): Viewport {
 }
 
 export function defaultViewport(n: number, want: number = DEFAULT_BARS, limits?: ViewportLimits): Viewport {
-  if (n <= 0) return { i0: 0, i1: 0 };
+  if (!Number.isFinite(n) || n <= 0) return { i0: 0, i1: 0 };
   const bounds = resolveViewportLimits(limits);
   const end = Math.min(Number.MAX_SAFE_INTEGER, n + bounds.rightPaddingBars);
   const span = Math.max(1, Math.min(want, end, bounds.maxBars));
@@ -40,8 +40,10 @@ export function defaultViewport(n: number, want: number = DEFAULT_BARS, limits?:
 }
 
 export function clampViewport(v: Viewport, n: number, limits?: ViewportLimits): Viewport {
-  if (n <= 0) return { i0: 0, i1: 0 };
+  if (!Number.isFinite(n) || n <= 0) return { i0: 0, i1: 0 };
   const bounds = resolveViewportLimits(limits);
+  // Invalid gesture coordinates must retain the host's zoom and padding bounds.
+  if (!Number.isFinite(v.i0) || !Number.isFinite(v.i1)) return defaultViewport(n, DEFAULT_BARS, bounds);
   const extent = Math.min(Number.MAX_SAFE_INTEGER, n + bounds.rightPaddingBars);
   const minSpan = Math.min(bounds.minBars, extent);
   let i0 = Math.round(v.i0);

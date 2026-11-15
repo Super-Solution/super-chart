@@ -31,7 +31,7 @@ It does not install a renderer or gesture handler, or change the deployed Mobile
 ## Host integration
 
 ```ts
-import { RealtimeSeries, createNativeDataLoader } from '@zzyzxlabs/super-chart/native'
+import { RealtimeSeries, createNativeDataLoader } from '@supersolutions/super-chart-core/native'
 
 const series = new RealtimeSeries()
 const loader = createNativeDataLoader({ datafeed, appState: AppState })

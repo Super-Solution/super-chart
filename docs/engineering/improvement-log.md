@@ -5,6 +5,33 @@ repository's own rules apply (see [`../MAINTAINING.md`](../MAINTAINING.md) and `
 added and no test case, fixture or snapshot baseline is added without the owner's permission, so validation
 below is the existing suites plus bounded manual observation.
 
+## PR #22 integration (2026-11-15)
+
+Integrated the older branch with main after PR #23, retaining its runtime fixes
+without introducing tests, fixtures, pipelines, dependencies or extra build gates.
+
+- Retained SuperScript nesting diagnostics, loader request/timer bounds, finite
+  viewport fallback, volume-profile invalid-bar handling, HTTP polling cleanup,
+  chat-card ownership and indicator rollback, and workspace support in the AI helper.
+- Integrated light/dark presets through the existing `--sc-*` variables. Kept
+  PR #23's lazy controls, render/input optimizations, viewport limits and data paths.
+- Removed PR #22's added unit/browser/backend cases and fixture, four additional
+  TypeScript consumer/example build passes, obsolete Node-types workaround, and
+  cosmetic colour/unknown-option checks. Existing main validation is unchanged.
+- Independent review found a nonfinite bar-count recursion in viewport fallback;
+  fixed it before merging. Tick throttling uses the same timer limit as other delays.
+
+Validation on the integrated source: 188 existing cases across six affected suites
+passed; full typecheck and all four ESM/DTS package builds with existing package
+checks passed; lint passed with 0 errors and the existing 146 warnings; diff check
+passed. The final viewport change was reviewed separately after the suite run.
+No new cases or assertions were written. Browser cases were not rerun this round.
+
+The prior branch's validation used a protocol stub and is not release evidence.
+This integration uses the real locally built `@supersolutions/super-protocol`
+source described in LOCAL-DEVELOPMENT.md. Registry-only installation still needs
+that package published. No npm publication or workflow was triggered here.
+
 ## Iteration 1 (2026-11-08)
 
 ### Discovered

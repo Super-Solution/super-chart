@@ -8,7 +8,7 @@ or deployed renderer is changed.
 ## Build one frame per visible snapshot/layout
 
 ```ts
-import { createRealtimeChartFrame } from '@zzyzxlabs/super-chart/core'
+import { createRealtimeChartFrame } from '@supersolutions/super-chart-core'
 
 // view is a RealtimeView connected to the existing DataLoader/RealtimeSeries.
 const snapshot = view.getSnapshot()

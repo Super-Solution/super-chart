@@ -142,8 +142,12 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     const teardown = (): void => {
       epoch++
       if (current !== null) {
-        charts.delete(current.id)
-        if (latest === current.id) latest = [...charts.keys()].pop() ?? null
+        // Another card may have registered under the same id since (an agent that reuses ids, or a host that
+        // unmounts an older card after a newer one appeared): only release the entry this card still owns.
+        if (charts.get(current.id) === current) {
+          charts.delete(current.id)
+          if (latest === current.id) latest = [...charts.keys()].pop() ?? null
+        }
         current.destroy()
         current = null
       }
@@ -174,6 +178,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
           symbol: spec.symbol,
           period: spec.period,
           periods,
+          theme: context.theme,
           chart: { mode: engine.mode, render: { ...RENDER_THEME[context.theme], chartType: engine.chartType as never } }
         })
         for (const definition of [...TECHNICAL_INDICATOR_DEFINITIONS, ...CLASSIC_INDICATOR_DEFINITIONS]) workspace.registerIndicator(definition)
@@ -347,8 +352,17 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
           }
         }
         if (remove !== undefined && !(Array.isArray(remove) && remove.every(name => typeof name === 'string'))) throw new TypeError('remove must be an array of names')
-        for (const name of (remove as string[] | undefined) ?? []) for (const item of engine.listIndicators().filter(entry => entry.name === name)) engine.removeIndicator(item.id)
-        for (const item of (add as ChartIndicator[] | undefined) ?? []) engine.addIndicator({ name: item.name, params: item.params })
+        // All or nothing: an indicator the engine refuses (bad parameters) must not leave the ones before it behind,
+        // or the agent's retry would stack duplicates. Adds go first so a failure removes nothing.
+        const added: string[] = []
+        try {
+          for (const item of (add as ChartIndicator[] | undefined) ?? []) added.push(engine.addIndicator({ name: item.name, params: item.params }))
+        } catch (error) {
+          for (const indicatorId of added) engine.removeIndicator(indicatorId)
+          throw error
+        }
+        const fresh = new Set(added)
+        for (const name of (remove as string[] | undefined) ?? []) for (const item of engine.listIndicators().filter(entry => entry.name === name && !fresh.has(entry.id))) engine.removeIndicator(item.id)
         chart.notes.textContent = ''
         changed(chart)
         return { chartId: chart.id, indicators: snapshot(chart).indicators, available }

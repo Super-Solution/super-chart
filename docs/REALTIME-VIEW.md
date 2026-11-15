@@ -15,7 +15,7 @@ React/React Native are not added as package dependencies. SSR hydration policy r
 with the host; this does not provide a server snapshot or renderer.
 
 ```ts
-import { RealtimeSeries, RealtimeView } from '@zzyzxlabs/super-chart/core'
+import { RealtimeSeries, RealtimeView } from '@supersolutions/super-chart-core'
 
 const series = new RealtimeSeries()
 const view = new RealtimeView(series, { count: 160, mode: 'heikin-ashi' })

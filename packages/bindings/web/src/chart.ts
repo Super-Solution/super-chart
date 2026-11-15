@@ -1,4 +1,4 @@
-import { RealtimeSeries, RealtimeView, normalizeBars, normalizeBar, ENGINE_CHART_TYPES, buildEngineFrame, validateEngineLayout, validatePriceScale, EngineIndicators, DrawingStore, projectDrawing, viewportLimitsForWidth, financialGeometry, type CandleMode, type MarketBar, type ChartDataPort, type EngineRenderOptions, type EngineFrame, type EngineLayout, type EngineInspection, type EngineIndicatorSpec, type IndicatorDefinition, type Drawing, type DrawingType } from '@supersolutions/super-chart-core'
+import { RealtimeSeries, RealtimeView, normalizeBars, normalizeBar, ENGINE_CHART_TYPES, buildEngineFrame, validateEngineLayout, validatePriceScale, EngineIndicators, DrawingStore, DRAWING_TYPES, projectDrawing, viewportLimitsForWidth, financialGeometry, type CandleMode, type MarketBar, type ChartDataPort, type EngineRenderOptions, type EngineFrame, type EngineLayout, type EngineInspection, type EngineIndicatorSpec, type IndicatorDefinition, type Drawing, type DrawingType } from '@supersolutions/super-chart-core'
 import { paintEngineFrame, paintEngineCursor } from './canvasRenderer'
 import { attachEngineGestures } from './gestures'
 import { attachDrawingInteraction } from './drawingInteraction'
@@ -265,7 +265,12 @@ export class EngineChart {
     })
   }
 
-  setDrawingTool (tool: DrawingType | null): void { this.assertLive(); this.drawingInput.setTool(tool) }
+  setDrawingTool (tool: DrawingType | null): void {
+    this.assertLive()
+    // An unknown name would arm a tool that swallows every pointer gesture and draws nothing.
+    if (tool !== null && !(DRAWING_TYPES as readonly string[]).includes(tool)) throw new RangeError(`Unknown drawing tool ${JSON.stringify(tool)}`)
+    this.drawingInput.setTool(tool)
+  }
 
   /** Own this layer until removal or chart disposal. It receives only revealed replay data. */
   addLayer (layer: EngineLayer): () => void {
