@@ -42,9 +42,7 @@ jobs:
               if (p.version !== process.env.RELEASE_VERSION) throw new Error(p.name + ' is ' + p.version + ', not ' + process.env.RELEASE_VERSION)
             }"
       - name: Install dependencies
-        # No lockfile yet: @supersolutions/super-protocol must be on npm before one can be created.
-        # Replace with `npm ci` once package-lock.json is committed.
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Build and check packages
         run: npm run build
       - name: Publish with npm Trusted Publishing
