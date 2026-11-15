@@ -50,6 +50,7 @@
       "@supersolutions/super-chart-web/engine": [
         "packages/bindings/web/src/engine.ts"
       ]
-    }
+    },
+    "types": []
   }
 }

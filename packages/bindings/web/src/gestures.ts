@@ -155,12 +155,16 @@ export function attachEngineGestures (
     element.setPointerCapture(e.pointerId); element.focus({ preventScroll: true }); rebase()
     if (e.pointerType === 'touch' && pointers.size === 1) {
       const id = e.pointerId
-      hold = { id, point, timer: win.setTimeout(() => {
-        const current = pointers.get(id)
-        if (hold?.id !== id || current === undefined || pointers.size !== 1 || drag === null || !valid(drag)) { cancelHold(); return }
-        hold = null; inspection = true; pending = null; velocity = 0
-        view.endNavigation(); cursor(current.x)
-      }, 450) }
+      hold = {
+        id,
+        point,
+        timer: win.setTimeout(() => {
+          const current = pointers.get(id)
+          if (hold?.id !== id || current === undefined || pointers.size !== 1 || drag === null || !valid(drag)) { cancelHold(); return }
+          hold = null; inspection = true; pending = null; velocity = 0
+          view.endNavigation(); cursor(current.x)
+        }, 450)
+      }
     } else cursor(null)
   })
   const movePointer = (e: PointerEvent, target: EventTarget | null = e.target): void => {

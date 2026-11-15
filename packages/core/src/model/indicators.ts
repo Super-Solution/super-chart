@@ -502,7 +502,8 @@ export class EngineIndicators {
       let beforeLast = initialMovingAverageState()
       for (let i = start; i < bars.length; i++) {
         if (i === bars.length - 1) beforeLast = { ...state }
-        rows[i] = { [maKey]: movingAverageStep(bars, i, params[0], state) }
+        const value = movingAverageStep(bars, i, params[0], state)
+        rows[i] = maKey === 'ma' ? { ma: value } : { [maKey]: value }
       }
       if (start === bars.length && cache !== undefined) beforeLast = cache.beforeLast
       entry.movingAverage = { beforeLast, afterLast: state }
@@ -513,10 +514,10 @@ export class EngineIndicators {
       const state = resume ? { ...(from === this.length ? cache.afterLast : cache.beforeLast) } : initialState()
       rows = resume ? entry.result!.rows as IndicatorRow[] : new Array(bars.length)
       let beforeLast = initialState()
-      const key = name === 'EMA' ? 'ema' : 'rsi'
       for (let i = start; i < bars.length; i++) {
         if (i === bars.length - 1) beforeLast = { ...state }
-        rows[i] = { [key]: recursiveStep(name, finite(bars[i].close), params[0], state) }
+        const value = recursiveStep(name, finite(bars[i].close), params[0], state)
+        rows[i] = name === 'EMA' ? { ema: value } : { rsi: value }
       }
       // A no-op tail notification must not discard the existing last-bar checkpoint.
       if (start === bars.length && cache !== undefined) beforeLast = cache.beforeLast

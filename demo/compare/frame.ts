@@ -17,6 +17,7 @@ const period = periods[initialPeriod === 15 ? 1 : 0]
 const anchor = Date.UTC(2026, 10, 14, 12)
 const directBench = params.get('bench') === '1'
 let benchRecord: Record<string, any> = { version, engine: params.get('engine'), count }
+const loadPhases: Record<string, number> = { historyGenerationMs: 0 }
 let benchOutput: HTMLElement | undefined
 let seq = 0
 let workspace: any
@@ -55,8 +56,10 @@ const feed: Datafeed = {
   async getHistoryKLineData(s, p, _from, _to, request) {
     if (request?.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     if (request?.firstDataRequest === false) return { bars: [], noData: true }
+    const began = performance.now()
     const last = latest(s, p), step = duration(p), bars: MarketBar[] = []
     for (let index = count - 1; index >= 0; index--) bars.push(index === 0 ? last : candle(s, last.timestamp - index * step, p))
+    loadPhases.historyGenerationMs += performance.now() - began
     return { bars, noData: true }
   },
   subscribe(s, p, callback) { currentSubscription = { symbol: s, period: p, callback }; report('market', { market: s.ticker + ' / ' + p.text, close: latest(s, p).close, seq }) },
@@ -77,8 +80,12 @@ function setLegacyRange() {
   chart.scrollToRealTime(0)
 }
 async function boot() {
+  let constructionStart = 0, constructedAt = 0
+  const importStart = performance.now()
   if (version === 'new') {
     const { ChartWorkspace } = await import(params.get('engine') === 'before' ? '/owned-before.js' : '/owned-after.js')
+    loadPhases.moduleLoadMs = performance.now() - importStart
+    constructionStart = performance.now()
     workspace = new ChartWorkspace(document.querySelector('#chart') as HTMLElement, {
       symbol, period, periods, datafeed: feed, loader: { count },
       countdown: { enabled: false },
@@ -89,13 +96,20 @@ async function boot() {
   } else {
     const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = '/legacy.css'; document.head.append(css)
     await loadScript('/legacy-engine.js'); await loadScript('/legacy-pro.js')
+    loadPhases.moduleLoadMs = performance.now() - importStart
+    constructionStart = performance.now()
     workspace = new (window as any).klinechartspro.SuperChart({
       container: document.querySelector('#chart'), symbol, period, periods, datafeed: feed,
       theme: 'dark', locale: 'en-US', timezone: 'UTC', mainIndicators: [], subIndicators: [],
       motion: true
     })
   }
+  constructedAt = performance.now()
+  loadPhases.constructorMs = constructedAt - constructionStart
   await workspace.ready
+  const readyAt = performance.now()
+  loadPhases.constructorToReadyMs = readyAt - constructionStart
+  loadPhases.afterConstructorToReadyMs = readyAt - constructedAt
   if(params.get('inspect')==='1'){
     const hud=document.createElement('output');hud.id='inspection';hud.style.cssText='position:fixed;right:8px;bottom:3px;background:#101820;color:#e9f2ff;z-index:999;font:11px monospace;pointer-events:none;padding:5px';document.body.append(hud);
     const inspectTimer=setInterval(()=>{if(disposed){clearInterval(inspectTimer);return}const v=workspace.chart?.view.getSnapshot().viewport??workspace.getChart().getVisibleRange();hud.textContent=JSON.stringify({range:v,canvasBytes:[...document.querySelectorAll('canvas')].reduce((n,c)=>n+c.width*c.height*4,0)})},100);
@@ -109,8 +123,13 @@ async function boot() {
     if (multi) workspace.addIndicator('RSI', { pane: 'new', calcParams: [14], height: 100 })
     setLegacyRange()
   }
+  // Retain the historical field as navigation-relative, not constructor duration.
   benchRecord.constructReadyMs = performance.now()
+  benchRecord.navigationToReadyMs = readyAt
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  loadPhases.readyToPaintObservationMs = performance.now() - readyAt
+  benchRecord.loadPhases = loadPhases
+  benchRecord.initialFrame = workspace.chart?.getMetrics?.() ?? null
   report('ready', { loadMs: performance.now(), heap: (performance as any).memory?.usedJSHeapSize ?? null, heapStart: startHeap, count: workspace.getBars().length, close: latest(symbol, period).close, seq, market: symbol.ticker + ' / ' + period.text })
 }
 window.addEventListener('message', event => {

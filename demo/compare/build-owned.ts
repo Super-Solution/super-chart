@@ -1,7 +1,8 @@
 import { resolve, posix } from 'node:path'
 
 // Manual comparison only: never resolves the baseline from a moving branch.
-const BASELINE = 'c8a8e9e098204f14ca7856a8bdc885c8ad9e814f'
+const BASELINE = process.env.SUPER_CHART_BASELINE_SHA ?? 'c8a8e9e098204f14ca7856a8bdc885c8ad9e814f'
+if (!/^[a-f0-9]{40}$/.test(BASELINE)) throw new Error('SUPER_CHART_BASELINE_SHA must be a full commit SHA')
 const root = resolve(process.argv[2] ?? resolve(import.meta.dir, '../..'))
 const baseline = process.argv[3] === '--baseline'
 const entry = 'packages/bindings/web/src/workspace.ts'

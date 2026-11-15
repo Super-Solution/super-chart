@@ -74,20 +74,21 @@ function define (
 ): IndicatorDefinition {
   const normalized = (supplied: readonly number[]): readonly number[] => parameters(name, supplied, defaults, kinds)
   const compute = (bars: readonly MarketBar[], supplied: readonly number[]): readonly IndicatorRow[] => calculate(bars, normalized(supplied))
-  if (name === 'SC_SMA' || name === 'SC_RSI' || name === 'SC_MACD') ownedKernel(compute, {
-    name: name === 'SC_SMA' ? 'MA' : name === 'SC_RSI' ? 'RSI' : 'MACD', parameters: normalized,
+  if (name === 'SC_SMA' || name === 'SC_RSI' || name === 'SC_MACD') { ownedKernel(compute, {
+    name: name === 'SC_SMA' ? 'MA' : name === 'SC_RSI' ? 'RSI' : 'MACD',
+    parameters: normalized,
     ...(name === 'SC_SMA' ? { maKey: 'sma' } : {})
-  })
-  if (name === 'SC_DONCHIAN') ownedWindow(compute, {
+  }) }
+  if (name === 'SC_DONCHIAN') { ownedWindow(compute, {
     inputStart: (supplied, from) => Math.max(0, from - normalized(supplied)[0] + 1), outputStart: (_p, from) => from
-  })
-  if (name === 'SC_ICHIMOKU') ownedWindow(compute, {
+  }) }
+  if (name === 'SC_ICHIMOKU') { ownedWindow(compute, {
     inputStart: (supplied, from, length) => {
       const p = normalized(supplied), shift = Math.min(p[3] - 1, length)
       return Math.max(0, from - 2 * shift - Math.max(p[0], p[1], p[2]) + 1)
     },
     outputStart: (supplied, from, length) => Math.max(0, from - Math.min(normalized(supplied)[3] - 1, length))
-  })
+  }) }
   return Object.freeze({
     name,
     params: Object.freeze([...defaults]),

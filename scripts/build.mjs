@@ -3,6 +3,7 @@
 // Usage: node scripts/build.mjs [--only core,web] [--no-dts]
 import { build } from 'esbuild'
 import { spawnSync } from 'node:child_process'
+import { createRequire } from 'node:module'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { PACKAGES } from './packages.mjs'
@@ -11,6 +12,8 @@ const args = process.argv.slice(2)
 const only = args.includes('--only') ? args[args.indexOf('--only') + 1].split(',') : null
 const withDts = !args.includes('--no-dts')
 const root = resolve(import.meta.dirname, '..')
+const require = createRequire(import.meta.url)
+const declarationCli = withDts ? require.resolve('dts-bundle-generator/dist/bin/dts-bundle-generator.js') : null
 
 for (const pkg of PACKAGES) {
   if (only !== null && !only.includes(pkg.dir)) continue
@@ -39,8 +42,8 @@ for (const pkg of PACKAGES) {
   mkdirSync(join(dir, 'dist'), { recursive: true })
   const cfgPath = join(dir, 'dist', '.dts-bundle.json')
   writeFileSync(cfgPath, JSON.stringify(config))
-  const r = spawnSync(join(root, 'node_modules/.bin/dts-bundle-generator'), ['--config', cfgPath, '--silent'], { stdio: 'inherit', cwd: root })
+  const r = spawnSync(process.execPath, [declarationCli, '--config', cfgPath, '--silent'], { stdio: 'inherit', cwd: root })
   rmSync(cfgPath)
-  if (r.status !== 0) { console.error(`dts  ${pkg.name} failed`); process.exit(1) }
+  if (r.error || r.status !== 0) { console.error(`dts  ${pkg.name} failed`, r.error ?? ''); process.exit(1) }
   console.log(`dts  ${pkg.name}`)
 }

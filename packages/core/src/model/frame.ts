@@ -106,19 +106,44 @@ function alignedModel (
     xTickIndices = end < start ? [] : [...new Set([start, Math.floor((start + end) / 2), end])]
   }
   const model: FinancialChartModel = {
-    geometry, min: scale.min, max: scale.max, yTicks: scale.ticks,
-    rightMin: 0, rightMax: 1, rightTicks: [], hasRightAxis: false,
-    xKeys, allKeys: [...xKeys], start: 0, end: Math.max(1, count), xPositions, xTickIndices,
-    plottedCandles: [], plottedSeries: [], x, y: scale.y
+    geometry,
+    min: scale.min,
+    max: scale.max,
+    yTicks: scale.ticks,
+    rightMin: 0,
+    rightMax: 1,
+    rightTicks: [],
+    hasRightAxis: false,
+    xKeys,
+    allKeys: [...xKeys],
+    start: 0,
+    end: Math.max(1, count),
+    xPositions,
+    xTickIndices,
+    plottedCandles: [],
+    plottedSeries: [],
+    x,
+    y: scale.y
   }
   if (primary) {
     for (let index = 0; index < count; index++) {
       const bar = snapshot.bars[index]
       const open = scale.y(bar.open), close = scale.y(bar.close), high = scale.y(bar.high), low = scale.y(bar.low)
       if (!Number.isFinite(high) || !Number.isFinite(low)) continue
-      model.plottedCandles.push({ t: bar.timestamp, o: bar.open, h: bar.high, l: bar.low, c: bar.close, v: bar.volume,
-        x: xPositions[index], index, bodyTop: Math.min(open, close), bodyBottom: Math.max(open, close),
-        wickTop: Math.min(high, low), wickBottom: Math.max(high, low) })
+      model.plottedCandles.push({
+        t: bar.timestamp,
+        o: bar.open,
+        h: bar.high,
+        l: bar.low,
+        c: bar.close,
+        v: bar.volume,
+        x: xPositions[index],
+        index,
+        bodyTop: Math.min(open, close),
+        bodyBottom: Math.max(open, close),
+        wickTop: Math.min(high, low),
+        wickBottom: Math.max(high, low)
+      })
     }
   }
   for (const source of series) {

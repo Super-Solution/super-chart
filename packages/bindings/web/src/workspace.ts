@@ -39,7 +39,6 @@ export interface ChartWorkspaceOptions {
 }
 
 const EMPTY_DRAWINGS = '{"version":1,"drawings":[]}'
-const INDICATORS = ['MA', 'EMA', 'BOLL', 'VOL', 'MACD', 'RSI', 'KDJ'] as const
 const DEFAULT_PERIODS: readonly Period[] = [
   { multiplier: 1, timespan: 'minute', text: '1m' }, { multiplier: 5, timespan: 'minute', text: '5m' },
   { multiplier: 15, timespan: 'minute', text: '15m' }, { multiplier: 1, timespan: 'hour', text: '1h' },
@@ -214,19 +213,22 @@ export class ChartWorkspace {
     presentation.panel.append(this.field('Chart type', chartType), this.field('Price mode', mode), this.field('Price scale', scale), reverse)
     toolbar.append(this.symbolButton, this.field('Interval', this.periodSelect), presentation.root, indicators.root)
 
-    this.indicatorSelect = this.select('Add indicator', INDICATORS.map(name => [name, name]), 'MA')
+    this.indicatorSelect = this.select('Add indicator', [], '')
     const indicatorList = this.node('div'); indicatorList.className = 'sc-indicator-list'
-    const refreshIndicators = (): void => {
+    let indicatorEditorDirty = true
+    const renderIndicators = (): void => {
+      if (!indicators.root.open || !indicatorEditorDirty) return
       const active = this.doc.activeElement
       const focused = active instanceof this.win.HTMLElement && indicatorList.contains(active) ? active : null
       const focusId = focused?.closest<HTMLElement>('[data-indicator]')?.dataset.indicator
       const focusControl = focused?.dataset.control
       const expanded = new Set([...indicatorList.querySelectorAll<HTMLDetailsElement>('details[open]')].map(item => item.dataset.indicator))
-      const selected = this.indicatorSelect.value
-      this.indicatorSelect.replaceChildren(...this.chart.getRegisteredIndicatorNames().map(name => {
+      const selected = this.indicatorSelect.value || 'MA'
+      const registered = this.chart.getRegisteredIndicatorNames()
+      this.indicatorSelect.replaceChildren(...registered.map(name => {
         const option = this.node('option'); option.value = name; option.textContent = name; return option
       }))
-      if (this.chart.getRegisteredIndicatorNames().includes(selected)) this.indicatorSelect.value = selected
+      if (registered.includes(selected)) this.indicatorSelect.value = selected
       const currentIndicators = this.chart.listIndicators()
       this.setText(indicators.summary, `Indicators${currentIndicators.length > 0 ? ` · ${currentIndicators.length}` : ''}`)
       indicatorList.replaceChildren(...currentIndicators.map(indicator => {
@@ -272,7 +274,17 @@ export class ChartWorkspace {
         const target = focusControl === undefined ? entry?.querySelector<HTMLElement>('summary') : entry?.querySelector<HTMLElement>(`[data-control="${focusControl}"]`)
         ;(target ?? indicators.summary).focus({ preventScroll: true })
       }
+      indicatorEditorDirty = false
     }
+    const refreshIndicators = (): void => {
+      indicatorEditorDirty = true
+      const count = this.chart.listIndicators().length
+      this.setText(indicators.summary, `Indicators${count > 0 ? ` · ${count}` : ''}`)
+      renderIndicators()
+    }
+    // Registry and model updates may arrive while the menu is closed. Build the
+    // current editor once on opening; reopening unchanged preserves input drafts.
+    this.listen(indicators.root, 'toggle', renderIndicators)
     const indicatorAdd = this.node('div'); indicatorAdd.className = 'sc-indicator-add'
     const add = this.button('Add', () => { this.run(() => { this.chart.addIndicator({ name: this.indicatorSelect.value }) }) }); add.classList.add('sc-primary')
     indicatorAdd.append(this.field('Indicator', this.indicatorSelect), add)
@@ -759,13 +771,13 @@ export class ChartWorkspace {
       }
     }
     const reset = (bars: MarketBar[], more?: boolean, normalized = false): void => apply(() => {
-        const restoring = this.pendingRestore
-        if (restoring !== null && !restoring.applied && restoring.generation === this.restoreGeneration && restoring.key === this.requestedPair()) {
-          this.chart.restoreConfiguration(restoring.configuration, { bars, more }); restoring.applied = true
-          this.drawingSymbol = symbolKey(this.symbol)
-        } else if (normalized) port.applyNormalizedData!(bars, more)
-        else port.applyNewData(bars, more)
-      }, 'reset', true)
+      const restoring = this.pendingRestore
+      if (restoring !== null && !restoring.applied && restoring.generation === this.restoreGeneration && restoring.key === this.requestedPair()) {
+        this.chart.restoreConfiguration(restoring.configuration, { bars, more }); restoring.applied = true
+        this.drawingSymbol = symbolKey(this.symbol)
+      } else if (normalized) port.applyNormalizedData!(bars, more)
+      else port.applyNewData(bars, more)
+    }, 'reset', true)
     return {
       applyNewData: (bars, more) => reset(bars, more),
       applyNormalizedData: (bars, more) => reset(bars, more, true),

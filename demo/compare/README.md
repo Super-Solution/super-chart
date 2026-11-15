@@ -50,3 +50,17 @@ It does not demonstrate a React Native renderer or claim a speedup percentage.
 The first-round measurement reports used the retained local snapshot 5b9b7d0.
 The PR playground pins the remotely available initial 0.1 snapshot c8a8e9e so a
 fresh clone can reproduce it. Historical measurements retain their original labels.
+
+For a follow-up against a specific PR commit, set `SUPER_CHART_BASELINE_SHA`
+to its full 40-character commit SHA before starting the server. The same in-memory
+archive path is used; a missing or malformed SHA fails explicitly.
+
+The ready output also separates module load, synchronous constructor work,
+constructor-to-data-ready, synthetic-history generation, and the wait until the
+two-frame paint observation. `navigationToReadyMs` and the historical
+`constructReadyMs` field are navigation-relative timestamps; the latter was
+previously mislabeled and is retained only for older report readers.
+`loadPhases.constructorToReadyMs` is the actual constructor-to-ready interval.
+`initialFrame` reports the engine's existing first-data-frame counters.
+These samples include JIT/GC and local browser scheduling; use alternating runs
+and retain outliers rather than treating a single load as a regression score.
