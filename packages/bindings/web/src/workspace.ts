@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/promise-function-async -- Load methods validate synchronously and return the shared queue promise without an async wrapper. */
 import { EngineChart, type EngineChartOptions, type EngineConfiguration } from './chart'
 import { ENGINE_CHART_TYPES, DRAWING_TYPES, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, parseWorkspaceDocument, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1 } from '@supersolutions/super-chart-core'
+import { WORKSPACE_CHROME_VARS, WORKSPACE_THEMES, type WorkspaceChromeKey, type WorkspaceThemeName } from './theme'
+import { DrawingDocuments, type WorkspaceDrawingCacheOptions } from './drawingDocuments'
+import { WORKSPACE_STYLE } from './workspaceStyle'
 import { moveActiveIndex, decideEnter, createRecentsStore, visibleRecents, type RecentsStore } from './symbolSearchNav'
-import { chromeVariables, themeName } from './tokens'
-import { adoptWorkspaceStyles } from './workspaceStyles'
 
 export interface WorkspaceSearchOptions {
   /** In-memory recents by default. Set zero to disable; at most 50. */
@@ -14,22 +15,36 @@ export interface WorkspaceSearchOptions {
   storage?: Pick<Storage, 'getItem' | 'setItem'>
 }
 
+/** Scoped workspace chrome. Canvas colours remain in chart.render. */
+export interface WorkspaceAppearanceOptions {
+  /** Additional root classes for host styles; .sc-workspace always remains. */
+  className?: string
+  density?: 'compact' | 'comfortable'
+  /** CSS custom properties only; values inherit from the host when omitted. */
+  variables?: Readonly<Partial<Record<`--sc-${string}`, string>>>
+}
+
 export interface ChartWorkspaceOptions {
   datafeed: Datafeed
   symbol: SymbolInfo
   period: Period
   periods?: readonly Period[]
   chart?: EngineChartOptions
+  /**
+   * `light` or `dark` for the chrome and the canvas colours; `chart.render` colours still win. Leave it out to keep the
+   * dark default and restyle through the existing `--sc-*` CSS custom properties (see `WORKSPACE_CHROME_VARS`).
+   */
+  theme?: WorkspaceThemeName
   loader?: Omit<LoaderOptions, 'datafeed' | 'env'>
   search?: WorkspaceSearchOptions
+  ui?: WorkspaceAppearanceOptions
+  /** Host persistence for completed edits; only acknowledged documents are evicted from memory. */
+  drawingCache?: WorkspaceDrawingCacheOptions
   /** Period-close estimate. Disable or supply the exchange's real session close. */
   countdown?: { enabled?: boolean, closeTimestamp?: (market: WorkspaceMarket, lastBar: MarketBar) => number | null }
-  /** Super Chart light or dark theme for the chrome and the canvas. Default dark. Colours set in chart.render still win. */
-  theme?: 'light' | 'dark'
 }
 
 const EMPTY_DRAWINGS = '{"version":1,"drawings":[]}'
-const INDICATORS = ['MA', 'EMA', 'BOLL', 'VOL', 'MACD', 'RSI', 'KDJ'] as const
 const DEFAULT_PERIODS: readonly Period[] = [
   { multiplier: 1, timespan: 'minute', text: '1m' }, { multiplier: 5, timespan: 'minute', text: '5m' },
   { multiplier: 15, timespan: 'minute', text: '15m' }, { multiplier: 1, timespan: 'hour', text: '1h' },
@@ -37,6 +52,10 @@ const DEFAULT_PERIODS: readonly Period[] = [
 ]
 const pairKey = (symbol: SymbolInfo, period: Period): string => `${symbolKey(symbol)}:${periodKey(period)}`
 const label = (value: string): string => value.replace(/-/g, ' ')
+function validTheme (theme: unknown): WorkspaceThemeName {
+  if (theme !== 'dark' && theme !== 'light') throw new TypeError('Workspace theme must be "dark" or "light"')
+  return theme
+}
 function validSymbol (symbol: SymbolInfo): SymbolInfo {
   if (typeof symbol?.ticker !== 'string' || symbol.ticker.trim() === '') throw new TypeError('A symbol ticker is required')
   return { ...symbol }
@@ -67,6 +86,11 @@ export class ChartWorkspace {
   private readonly root: HTMLDivElement
   private readonly chartHost: HTMLDivElement
   private readonly statusNode: HTMLDivElement
+  private readonly stageStatus: HTMLDivElement
+  private readonly replayControls: HTMLDivElement
+  private readonly downloadButton: HTMLButtonElement
+  private downloading = false
+  private reportedStatusUI = ''
   private readonly notice: HTMLDivElement
   private readonly symbolButton: HTMLButtonElement
   private readonly periodSelect: HTMLSelectElement
@@ -90,7 +114,10 @@ export class ChartWorkspace {
   private readonly replaySpeed: HTMLSelectElement
   private readonly drawingButtons: { undo: HTMLButtonElement, redo: HTMLButtonElement, lock: HTMLButtonElement, remove: HTMLButtonElement }
   private readonly unsubscribe: Array<() => void> = []
-  private readonly drawingDocuments = new Map<string, string>()
+  private readonly drawingDocuments: DrawingDocuments
+  private drawingSaveTimer: number | null = null
+  private readonly persistentDrawings: boolean
+  private lastDrawingList: unknown = null
   private readonly downloads = new Map<number, string>()
   private readonly actions = new WeakMap<HTMLButtonElement, () => unknown>()
   private symbol: SymbolInfo
@@ -112,11 +139,14 @@ export class ChartWorkspace {
   private searchTimer: number | null = null
   private searchGeneration = 0
   private disposed = false
-  private readonly releaseStyles: () => void
   private restoreGeneration = 0
   private pendingRestore: { generation: number, key: string, configuration: EngineConfiguration, applied: boolean } | null = null
 
   constructor (host: HTMLElement, options: ChartWorkspaceOptions) {
+    // Name the misuse instead of failing on the first property read.
+    if (host === null || typeof host !== 'object' || host.ownerDocument == null) throw new TypeError('ChartWorkspace needs a host HTMLElement to mount into')
+    if (options === null || typeof options !== 'object') throw new TypeError('ChartWorkspace needs options: { datafeed, symbol, period }')
+    if (typeof options.datafeed?.getHistoryKLineData !== 'function') throw new TypeError('options.datafeed must implement getHistoryKLineData(symbol, period, from, to)')
     this.doc = host.ownerDocument
     if (this.doc.defaultView === null) throw new Error('Workspace host needs an active document')
     this.win = this.doc.defaultView as Window & typeof globalThis
@@ -124,6 +154,8 @@ export class ChartWorkspace {
     this.loads = new WorkspaceLoadQueue(callback => this.win.queueMicrotask(callback), result => this.events.emit('loadResult', result))
     this.events = new WorkspaceEventBus((...args) => this.win.console.warn(...args), callback => this.win.queueMicrotask(callback))
     this.loaderOptions = options.loader
+    this.drawingDocuments = new DrawingDocuments(options.drawingCache)
+    this.persistentDrawings = options.drawingCache !== undefined
     this.datafeed = options.datafeed
     this.symbol = validSymbol(options.symbol); this.period = validPeriod(options.period)
     this.recentLimit = options.search?.recentLimit ?? 8
@@ -142,19 +174,27 @@ export class ChartWorkspace {
     if (!this.periods.some(period => periodKey(period) === periodKey(this.period))) this.periods.push(this.period)
     this.scale = { ...options.chart?.layout?.priceScale }
     this.root = this.node('div')
-    const theme = themeName(options.theme ?? options.chart?.render?.theme)
-    this.root.className = 'sc-ws'
-    this.root.style.cssText = `display:flex;flex-direction:column;position:relative;width:100%;height:100%;min-height:280px;box-sizing:border-box;color-scheme:${theme};`
-    for (const [name, value] of Object.entries(chromeVariables(theme))) this.root.style.setProperty(name, value)
-    this.releaseStyles = adoptWorkspaceStyles(host)
+    this.root.className = 'sc-workspace'
+    if (options.ui?.className !== undefined) this.root.classList.add(...options.ui.className.split(/\s+/).filter(Boolean))
+    const density = options.ui?.density ?? 'compact'
+    if (density !== 'compact' && density !== 'comfortable') throw new TypeError('Unknown workspace density')
+    this.root.dataset.density = density
+    if (options.theme !== undefined) this.applyChromeTheme(validTheme(options.theme))
+    for (const [name, value] of Object.entries(options.ui?.variables ?? {})) {
+      if (!/^--sc-[a-z0-9-]+$/.test(name) || typeof value !== 'string') throw new TypeError('Workspace variables must use --sc- names and string values')
+      this.root.style.setProperty(name, value)
+    }
+    const style = this.node('style'); style.textContent = WORKSPACE_STYLE; this.root.append(style)
     this.root.setAttribute('aria-label', 'Chart workspace')
     this.listen(this.root, 'click', event => {
       const button = event.target instanceof this.win.Element ? event.target.closest('button') : null
       if (!this.disposed && button instanceof this.win.HTMLButtonElement && !button.disabled) this.actions.get(button)?.()
     })
     const toolbar = this.row('Chart controls'), drawingBar = this.row('Drawing controls'), footer = this.row('Chart playback')
+    toolbar.classList.add('sc-marketbar'); drawingBar.classList.add('sc-drawingbar'); footer.classList.add('sc-footer')
+    const presentation = this.menu('Chart', 'Chart presentation'), indicators = this.menu('Indicators', 'Manage indicators')
     this.symbolButton = this.button(this.symbol.ticker, () => this.openSearch())
-    this.symbolButton.classList.add('sc-sym')
+    this.symbolButton.classList.add('sc-symbol'); this.symbolButton.title = 'Find a symbol'
     this.symbolButton.setAttribute('aria-haspopup', 'dialog'); this.symbolButton.setAttribute('aria-expanded', 'false')
     this.periodSelect = this.select('Interval', this.periods.map(period => [periodKey(period), period.text]), periodKey(this.period))
     this.listen(this.periodSelect, 'change', () => this.run(() => {
@@ -162,9 +202,9 @@ export class ChartWorkspace {
       if (period !== undefined) void this.setPeriod(period)
     }))
     const chartType = this.select('Chart type', ENGINE_CHART_TYPES.map(type => [type, label(type)]), options.chart?.render?.chartType ?? 'candles')
-    this.listen(chartType, 'change', () => this.run(() => this.chart.setRenderOptions({ chartType: chartType.value as EngineChartType })))
+    this.listen(chartType, 'change', () => { this.run(() => this.chart.setRenderOptions({ chartType: chartType.value as EngineChartType })); this.syncPresentation() })
     const mode = this.select('Candles', [['raw', 'Original prices'], ['heikin-ashi', 'Heikin Ashi']], options.chart?.mode ?? 'raw')
-    this.listen(mode, 'change', () => this.run(() => this.chart.view.setMode(mode.value as 'raw' | 'heikin-ashi')))
+    this.listen(mode, 'change', () => { this.run(() => this.chart.view.setMode(mode.value as 'raw' | 'heikin-ashi')); this.syncPresentation() })
     const scale = this.select('Price scale', [['linear', 'Linear'], ['log', 'Logarithmic'], ['percentage', 'Percentage']], this.scale.mode ?? 'linear')
     this.listen(scale, 'change', () => {
       const next = { ...this.chart.getLayoutOptions().priceScale, mode: scale.value as PriceScaleOptions['mode'] }
@@ -184,54 +224,98 @@ export class ChartWorkspace {
       scale.value = this.scale.mode ?? 'linear'
       reverse.setAttribute('aria-pressed', String(this.scale.reversed === true))
     }
-    toolbar.append(this.symbolButton, this.separator(), this.field('Interval', this.periodSelect), this.field('Type', chartType), this.field('Prices', mode), this.field('Scale', scale), reverse, this.separator())
+    presentation.panel.classList.add('sc-settings-grid')
+    presentation.panel.append(this.field('Chart type', chartType), this.field('Price mode', mode), this.field('Price scale', scale), reverse)
+    toolbar.append(this.symbolButton, this.field('Interval', this.periodSelect), presentation.root, indicators.root)
 
-    this.indicatorSelect = this.select('Add indicator', INDICATORS.map(name => [name, name]), 'MA')
-    const indicatorList = this.node('span')
-    const refreshIndicators = (): void => {
+    this.indicatorSelect = this.select('Add indicator', [], '')
+    const indicatorList = this.node('div'); indicatorList.className = 'sc-indicator-list'
+    let indicatorEditorDirty = true
+    const renderIndicators = (): void => {
+      if (!indicators.root.open || !indicatorEditorDirty) return
+      const active = this.doc.activeElement
+      const focused = active instanceof this.win.HTMLElement && indicatorList.contains(active) ? active : null
+      const focusId = focused?.closest<HTMLElement>('[data-indicator]')?.dataset.indicator
+      const focusControl = focused?.dataset.control
       const expanded = new Set([...indicatorList.querySelectorAll<HTMLDetailsElement>('details[open]')].map(item => item.dataset.indicator))
-      const selected = this.indicatorSelect.value
-      this.indicatorSelect.replaceChildren(...this.chart.getRegisteredIndicatorNames().map(name => {
+      const selected = this.indicatorSelect.value || 'MA'
+      const registered = this.chart.getRegisteredIndicatorNames()
+      this.indicatorSelect.replaceChildren(...registered.map(name => {
         const option = this.node('option'); option.value = name; option.textContent = name; return option
       }))
-      if (this.chart.getRegisteredIndicatorNames().includes(selected)) this.indicatorSelect.value = selected
-      indicatorList.replaceChildren(...this.chart.listIndicators().map(indicator => {
+      if (registered.includes(selected)) this.indicatorSelect.value = selected
+      const currentIndicators = this.chart.listIndicators()
+      this.setParts(indicators.summary, [['Indicators'], [currentIndicators.length > 0 ? String(currentIndicators.length) : '', 'sc-count']])
+      indicatorList.replaceChildren(...currentIndicators.map(indicator => {
         const settings = this.node('details'), title = this.node('summary')
-        settings.dataset.indicator = indicator.id; settings.open = expanded.has(indicator.id)
+        settings.className = 'sc-indicator'; settings.dataset.indicator = indicator.id; settings.open = expanded.has(indicator.id)
         title.textContent = `${indicator.name} ${indicator.params.join(',')}${indicator.visible ? '' : ' (hidden)'}`
         const params = this.node('input'); params.type = 'text'; params.value = indicator.params.join(',')
-        params.setAttribute('aria-label', `${indicator.name} parameters`)
+        params.setAttribute('aria-label', `${indicator.name} parameters`); params.className = 'sc-input'; params.dataset.control = 'params'; params.autocomplete = 'off'; params.spellcheck = false
         const pane = this.select(`${indicator.name} pane`, [['price', 'Price pane'], ['separate', 'Separate pane']], indicator.pane)
         const group = this.node('input'); group.type = 'text'; group.value = indicator.paneId ?? ''; group.maxLength = 128
-        group.setAttribute('aria-label', `${indicator.name} pane group`); group.placeholder = 'Independent pane'
+        group.setAttribute('aria-label', `${indicator.name} pane group`); group.placeholder = 'Independent pane'; group.className = 'sc-input'; group.dataset.control = 'group'; pane.dataset.control = 'pane'
+        group.disabled = pane.value !== 'separate'; pane.onchange = () => { group.disabled = pane.value !== 'separate' }
         const apply = this.button('Apply indicator', () => this.run(() => {
           const raw = params.value.trim(), values = raw === '' ? [] : raw.split(',').map(value => {
             if (value.trim() === '') throw new TypeError('Indicator parameters must be numbers separated by commas')
             return Number(value)
           })
-          this.chart.updateIndicator(indicator.id, { params: values, pane: pane.value as 'price' | 'separate', paneId: group.value.trim() || undefined })
+          this.chart.updateIndicator(indicator.id, { params: values, pane: pane.value as 'price' | 'separate', paneId: pane.value === 'separate' ? group.value.trim() || undefined : undefined })
         }))
         const toggle = this.button(indicator.visible ? 'Hide indicator' : 'Show indicator', () => this.run(() => {
           const current = this.chart.listIndicators().find(item => item.id === indicator.id)
           if (current !== undefined) this.chart.updateIndicator(indicator.id, { visible: !current.visible })
         }))
-        const remove = this.button('×', () => {
+        const remove = this.button('Remove', () => {
           this.run(() => { this.chart.removeIndicator(indicator.id) })
         })
-        remove.classList.add('sc-x')
         remove.setAttribute('aria-label', `Remove ${indicator.name} ${indicator.params.join(',')}`)
-        params.className = group.className = 'sc-input'
-        const panel = this.node('div'); panel.className = 'sc-pop'
-        panel.append(this.field('Parameters', params), this.field('Pane', pane), this.field('Group', group), apply, toggle)
-        settings.append(title, panel)
-        const entry = this.node('span'); entry.className = 'sc-chip'
+        apply.classList.add('sc-primary'); apply.dataset.control = 'apply'; toggle.dataset.control = 'toggle'; remove.dataset.control = 'remove'
+        toggle.setAttribute('aria-pressed', String(indicator.visible)); remove.classList.add('sc-danger')
+        params.onkeydown = event => { if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); apply.click() } }
+        const editor = this.node('div'); editor.className = 'sc-indicator-editor'
+        const actions = this.node('div'); actions.className = 'sc-actions'; actions.append(apply, toggle)
+        editor.append(this.field('Parameters', params), this.field('Pane', pane), this.field('Pane group', group), actions)
+        settings.append(title, editor)
+        const entry = this.node('div'); entry.className = 'sc-indicator-entry'; entry.dataset.indicator = indicator.id
         entry.append(settings, remove); return entry
       }))
+      if (currentIndicators.length === 0) {
+        const empty = this.node('p'); empty.className = 'sc-hint'; empty.textContent = 'No indicators. Choose one above to add it.'; indicatorList.append(empty)
+      }
+      if (focused !== null) {
+        const entry = [...indicatorList.children].find(node => (node as HTMLElement).dataset.indicator === focusId)
+        const target = focusControl === undefined ? entry?.querySelector<HTMLElement>('summary') : entry?.querySelector<HTMLElement>(`[data-control="${focusControl}"]`)
+        ;(target ?? indicators.summary).focus({ preventScroll: true })
+      }
+      indicatorEditorDirty = false
     }
-    toolbar.append(this.field('Indicator', this.indicatorSelect), this.button('Add', () => {
-      this.run(() => { this.chart.addIndicator({ name: this.indicatorSelect.value }) })
-    }), indicatorList)
-    this.drawingSelect = this.select('Drawing tool', [['', 'Pan / select'], ...DRAWING_TYPES.map(type => [type, label(type)] as [string, string])], '')
+    const refreshIndicators = (): void => {
+      indicatorEditorDirty = true
+      const count = this.chart.listIndicators().length
+      this.setParts(indicators.summary, [['Indicators'], [count > 0 ? String(count) : '', 'sc-count']])
+      renderIndicators()
+    }
+    // Registry and model updates may arrive while the menu is closed. Build the
+    // current editor once on opening; reopening unchanged preserves input drafts.
+    this.listen(indicators.root, 'toggle', renderIndicators)
+    const indicatorAdd = this.node('div'); indicatorAdd.className = 'sc-indicator-add'
+    const add = this.button('Add', () => { this.run(() => { this.chart.addIndicator({ name: this.indicatorSelect.value }) }) }); add.classList.add('sc-primary')
+    indicatorAdd.append(this.field('Indicator', this.indicatorSelect), add)
+    indicators.panel.append(indicatorAdd, indicatorList)
+    this.drawingSelect = this.select('Drawing tool', [['', 'Pan / select']], '')
+    const toolGroups = new Map<string, HTMLOptGroupElement>()
+    for (const type of DRAWING_TYPES) {
+      const category = /fibonacci|gann/.test(type) ? 'Fibonacci & Gann' : /waves|abcd/.test(type) ? 'Patterns & waves'
+        : /vwap|volume-profile/.test(type) ? 'Data studies' : /brush|highlighter/.test(type) ? 'Freehand'
+          : /channel|pitchfork|regression/.test(type) ? 'Channels & pitchforks' : /position|range|forecast/.test(type) ? 'Measurement & risk'
+            : /text|note|callout|signpost|pin|image|label|flag|arrow/.test(type) ? 'Annotations'
+              : /horizontal|vertical|segment|ray|trend-line|price-line/.test(type) ? 'Lines' : 'Shapes & curves'
+      let group = toolGroups.get(category)
+      if (group === undefined) { group = this.node('optgroup'); group.label = category; toolGroups.set(category, group); this.drawingSelect.append(group) }
+      const option = this.node('option'); option.value = type; option.textContent = label(type); group.append(option)
+    }
     this.listen(this.drawingSelect, 'change', () => this.run(() => {
       this.chart.setDrawingTool(this.drawingSelect.value === '' ? null : this.drawingSelect.value as DrawingType)
       this.chartHost.querySelector<HTMLElement>('[tabindex="0"]')?.focus({ preventScroll: true })
@@ -248,12 +332,21 @@ export class ChartWorkspace {
         if (id !== null) this.chart.drawings.remove(id)
       }))
     }
-    drawingBar.append(this.field('Draw', this.drawingSelect), ...Object.values(this.drawingButtons), this.button('Follow latest', () => this.run(() => this.chart.view.followLatest())), this.button('Download PNG', () => { void this.download() }))
+    const navBack = this.button('←', () => this.run(() => { this.chart.view.undoNavigation() })), navForward = this.button('→', () => this.run(() => { this.chart.view.redoNavigation() }))
+    navBack.title = 'Previous chart view (Alt+Left)'; navBack.setAttribute('aria-label', 'Previous chart view')
+    navForward.title = 'Next chart view (Alt+Right)'; navForward.setAttribute('aria-label', 'Next chart view')
+    const updateNavigation = (): void => { const history = this.chart.view.getNavigationHistory(); navBack.disabled = !history.canUndo; navForward.disabled = !history.canRedo }
+    navBack.disabled = navForward.disabled = true
+    const latest = this.button('Latest', () => this.run(() => this.chart.view.followLatest())); latest.title = 'Follow latest bars'; latest.setAttribute('aria-label', 'Follow latest bars')
+    this.downloadButton = this.button('PNG', () => { void this.download() }); this.downloadButton.title = 'Download chart as PNG'; this.downloadButton.setAttribute('aria-label', 'Download chart as PNG')
+    this.drawingButtons.remove.classList.add('sc-danger')
+    drawingBar.append(this.field('Draw', this.drawingSelect), ...Object.values(this.drawingButtons), navBack, navForward, latest, this.downloadButton)
     if (typeof this.root.requestFullscreen === 'function' && typeof this.doc.exitFullscreen === 'function') {
       const fullscreen = this.button('Fullscreen', () => {
         void (this.doc.fullscreenElement === this.root ? this.doc.exitFullscreen() : this.root.requestFullscreen()).catch(error => this.showNotice(error))
       })
-      this.listen(this.doc, 'fullscreenchange', () => { fullscreen.textContent = this.doc.fullscreenElement === this.root ? 'Exit fullscreen' : 'Fullscreen' })
+      this.listen(this.doc, 'fullscreenchange', () => { const active = this.doc.fullscreenElement === this.root; this.setText(fullscreen, active ? 'Exit fullscreen' : 'Fullscreen'); fullscreen.title = fullscreen.textContent ?? ''; fullscreen.setAttribute('aria-pressed', String(active)) })
+      fullscreen.setAttribute('aria-pressed', 'false')
       drawingBar.append(fullscreen)
     }
 
@@ -261,12 +354,13 @@ export class ChartWorkspace {
     this.searchPanel.setAttribute('role', 'dialog'); this.searchPanel.setAttribute('aria-label', 'Find a symbol')
     this.searchPanel.className = 'sc-search'
     this.searchInput = this.node('input'); this.searchInput.type = 'search'; this.searchInput.placeholder = 'Symbol or name'; this.searchInput.setAttribute('aria-label', 'Symbol or name')
-    this.searchInput.autocomplete = 'off'; this.searchInput.className = 'sc-input'
-    this.searchStatus = this.node('div'); this.searchStatus.setAttribute('role', 'status'); this.searchStatus.className = 'sc-label'
-    this.searchResults = this.node('ul'); this.searchResults.className = 'sc-results'
-    const searchRow = this.node('div'); searchRow.className = 'sc-search-row'
-    searchRow.append(this.searchInput, this.button('Close', () => this.closeSearch()))
-    this.searchPanel.append(searchRow, this.searchStatus, this.searchResults)
+    this.searchInput.autocomplete = 'off'; this.searchInput.spellcheck = false; this.searchInput.className = 'sc-input sc-search-input'
+    this.searchStatus = this.node('div'); this.searchStatus.className = 'sc-search-status'; this.searchStatus.setAttribute('role', 'status')
+    this.searchResults = this.node('ul'); this.searchResults.className = 'sc-search-results'; this.searchResults.setAttribute('aria-label', 'Matching symbols')
+    const searchHeader = this.node('div'); searchHeader.className = 'sc-panel-header'
+    const searchTitle = this.node('h2'); searchTitle.textContent = 'Find a symbol'
+    searchHeader.append(searchTitle, this.button('Close', () => this.closeSearch()))
+    this.searchPanel.append(searchHeader, this.searchInput, this.searchStatus, this.searchResults)
     this.listen(this.searchInput, 'input', () => this.queueSearch(200))
     this.listen(this.searchPanel, 'keydown', event => this.searchKey(event as KeyboardEvent))
     this.listen(this.root, 'keydown', event => {
@@ -275,17 +369,20 @@ export class ChartWorkspace {
       key.preventDefault(); this.openSearch(key.key)
     })
     this.listen(this.doc, 'pointerdown', event => {
-      if (!this.searchPanel.hidden && event.target instanceof this.win.Node && !this.searchPanel.contains(event.target) && !this.symbolButton.contains(event.target)) this.closeSearch(false)
+      if (!(event.target instanceof this.win.Node)) return
+      if (!this.searchPanel.hidden && !this.searchPanel.contains(event.target) && !this.symbolButton.contains(event.target)) this.closeSearch(false)
+      for (const menu of this.root.querySelectorAll<HTMLDetailsElement>('.sc-menu[open]')) if (!menu.contains(event.target)) menu.open = false
     })
 
-    const stage = this.node('div'); stage.style.cssText = 'flex:1;min-height:160px;position:relative;'
-    this.chartHost = this.node('div'); this.chartHost.style.cssText = 'position:absolute;inset:0;'
-    this.notice = this.node('div'); this.notice.setAttribute('role', 'alert'); this.notice.className = 'sc-notice'
-    this.statusNode = this.node('div'); this.statusNode.setAttribute('role', 'status'); this.statusNode.className = 'sc-status'
-    stage.append(this.chartHost)
+    const stage = this.node('div'); stage.className = 'sc-stage'
+    this.chartHost = this.node('div'); this.chartHost.className = 'sc-chart'
+    this.stageStatus = this.node('div'); this.stageStatus.className = 'sc-stage-status'; this.stageStatus.setAttribute('aria-hidden', 'true')
+    this.notice = this.node('div'); this.notice.className = 'sc-notice'; this.notice.setAttribute('role', 'alert')
+    this.statusNode = this.node('div'); this.statusNode.className = 'sc-status'; this.statusNode.setAttribute('role', 'status')
+    stage.append(this.chartHost, this.stageStatus)
     this.retryButton = this.button('Retry', () => this.reload())
     this.olderButton = this.button('Load older', () => this.run(() => this.chart.view.requestMore()))
-    this.replayInfo = this.node('span'); this.replayInfo.className = 'sc-meta'
+    this.replayInfo = this.node('span')
     this.replayButtons = {
       start: this.button('Replay', () => this.run(() => { if (!this.startReplay()) throw new Error('At least three loaded bars are needed for replay') })),
       back: this.button('Previous bar', () => this.run(() => { this.stepReplay(-1) })),
@@ -295,20 +392,22 @@ export class ChartWorkspace {
     }
     this.replaySpeed = this.select('Replay speed', [0.25, 0.5, 1, 2, 4, 8, 16].map(speed => [String(speed), `${speed}×`]), '1')
     this.listen(this.replaySpeed, 'change', () => this.run(() => this.setReplaySpeed(Number(this.replaySpeed.value))))
-    const countdownNode = this.node('span'); countdownNode.className = 'sc-meta'; countdownNode.title = 'Period boundary estimate; exchange holidays and early closes need a host-provided close time.'
-    footer.classList.add('sc-foot')
-    footer.append(...Object.values(this.replayButtons), this.field('Speed', this.replaySpeed), this.replayInfo, countdownNode, this.olderButton, this.retryButton)
-    this.root.append(toolbar, drawingBar, this.notice, stage, this.statusNode, footer, this.searchPanel)
+    this.replayControls = this.node('div'); this.replayControls.className = 'sc-replay-controls'; this.replayControls.hidden = true
+    this.replayInfo.className = 'sc-replay-info'
+    const countdownNode = this.node('span'); countdownNode.className = 'sc-countdown'; countdownNode.title = 'Period boundary estimate; exchange holidays and early closes need a host-provided close time.'
+    this.replayControls.append(this.replayButtons.back, this.replayButtons.next, this.replayButtons.play, this.field('Speed', this.replaySpeed), this.replayButtons.exit, this.replayInfo)
+    footer.append(this.statusNode, countdownNode, this.replayButtons.start, this.olderButton, this.retryButton)
+    this.root.append(toolbar, drawingBar, this.notice, stage, this.replayControls, footer, this.searchPanel)
     host.append(this.root)
     try {
       this.chart = new EngineChart(this.chartHost, {
         ...options.chart,
-        render: { theme, ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone },
+        render: { ...(options.theme === undefined ? {} : WORKSPACE_THEMES[options.theme].render), ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone },
         onToolComplete: () => {
           this.drawingSelect.value = ''; options.chart?.onToolComplete?.()
         }
       })
-    } catch (error) { this.abort.abort(); this.root.remove(); this.releaseStyles(); throw error }
+    } catch (error) { this.abort.abort(); this.root.remove(); throw error }
     this.loader = this.createLoader()
     this.timedReplay = this.createReplay()
     this.countdown = createBarCountdown({
@@ -321,13 +420,14 @@ export class ChartWorkspace {
         }
         return { marketKey: this.requestedPair(), lastBar, period: this.period, symbolTimezone: this.symbol.timezone, replaying: this.loader.replaying, closeTimestamp }
       },
-      onChange: snapshot => { countdownNode.textContent = snapshot === null ? '' : `Bar closes in ${snapshot.text}` },
+      onChange: snapshot => { this.setText(countdownNode, snapshot === null ? '' : `Close ≈ ${snapshot.text}`) },
       hidden: () => this.doc.hidden,
       timer: { setTimeout: (callback, ms) => this.win.setTimeout(callback, ms), clearTimeout: handle => this.win.clearTimeout(handle as number) }
     })
     this.listen(this.doc, 'visibilitychange', () => { if (this.doc.hidden) this.timedReplay.pause(); this.countdown.refresh() })
+    this.unsubscribe.push(this.chart.view.subscribe(updateNavigation)); updateNavigation()
     this.unsubscribe.push(this.chart.onIndicatorsChanged(refreshIndicators))
-    this.unsubscribe.push(this.chart.drawings.subscribe(() => this.updateDrawingControls()))
+    this.unsubscribe.push(this.chart.drawings.subscribe(() => { this.updateDrawingControls(); this.queueDrawingSave() }))
     this.loader.attach(this.dataPort())
     refreshIndicators(); this.updateDrawingControls(); this.ready = this.request()
   }
@@ -348,7 +448,7 @@ export class ChartWorkspace {
   }
 
   private changeMarket (symbol: SymbolInfo, period: Period | string): Promise<WorkspaceLoadResult> {
-    this.assertLive()
+    this.assertLive(); this.saveDrawings()
     const nextSymbol = validSymbol(symbol), nextPeriod = this.resolvePeriod(period)
     const previous = this.market(), changed = pairKey(nextSymbol, nextPeriod) !== this.requestedPair()
     if (symbolKey(nextSymbol) !== symbolKey(this.symbol)) {
@@ -368,7 +468,7 @@ export class ChartWorkspace {
     }
     this.symbol = nextSymbol; this.period = nextPeriod
     this.symbolButton.textContent = nextSymbol.ticker; this.periodSelect.value = periodKey(nextPeriod)
-    const result = changed ? this.request() : this.loads.current(this.market()) ?? Promise.resolve(this.currentResult())
+    const result = changed ? this.request(true) : this.loads.current(this.market()) ?? Promise.resolve(this.currentResult())
     if (changed) this.events.emit('marketChange', { previous, requested: this.market() })
     this.updateStatus()
     return result
@@ -545,9 +645,26 @@ export class ChartWorkspace {
     return { ...state, state: loading ? 'loading' : state.state, error: loading || state.error === null ? null : { ...state.error, symbol: { ...state.error.symbol }, period: { ...state.error.period } } }
   }
 
+  /**
+   * Switch the chrome and the canvas colours to a preset. The preset's six canvas colours replace the current ones,
+   * including any the host passed in `chart.render`; set those again afterwards through `chart.setRenderOptions`.
+   * Preset chrome variables likewise replace earlier values; other `ui.variables` stay untouched.
+   */
+  setTheme (theme: WorkspaceThemeName): void {
+    if (this.disposed) return
+    const name = validTheme(theme)
+    this.applyChromeTheme(name)
+    this.chart.setRenderOptions({ ...WORKSPACE_THEMES[name].render })
+  }
+
+  private applyChromeTheme (theme: WorkspaceThemeName): void {
+    for (const key of Object.keys(WORKSPACE_CHROME_VARS) as WorkspaceChromeKey[]) this.root.style.setProperty(WORKSPACE_CHROME_VARS[key], WORKSPACE_THEMES[theme].chrome[key])
+  }
+
   dispose (): void {
     if (this.disposed) return
-    this.disposed = true; this.cancelSearch(); this.abort.abort(); this.releaseStyles()
+    this.saveDrawings();
+    this.disposed = true; this.cancelSearch(); this.abort.abort()
     this.restoreGeneration++; this.pendingRestore = null
     this.timedReplay.dispose(); this.countdown.dispose()
     this.loads.dispose(); this.events.clear()
@@ -555,6 +672,27 @@ export class ChartWorkspace {
     for (const [timer, url] of this.downloads) { this.win.clearTimeout(timer); this.win.URL.revokeObjectURL(url) }
     this.downloads.clear(); this.drawingDocuments.clear()
     try { this.chart.dispose() } finally { this.root.remove() }
+  }
+
+  /** Flush a completed edit before leaving. Storage errors propagate; the document
+   * stays in memory and disposal can be retried after the host handles the error. */
+  saveDrawings (): void {
+    if (this.drawingSaveTimer !== null) { this.win.clearTimeout(this.drawingSaveTimer); this.drawingSaveTimer = null }
+    if (this.drawingSymbol !== null) this.drawingDocuments.set(this.drawingSymbol, this.chart.drawings.exportJson())
+  }
+
+  getDrawingCacheStats (): { symbols: number, bytes: number, unsaved: number } { return this.drawingDocuments.getStats() }
+
+  private queueDrawingSave (): void {
+    const list = this.chart.drawings.getSnapshot().drawings
+    if (list === this.lastDrawingList) return
+    this.lastDrawingList = list
+    if (!this.persistentDrawings || this.drawingSymbol === null) return
+    if (this.drawingSaveTimer !== null) this.win.clearTimeout(this.drawingSaveTimer)
+    this.drawingSaveTimer = this.win.setTimeout(() => {
+      this.drawingSaveTimer = null
+      try { this.saveDrawings() } catch (error) { this.showNotice(error) }
+    }, 250)
   }
 
   private market (): WorkspaceMarket { return { symbol: this.getSymbol(), period: this.getPeriod() } }
@@ -616,7 +754,6 @@ export class ChartWorkspace {
   }
 
   private prepareRequest (): void {
-    if (this.drawingSymbol !== null) this.drawingDocuments.set(this.drawingSymbol, this.chart.drawings.exportJson())
     this.drawingSymbol = null; this.displayedPair = null; this.pending = true; this.waitingStart = true; this.applyError = null; this.cancelled = false
     this.olderPending = false
     this.chart.setDrawingTool(null); this.drawingSelect.value = ''
@@ -624,7 +761,8 @@ export class ChartWorkspace {
     this.notice.textContent = ''; this.updateStatus()
   }
 
-  private request (): Promise<WorkspaceLoadResult> {
+  private request (drawingsSaved = false): Promise<WorkspaceLoadResult> {
+    if (!drawingsSaved) this.saveDrawings()
     this.timedReplay.pause()
     const waiting = this.loads.request(this.market())
     this.prepareRequest(); this.loader.request(this.getSymbol(), this.getPeriod())
@@ -663,14 +801,22 @@ export class ChartWorkspace {
         this.chart.setDrawingTool(null); this.chart.setData([], false); this.updateStatus(); this.settleLoad()
       }
     }
+    const reset = (bars: MarketBar[], more?: boolean, normalized = false): void => apply(() => {
+      const restoring = this.pendingRestore
+      if (restoring !== null && !restoring.applied && restoring.generation === this.restoreGeneration && restoring.key === this.requestedPair()) {
+        this.chart.restoreConfiguration(restoring.configuration, { bars, more }); restoring.applied = true
+        this.drawingSymbol = symbolKey(this.symbol)
+      } else if (normalized) port.applyNormalizedData!(bars, more)
+      else port.applyNewData(bars, more)
+    }, 'reset', true)
     return {
-      applyNewData: (bars, more) => apply(() => {
-        const restoring = this.pendingRestore
-        if (restoring !== null && !restoring.applied && restoring.generation === this.restoreGeneration && restoring.key === this.requestedPair()) {
-          this.chart.restoreConfiguration(restoring.configuration, { bars, more }); restoring.applied = true
-          this.drawingSymbol = symbolKey(this.symbol)
-        } else port.applyNewData(bars, more)
-      }, 'reset', true),
+      applyNewData: (bars, more) => reset(bars, more),
+      applyNormalizedData: (bars, more) => reset(bars, more, true),
+      truncateData: (length, expectedLength, expectedLastTimestamp) => {
+        let applied = false
+        apply(() => { applied = port.truncateData!(length, expectedLength, expectedLastTimestamp) }, 'reset')
+        return applied
+      },
       applyMoreData: (bars, more) => apply(() => { this.olderPending = false; port.applyMoreData(bars, more) }, 'prepend'),
       updateData: bar => apply(() => port.updateData(bar), 'tail'),
       updateDataBatch: (bars, more) => apply(() => port.updateDataBatch?.(bars, more), 'tail'),
@@ -695,18 +841,27 @@ export class ChartWorkspace {
 
   private updateStatus (): void {
     if (this.disposed) return
-    // The market as ticker plus interval chip; what is happening to it as a sentence after.
-    const status = this.getStatus()
-    const message = this.cancelled ? 'Loading cancelled.' : status.state === 'loading' ? 'Loading…'
-      : status.state === 'error' ? `Could not load: ${this.errorMessage(status.error?.error)}`
-        : status.state === 'empty' ? 'No bars for this market.' : status.loadingMore ? 'Loading older bars…' : ''
-    const ticker = this.node('b'), interval = this.node('span'), note = this.node('span')
-    ticker.textContent = this.symbol.ticker; interval.className = 'sc-ivl'; interval.textContent = this.period.text; note.textContent = message
-    this.statusNode.replaceChildren(ticker, interval, note)
-    this.chartHost.style.visibility = status.state === 'ready' && this.displayedPair === this.requestedPair() ? 'visible' : 'hidden'
-    this.chartHost.inert = status.state !== 'ready'
-    this.drawingSelect.disabled = status.state !== 'ready'; this.retryButton.hidden = status.state !== 'error' && !this.cancelled
-    this.olderButton.disabled = status.state !== 'ready' || status.loadingMore || this.olderPending || !this.chart.view.getSnapshot().hasMore
+    const status = this.getStatus(), ticker = this.symbol.ticker, interval = this.period.text, pair = `${ticker} ${interval}`
+    const reason = status.state === 'error' ? this.errorMessage(status.error?.error) : ''
+    const text = this.cancelled ? `Loading ${pair} was cancelled` : status.state === 'loading' ? `Loading ${pair}…`
+      : status.state === 'error' ? `Could not load ${pair}: ${reason}`
+        : status.state === 'empty' ? `No data for ${pair}` : status.loadingMore ? `Loading older ${pair} bars…` : pair
+    const message = this.cancelled ? 'Loading cancelled' : status.state === 'loading' ? 'Loading…'
+      : status.state === 'error' ? `Could not load: ${reason}` : status.state === 'empty' ? 'No data' : status.loadingMore ? 'Loading older bars…' : ''
+    const shown = status.state === 'ready' && this.displayedPair === this.requestedPair()
+    const hasMore = this.chart.view.getSnapshot().hasMore
+    const signatureUI = `${text}|${shown}|${this.olderPending}|${hasMore}|${this.downloading}`
+    if (signatureUI !== this.reportedStatusUI) {
+      this.reportedStatusUI = signatureUI; this.setParts(this.statusNode, [[ticker, 'sc-ticker'], [interval, 'sc-interval'], [message]])
+      this.root.dataset.state = this.cancelled ? 'cancelled' : status.state
+      this.chartHost.style.visibility = shown ? 'visible' : 'hidden'; this.chartHost.inert = !shown
+      this.setText(this.stageStatus, shown ? '' : text); this.stageStatus.hidden = shown
+      this.drawingSelect.disabled = !shown; this.downloadButton.disabled = !shown || this.downloading
+      this.retryButton.hidden = status.state !== 'error' && !this.cancelled
+      this.olderButton.hidden = !hasMore && status.state === 'ready'
+      this.olderButton.disabled = status.state !== 'ready' || status.loadingMore || this.olderPending || !hasMore
+      this.olderButton.title = status.loadingMore || this.olderPending ? 'Older bars are loading' : !hasMore ? 'All available history is loaded' : 'Load older bars'
+    }
     this.updateReplay()
     const state = this.getLoadState(), signature = JSON.stringify(state)
     if (signature !== this.reportedLoadState) { this.reportedLoadState = signature; this.events.emit('loadState', state) }
@@ -715,13 +870,26 @@ export class ChartWorkspace {
   private updateReplay (): void {
     if (this.disposed) return
     const info = this.loader.replayInfo
-    this.replayButtons.start.disabled = this.getStatus().state !== 'ready' || info !== null
+    const focused = this.doc.activeElement
+    const entering = info !== null && this.replayControls.hidden
+    const leaving = info === null && !this.replayControls.hidden
+    this.replayButtons.start.disabled = this.getStatus().state !== 'ready' || info !== null || this.chart.view.getSnapshot().length < 3
     this.replayButtons.back.disabled = info === null || info.index === 0
-    this.replayButtons.next.disabled = info === null
+    this.replayButtons.next.disabled = info === null || this.loader.replayAtEnd
     this.replayButtons.exit.disabled = info === null
     const playback = this.timedReplay?.getState()
     this.replayButtons.play.disabled = info === null || this.loader.replayAtEnd
-    this.replayButtons.play.textContent = playback?.playing === true ? 'Pause replay' : 'Play replay'
+    this.setText(this.replayButtons.play, playback?.playing === true ? 'Pause replay' : 'Play replay')
+    this.replayButtons.play.title = this.replayButtons.play.textContent ?? ''
+    this.replayButtons.play.setAttribute('aria-pressed', String(playback?.playing === true))
+    this.replayControls.hidden = info === null
+    this.replayButtons.start.hidden = info !== null
+    this.replaySpeed.disabled = info === null
+    if (entering && focused === this.replayButtons.start) {
+      (this.replayButtons.play.disabled ? this.replayButtons.exit : this.replayButtons.play).focus({ preventScroll: true })
+    } else if (leaving && focused !== null && this.replayControls.contains(focused)) {
+      (this.replayButtons.start.disabled ? this.symbolButton : this.replayButtons.start).focus({ preventScroll: true })
+    }
     const speed = String(playback?.speed ?? 1)
     if (![...this.replaySpeed.options].some(option => option.value === speed)) {
       this.replaySpeed.querySelector('option[data-custom]')?.remove()
@@ -729,7 +897,7 @@ export class ChartWorkspace {
     }
     this.replaySpeed.value = speed
     this.countdown?.refresh()
-    this.replayInfo.textContent = info === null || !Number.isFinite(info.timestamp) ? '' : `Replaying at ${new Date(info.timestamp).toISOString().slice(0, 16).replace('T', ' ')} UTC`
+    this.setParts(this.replayInfo, info === null ? [] : [[`${info.index + 1} / ${info.length}`], [Number.isFinite(info.timestamp) ? new Date(info.timestamp).toISOString().replace('T', ' ').replace('.000Z', ' UTC') : '']])
     const state = this.getReplayState(), signature = JSON.stringify(state)
     if (signature !== this.reportedReplayState) { this.reportedReplayState = signature; this.events.emit('replayChange', state) }
   }
@@ -737,13 +905,18 @@ export class ChartWorkspace {
   private updateDrawingControls (): void {
     const state = this.chart.drawings.getSnapshot(), selected = state.drawings.find(item => item.id === state.selectedId)
     this.drawingButtons.undo.disabled = !state.canUndo; this.drawingButtons.redo.disabled = !state.canRedo
-    this.drawingButtons.lock.disabled = selected === undefined; this.drawingButtons.lock.textContent = selected?.locked === true ? 'Unlock' : 'Lock'
+    this.drawingButtons.lock.disabled = selected === undefined; this.setText(this.drawingButtons.lock, selected?.locked === true ? 'Unlock' : 'Lock')
+    this.drawingButtons.lock.setAttribute('aria-pressed', String(selected?.locked === true)); this.drawingButtons.lock.title = selected === undefined ? 'Select a drawing to lock it' : selected.locked ? 'Unlock selected drawing' : 'Lock selected drawing'
+    this.drawingButtons.remove.title = selected?.locked === true ? 'Unlock this drawing before deleting it' : 'Delete selected drawing'
     this.drawingButtons.remove.disabled = selected === undefined || selected.locked
   }
 
   private openSearch (initialQuery?: string): void {
     if (this.disposed) return
     if (initialQuery !== undefined) this.searchInput.value = initialQuery
+    for (const menu of this.root.querySelectorAll<HTMLDetailsElement>('.sc-menu[open]')) menu.open = false
+    const toolbar = this.root.querySelector<HTMLElement>('.sc-marketbar')
+    if (toolbar !== null) this.searchPanel.style.top = `${toolbar.offsetHeight + 4}px`
     this.searchPanel.hidden = false; this.symbolButton.setAttribute('aria-expanded', 'true'); this.searchInput.focus(); this.queueSearch(0)
   }
 
@@ -761,6 +934,7 @@ export class ChartWorkspace {
 
   private queueSearch (delay: number): void {
     this.cancelSearch(); this.searchResults.replaceChildren(); this.searchStatus.textContent = 'Searching…'
+    this.searchResults.setAttribute('aria-busy', 'true')
     this.searchLoading = true; this.searchSymbols = []; this.searchActive = -1
     const generation = this.searchGeneration
     this.searchTimer = this.win.setTimeout(() => { this.searchTimer = null; void this.search(generation) }, delay)
@@ -784,23 +958,22 @@ export class ChartWorkspace {
       const recentKeys = new Set(recent.map(symbolKey))
       const results = [...recent, ...candidates.filter(symbol => !recentKeys.has(symbolKey(symbol)))].slice(0, 50)
       this.searchSymbols = results; this.searchShownQuery = query; this.searchLoading = false; this.searchActive = -1
+      this.searchResults.setAttribute('aria-busy', 'false')
       this.searchStatus.textContent = results.length === 0 ? 'No matching symbols' : symbols.length > 50 ? 'Showing the first 50 matches' : `${results.length} matches`
       this.searchResults.replaceChildren(...results.map((symbol, index) => {
-        const item = this.node('li'), button = this.button(symbol.ticker, () => {
+        const item = this.node('li'), button = this.button([symbol.ticker, symbol.name, symbol.exchange].filter(Boolean).join(', '), () => {
           this.chooseSearchResult(index)
         })
-        // Ticker, then the name, then the venue at the end: each in its own place, no joined string.
-        const name = this.node('span'), venue = this.node('span')
-        name.className = 'sc-muted'; name.textContent = symbol.name ?? ''
-        venue.className = 'sc-muted sc-end'; venue.textContent = symbol.exchange ?? ''
-        button.classList.add('sc-result'); button.append(name, venue)
-        button.setAttribute('aria-label', [symbol.ticker, symbol.name, symbol.exchange].filter(Boolean).join(', '))
-        item.append(button); return item
+        button.classList.add('sc-search-result')
+        const ticker = this.node('strong'); ticker.textContent = symbol.ticker
+        const name = this.node('span'); name.textContent = symbol.name ?? ''
+        const venue = this.node('span'); venue.className = 'sc-venue'; venue.textContent = symbol.exchange ?? ''; venue.hidden = !symbol.exchange
+        button.replaceChildren(ticker, name, venue); item.append(button); return item
       }))
     } catch (error) {
       if (this.disposed || controller.signal.aborted || generation !== this.searchGeneration) return
       this.searchStatus.replaceChildren(this.doc.createTextNode(`Search failed: ${this.errorMessage(error)} `), this.button('Retry search', () => this.queueSearch(0)))
-      this.searchLoading = false
+      this.searchLoading = false; this.searchResults.setAttribute('aria-busy', 'false')
     } finally { if (this.searchAbort === controller) this.searchAbort = null }
   }
 
@@ -834,6 +1007,8 @@ export class ChartWorkspace {
   }
 
   private async download (): Promise<void> {
+    if (this.disposed || this.downloading) return
+    this.downloading = true; this.setText(this.downloadButton, 'Saving…'); this.updateStatus()
     try {
       if (this.getStatus().state !== 'ready') throw new Error('Load chart data before downloading an image')
       const filename = `${this.symbol.ticker.replace(/[^a-z0-9._-]/gi, '_')}-${this.period.text.replace(/[^a-z0-9._-]/gi, '_')}.png`
@@ -844,20 +1019,23 @@ export class ChartWorkspace {
       this.root.append(link); link.click(); link.remove()
       const timer = this.win.setTimeout(() => { this.win.URL.revokeObjectURL(url); this.downloads.delete(timer) }, 1000)
       this.downloads.set(timer, url)
-    } catch (error) { this.showNotice(error) }
+    } catch (error) { this.showNotice(error) } finally {
+      this.downloading = false
+      if (!this.disposed) { this.setText(this.downloadButton, 'PNG'); this.updateStatus() }
+    }
   }
 
   private node<K extends keyof HTMLElementTagNameMap> (tag: K): HTMLElementTagNameMap[K] { return this.doc.createElement(tag) }
   private listen (target: EventTarget, type: string, listener: EventListener): void { target.addEventListener(type, listener, { signal: this.abort.signal }) }
   private button (text: string, action: () => unknown): HTMLButtonElement {
     const button = this.node('button'); button.type = 'button'; button.textContent = text
-    button.className = 'sc-btn'
+    button.className = 'sc-button'; button.title = text
     this.actions.set(button, action); return button
   }
 
   private select (name: string, values: ReadonlyArray<readonly [string, string]>, selected: string): HTMLSelectElement {
     const select = this.node('select'); select.setAttribute('aria-label', name)
-    select.className = 'sc-select'
+    select.className = 'sc-select'; select.title = name
     for (const [value, text] of values) { const option = this.node('option'); option.value = value; option.textContent = text; select.append(option) }
     select.value = selected; return select
   }
@@ -867,14 +1045,45 @@ export class ChartWorkspace {
     row.className = 'sc-row'; return row
   }
 
-  private separator (): HTMLSpanElement {
-    const line = this.node('span'); line.className = 'sc-sep'; line.setAttribute('aria-hidden', 'true'); return line
+  private field (name: string, control: HTMLElement): HTMLLabelElement {
+    const field = this.node('label'); field.className = 'sc-field'
+    const caption = this.node('span'); caption.className = 'sc-field-label'; caption.textContent = name
+    field.append(caption, control); return field
   }
 
-  private field (name: string, control: HTMLElement): HTMLLabelElement {
-    const field = this.node('label'), text = this.node('span')
-    field.className = 'sc-field'; text.className = 'sc-label'; text.textContent = name
-    field.append(text, control); return field
+  private setText (node: HTMLElement, value: string): void { if (node.textContent !== value) node.textContent = value }
+
+  /** Separate values as separate elements that CSS spaces apart, never one string joined with separators. Empty parts are left out. */
+  private setParts (node: HTMLElement, parts: ReadonlyArray<readonly [text: string, className?: string]>): void {
+    const shown = parts.filter(([text]) => text !== '')
+    const signature = JSON.stringify(shown)
+    if (node.dataset.parts === signature) return
+    node.dataset.parts = signature
+    node.replaceChildren(...shown.map(([text, className]) => {
+      const part = this.node('span'); part.textContent = text
+      if (className !== undefined) part.className = className
+      return part
+    }))
+  }
+
+  private menu (name: string, description: string): { root: HTMLDetailsElement, summary: HTMLElement, panel: HTMLDivElement } {
+    const root = this.node('details'); root.className = 'sc-menu'
+    const summary = this.node('summary'); summary.textContent = name; summary.title = description
+    const panel = this.node('div'); panel.className = 'sc-menu-panel'; panel.setAttribute('role', 'group'); panel.setAttribute('aria-label', description)
+    root.append(summary, panel)
+    this.listen(root, 'toggle', () => {
+      if (root.open) {
+        const toolbar = this.root.querySelector<HTMLElement>('.sc-marketbar')
+        if (toolbar !== null) panel.style.top = `${toolbar.offsetHeight + 4}px`
+        this.closeSearch(false)
+        for (const other of this.root.querySelectorAll<HTMLDetailsElement>('.sc-menu[open]')) if (other !== root) other.open = false
+      }
+    })
+    this.listen(root, 'keydown', event => {
+      const key = event as KeyboardEvent
+      if (key.key === 'Escape' && root.open) { key.preventDefault(); key.stopPropagation(); root.open = false; summary.focus() }
+    })
+    return { root, summary, panel }
   }
 
   private run (action: () => void): boolean {

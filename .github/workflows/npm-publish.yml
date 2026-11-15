@@ -24,8 +24,6 @@ jobs:
       contents: read
       id-token: write
     env:
-      # npm provenance is unavailable for a private source repository.
-      NPM_CONFIG_PROVENANCE: 'false'
       RELEASE_VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -39,19 +37,17 @@ jobs:
         run: |
           node --input-type=module -e "
             import fs from 'node:fs'
-            for (const dir of ['core', 'superscript', 'web', 'chat-plugin']) {
+            for (const dir of ['core', 'superscript', 'bindings/web', 'integrations/chat-plugin']) {
               const p = JSON.parse(fs.readFileSync('packages/' + dir + '/package.json', 'utf8'))
               if (p.version !== process.env.RELEASE_VERSION) throw new Error(p.name + ' is ' + p.version + ', not ' + process.env.RELEASE_VERSION)
             }"
       - name: Install dependencies
-        # No lockfile yet: @supersolutions/super-protocol must be on npm before one can be created.
-        # Replace with `npm ci` once package-lock.json is committed.
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Build and check packages
         run: npm run build
       - name: Publish with npm Trusted Publishing
         # Dependency order: core, then superscript and web, then the plugin.
         run: |
-          for dir in core superscript web chat-plugin; do
-            npm publish "./packages/$dir" --registry=https://registry.npmjs.org/ --access=public --tag=latest --ignore-scripts
+          for dir in core superscript bindings/web integrations/chat-plugin; do
+            npm publish "./packages/$dir" --registry=https://registry.npmjs.org/ --access=public --provenance --tag=latest --ignore-scripts
           done

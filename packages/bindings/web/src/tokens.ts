@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Super Chart design tokens: the one source for the canvas, drawings, the
  * agent layer, the workspace chrome and the chat card.
@@ -42,6 +43,7 @@ export interface SuperChartColors {
   danger: string
   /** Market data: a bar that closed above (up), below (down) or at (flat) its open. */
   up: string
+  /** `bear` tone. */
   down: string
   flat: string
   /** Price text on an up, down or flat fill. */
@@ -133,26 +135,6 @@ export function themeName (value: unknown): ThemeName {
 
 export function colors (theme: unknown): Readonly<SuperChartColors> {
   return SUPER_CHART_COLORS[themeName(theme)]
-}
-
-/** The workspace chrome's custom properties for a theme, set on its root element. */
-export function chromeVariables (theme: unknown): Record<string, string> {
-  const c = colors(theme)
-  return {
-    '--sc-ground': c.ground,
-    '--sc-surface': c.surface,
-    '--sc-surface-sunken': c.surfaceSunken,
-    '--sc-line': c.line,
-    '--sc-line-strong': c.lineStrong,
-    '--sc-ink': c.ink,
-    '--sc-ink-muted': c.inkMuted,
-    '--sc-violet': c.violet,
-    '--sc-violet-strong': c.violetStrong,
-    '--sc-violet-tint': c.violetTint,
-    '--sc-danger': c.danger,
-    '--sc-font': FONT_SANS,
-    '--sc-mono': FONT_MONO
-  }
 }
 
 /** A colour at an alpha, when it is #rrggbb; anything else is returned as given. */

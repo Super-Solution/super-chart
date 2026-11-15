@@ -1,6 +1,6 @@
-import { nearestChartIndex, derivePrecision, formatBarDate, type FinancialChartModel, type EngineRenderFrame, type EngineRenderOptions, type BarDateRequestType } from '@supersolutions/super-chart-core'
+import { nearestChartIndex, derivePrecision, formatBarDate, type FinancialChartModel, type ChartCandlePoint, type EngineRenderFrame, type EngineRenderOptions, type BarDateRequestType } from '@supersolutions/super-chart-core'
 import { paintPriceSeries } from './seriesRenderer'
-import { typicalPrice } from './geometry'
+import { typicalPrice, halfBarWidth } from './geometry'
 import { colors, withAlpha, CANVAS_FONT, CANVAS_LABEL_FONT } from './tokens'
 
 export type { EngineRenderOptions } from '@supersolutions/super-chart-core'
@@ -61,13 +61,25 @@ function timeFormat (timeZone: string): Intl.DateTimeFormat {
 function precision (value: number | undefined): number {
   return value !== undefined && Number.isFinite(value) ? Math.max(0, Math.min(20, Math.trunc(value))) : 2
 }
-function timeLabel (displayDtf: Intl.DateTimeFormat, timestamp: number, options: EngineRenderOptions, type: BarDateRequestType, format = 'HH:mm'): string {
-  return Number.isFinite(timestamp) && Math.abs(timestamp) <= 8.64e15
-    ? formatBarDate({ displayDtf, timestamp, timespan: options.timespan ?? '', symbolTimezone: options.symbolTimezone, type, format })
-    : String(timestamp)
+const dateLabels = new Map<string, string>()
+const calendarDates = new Map<string, Record<string, string>>()
+function boundedSet<T> (cache: Map<string, T>, key: string, value: T): T {
+  if (cache.size >= 512) cache.delete(cache.keys().next().value as string)
+  cache.set(key, value)
+  return value
 }
-function calendarDate (format: Intl.DateTimeFormat, timestamp: number): Record<string, string> {
-  return Object.fromEntries(format.formatToParts(timestamp).filter(part => ['year', 'month', 'day'].includes(part.type)).map(part => [part.type, part.value]))
+function timeLabel (displayDtf: Intl.DateTimeFormat, timestamp: number, options: EngineRenderOptions, type: BarDateRequestType, format = 'HH:mm'): string {
+  if (!Number.isFinite(timestamp) || Math.abs(timestamp) > 8.64e15) return String(timestamp)
+  const key = JSON.stringify([options.timeZone ?? 'UTC', timestamp, options.timespan ?? '', options.symbolTimezone, type, format])
+  const cached = dateLabels.get(key)
+  return cached ?? boundedSet(dateLabels, key, formatBarDate({ displayDtf, timestamp, timespan: options.timespan ?? '', symbolTimezone: options.symbolTimezone, type, format }))
+}
+function calendarDate (format: Intl.DateTimeFormat, timestamp: number, timezone: string): Record<string, string> {
+  const key = JSON.stringify([timezone, timestamp]), cached = calendarDates.get(key)
+  if (cached !== undefined) return cached
+  const date: Record<string, string> = {}
+  for (const part of format.formatToParts(timestamp)) if (part.type === 'year' || part.type === 'month' || part.type === 'day') date[part.type] = part.value
+  return boundedSet(calendarDates, key, date)
 }
 function boundaryFormat (date: Record<string, string>, previous: Record<string, string> | null): string {
   if (previous === null) return 'MM-DD'
@@ -85,31 +97,61 @@ function clipPlot (ctx: CanvasRenderingContext2D, m: FinancialChartModel): void 
   const g = m.geometry
   ctx.beginPath(); ctx.rect(g.left, g.top, g.plotWidth, g.plotHeight); ctx.clip()
 }
-function halfBarWidth (m: FinancialChartModel): number {
-  let spacing = m.geometry.plotWidth
-  const xs = m.xPositions
-  for (let i = 1; i < xs.length; i++) {
-    const gap = xs[i] - xs[i - 1]
-    if (gap > 0) spacing = Math.min(spacing, gap)
-  }
-  return Math.max(0.25, Math.min(6, spacing * 0.34))
-}
-function closePath (ctx: CanvasRenderingContext2D, m: FinancialChartModel, area: boolean): void {
-  let previous = -2, firstX = 0, lastX = 0, open = false
+interface CloseGeometry { points: Array<{ x: number, y: number, index: number }>, stroke?: Path2D, area?: Path2D }
+const closeGeometry = new WeakMap<FinancialChartModel, CloseGeometry>()
+function closePoints (m: FinancialChartModel): CloseGeometry {
+  let geometry = closeGeometry.get(m)
+  if (geometry !== undefined) return geometry
+  geometry = { points: [] }
   for (const candle of m.plottedCandles) {
     const y = m.y(candle.c)
-    if (!Number.isFinite(candle.x) || !Number.isFinite(y)) continue
-    if (candle.index !== previous + 1) {
-      if (area && open) {
-        ctx.lineTo(lastX, m.geometry.bottom); ctx.lineTo(firstX, m.geometry.bottom); ctx.closePath()
-      }
-      ctx.moveTo(candle.x, y); firstX = candle.x; open = true
-    } else ctx.lineTo(candle.x, y)
-    previous = candle.index; lastX = candle.x
+    if (Number.isFinite(candle.x) && Number.isFinite(y)) geometry.points.push({ x: candle.x, y, index: candle.index })
   }
-  if (area && open) {
-    ctx.lineTo(lastX, m.geometry.bottom); ctx.lineTo(firstX, m.geometry.bottom); ctx.closePath()
+  closeGeometry.set(m, geometry)
+  return geometry
+}
+function closePath (target: Pick<CanvasRenderingContext2D, 'moveTo' | 'lineTo' | 'closePath'>, m: FinancialChartModel, area: boolean): void {
+  let previous = -2, firstX = 0, lastX = 0, open = false
+  for (const point of closePoints(m).points) {
+    if (point.index !== previous + 1) {
+      if (area && open) { target.lineTo(lastX, m.geometry.bottom); target.lineTo(firstX, m.geometry.bottom); target.closePath() }
+      target.moveTo(point.x, point.y); firstX = point.x; open = true
+    } else target.lineTo(point.x, point.y)
+    previous = point.index; lastX = point.x
   }
+  if (area && open) { target.lineTo(lastX, m.geometry.bottom); target.lineTo(firstX, m.geometry.bottom); target.closePath() }
+}
+function paintClose (ctx: CanvasRenderingContext2D, m: FinancialChartModel, area: boolean): void {
+  if (typeof Path2D !== 'undefined') {
+    const geometry = closePoints(m), key = area ? 'area' : 'stroke'
+    let path = geometry[key]
+    if (path === undefined) { path = new Path2D(); closePath(path, m, area); geometry[key] = path }
+    if (area) ctx.fill(path); else ctx.stroke(path)
+  } else {
+    ctx.beginPath(); closePath(ctx, m, area)
+    if (area) ctx.fill(); else ctx.stroke()
+  }
+}
+const envelopes = new WeakMap<FinancialChartModel, readonly ChartCandlePoint[]>()
+/** Explicit pixel-envelope paint mode: first open, last close, all highs/lows. Never changes the public model. */
+function candleEnvelope (m: FinancialChartModel): readonly ChartCandlePoint[] {
+  if (m.plottedCandles.length <= m.geometry.plotWidth) return m.plottedCandles
+  const cached = envelopes.get(m)
+  if (cached !== undefined) return cached
+  const result: ChartCandlePoint[] = []
+  let bucket = NaN
+  for (const candle of m.plottedCandles) {
+    const pixel = Math.floor(candle.x)
+    if (!Number.isFinite(pixel)) continue
+    const previous = result[result.length - 1]
+    if (pixel !== bucket || previous === undefined) { result.push({ ...candle }); bucket = pixel; continue }
+    previous.c = candle.c; previous.h = Math.max(previous.h, candle.h); previous.l = Math.min(previous.l, candle.l)
+    previous.wickTop = Math.min(previous.wickTop, candle.wickTop); previous.wickBottom = Math.max(previous.wickBottom, candle.wickBottom)
+    const open = m.y(previous.o), close = m.y(previous.c)
+    previous.bodyTop = Math.min(open, close); previous.bodyBottom = Math.max(open, close)
+  }
+  envelopes.set(m, result)
+  return result
 }
 /** +1 up, -1 down, 0 flat: the close against the open. */
 function direction (open: number, close: number): number {
@@ -121,15 +163,15 @@ function direction (open: number, close: number): number {
  * so up and down read by shape before colour. Bodies under 3px are filled, or
  * a hollow body would vanish. A path per group, not a stroke per bar.
  */
-function paintCandles (ctx: CanvasRenderingContext2D, m: FinancialChartModel, type: 'candles' | 'ohlc', p: Palette): void {
-  const half = halfBarWidth(m), bodies = type === 'candles', hollowUp = bodies && half >= 1.5
+function paintCandles (ctx: CanvasRenderingContext2D, m: FinancialChartModel, candles: readonly ChartCandlePoint[], half: number, type: 'candles' | 'ohlc', p: Palette): void {
+  const bodies = type === 'candles', hollowUp = bodies && half >= 1.5
   ctx.lineWidth = 1
   for (const group of [1, -1, 0]) {
     const color = group > 0 ? p.up : group < 0 ? p.down : p.flat
     ctx.fillStyle = ctx.strokeStyle = color
-    const hollow = (candle: FinancialChartModel['plottedCandles'][number]): boolean => hollowUp && group > 0 && candle.bodyBottom - candle.bodyTop >= 2
+    const hollow = (candle: ChartCandlePoint): boolean => hollowUp && group > 0 && candle.bodyBottom - candle.bodyTop >= 2
     ctx.beginPath()
-    for (const candle of m.plottedCandles) {
+    for (const candle of candles) {
       if (direction(candle.o, candle.c) !== group) continue
       if (hollow(candle)) {
         ctx.moveTo(candle.x, candle.wickTop); ctx.lineTo(candle.x, candle.bodyTop)
@@ -149,7 +191,7 @@ function paintCandles (ctx: CanvasRenderingContext2D, m: FinancialChartModel, ty
     ctx.stroke()
     if (!bodies || group === 0) continue
     ctx.beginPath()
-    for (const candle of m.plottedCandles) {
+    for (const candle of candles) {
       if (direction(candle.o, candle.c) !== group || hollow(candle)) continue
       ctx.rect(candle.x - half, candle.bodyTop, 2 * half, Math.max(1, candle.bodyBottom - candle.bodyTop))
     }
@@ -170,7 +212,7 @@ export function paintEngineFrame (
   const m = frame.model, g = m.geometry
   if (!ready(m)) return
   const p = palette(options)
-  const digits = precision(options.pricePrecision ?? derivePrecision(frame.snapshot.bars))
+  const digits = precision(options.pricePrecision ?? frame.pricePrecision ?? derivePrecision(frame.snapshot.bars))
   const formatter = timeFormat(options.timeZone ?? 'UTC')
   const bars = frame.snapshot.bars
   const last = frame.indicatorPane === true ? undefined : bars[bars.length - 1]
@@ -199,18 +241,22 @@ export function paintEngineFrame (
       ctx.stroke()
 
       const type = options.chartType ?? 'candles'
-      if (paintPriceSeries(ctx, frame, { ...options, up: p.up, down: p.down, line: p.line, text: p.text, background: p.background })) {
+      const span = frame.snapshot.viewport.i1 - frame.snapshot.viewport.i0
+      const half = (type !== 'line' && type !== 'area') || m.plottedSeries.some(series => series.source.type === 'bar') ? halfBarWidth(m, frame.snapshot.dataStart !== undefined && span > 0 ? g.plotWidth / span : undefined) : 0
+      if (paintPriceSeries(ctx, frame, { ...options, up: p.up, down: p.down, line: p.line, text: p.text, background: p.background }, half)) {
         // Extended series share this clip and the exact same price transform.
       } else if (type === 'line' || type === 'area') {
         if (type === 'area') {
           ctx.fillStyle = options.line === undefined ? colors(options.theme).inkWash : p.line
           ctx.globalAlpha = options.line === undefined ? 1 : 0.14
-          ctx.beginPath(); closePath(ctx, m, true); ctx.fill(); ctx.globalAlpha = 1
+          paintClose(ctx, m, true); ctx.globalAlpha = 1
         }
         ctx.strokeStyle = p.line; ctx.lineWidth = 2; ctx.lineJoin = 'round'
-        ctx.beginPath(); closePath(ctx, m, false); ctx.stroke()
+        paintClose(ctx, m, false)
       } else {
-        paintCandles(ctx, m, type === 'ohlc' ? 'ohlc' : 'candles', p)
+        // Density changes only the paint list; raw data, inspection and indicator rows remain exact.
+        const candles = options.candleDensity === 'pixel-envelope' ? candleEnvelope(m) : m.plottedCandles
+        paintCandles(ctx, m, candles, half, type === 'ohlc' ? 'ohlc' : 'candles', p)
       }
 
       // Lines without their own colour take the pane's slots in order; a fourth
@@ -223,7 +269,7 @@ export function paintEngineFrame (
         const own = series.source.color
         if (series.source.type === 'bar') {
           const base = Math.max(m.min, Math.min(m.max, style?.base ?? 0))
-          const half = halfBarWidth(m), zero = Math.max(g.top, Math.min(g.bottom, m.y(base)))
+          const zero = Math.max(g.top, Math.min(g.bottom, m.y(base)))
           const signed = series.points.some(point => point.value < base)
           if (own === undefined && !signed && directions === null) directions = new Map(bars.map(bar => [bar.timestamp, direction(bar.open, bar.close)]))
           for (const rising of [true, false]) {
@@ -302,7 +348,7 @@ export function paintEngineFrame (
     ctx.fillStyle = p.text; ctx.textAlign = 'center'
     for (const index of options.showTimeAxis === false ? [] : m.xTickIndices) {
       const key = m.xKeys[index]
-      const date = (options.timespan === 'minute' || options.timespan === 'second') && typeof key === 'number' && Number.isFinite(key) && Math.abs(key) <= 8.64e15 ? calendarDate(formatter, key) : null
+      const date = (options.timespan === 'minute' || options.timespan === 'second') && typeof key === 'number' && Number.isFinite(key) && Math.abs(key) <= 8.64e15 ? calendarDate(formatter, key, options.timeZone ?? 'UTC') : null
       const label = typeof key === 'number' ? timeLabel(formatter, key, options, 'xAxis', date === null ? 'HH:mm' : boundaryFormat(date, previousDate)) : String(key)
       const width = Math.min(ctx.measureText(label).width, Math.max(1, g.width - 8))
       const x = Math.max(4 + width / 2, Math.min(g.width - 4 - width / 2, m.xPositions[index]))
@@ -323,7 +369,7 @@ export function paintEngineCursor (
 ): void {
   const m = frame.model, g = m.geometry
   if (!ready(m) || !Number.isFinite(x) || x < g.left || x > g.right) return
-  const index = nearestChartIndex(m, x), hit = frame.inspect(x)
+  const index = nearestChartIndex(m, x), hit = frame.inspectBar !== undefined ? frame.inspectBar(x) : frame.inspect(x)
   if (index === null || hit === null) return
   const p = palette(options)
   const bar = hit.displayBar
@@ -332,7 +378,7 @@ export function paintEngineCursor (
   const px = m.xPositions[index], py = m.y(displayed)
   const indicator = frame.indicatorPane === true
   if (!Number.isFinite(px) || (!indicator && !Number.isFinite(py))) return
-  const digits = precision(options.pricePrecision ?? derivePrecision(frame.snapshot.bars))
+  const digits = precision(options.pricePrecision ?? frame.pricePrecision ?? derivePrecision(frame.snapshot.bars))
   ctx.save()
   try {
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'
@@ -352,7 +398,10 @@ export function paintEngineCursor (
     // Readout: names muted, values in ink, on the canvas colour.
     const parts: Array<[string, string]> = indicator
       ? m.plottedSeries.map(series => {
-        const point = series.points.find(item => item.index === index)
+        // Visible points stay ordered even when warmup/null gaps were filtered.
+        let lo = 0, hi = series.points.length
+        while (lo < hi) { const mid = (lo + hi) >>> 1; if (series.points[mid].index < index) lo = mid + 1; else hi = mid }
+        const point = series.points[lo]?.index === index ? series.points[lo] : undefined
         return [`${series.source.name ?? series.source.id} `, point === undefined ? '—' : String(Number(point.value.toPrecision(6)))]
       })
       : [[hit.mode === 'heikin-ashi' ? 'HA O ' : 'O ', bar.open.toFixed(digits)], ['H ', bar.high.toFixed(digits)], ['L ', bar.low.toFixed(digits)], ['C ', bar.close.toFixed(digits)]]

@@ -2,17 +2,8 @@ import { viewportSpan, clampContinuousViewport as clampViewport, zoomContinuousV
 
 interface Geometry { left: number, plotWidth: number }
 interface Point { x: number, y: number }
-interface Frame {
-  length: number
-  left: number
-  width: number
-  observed: Readonly<Viewport>
-}
-interface Drag extends Frame {
-  start: Viewport
-  x: number
-  distance: number
-}
+interface Frame { length: number, left: number, width: number, observed: Readonly<Viewport> }
+interface Drag extends Frame { start: Viewport, x: number, distance: number }
 
 /** Browser input for the owned engine. Native hosts retain their native gestures. */
 export function attachEngineGestures (
@@ -23,35 +14,45 @@ export function attachEngineGestures (
   options: {
     inertia?: boolean
     reducedMotion?: boolean
-    frameScheduler?: {
-      request: (callback: (time: number) => void) => number
-      cancel: (id: number) => void
-    }
+    frameScheduler?: { request: (callback: (time: number) => void) => number, cancel: (id: number) => void }
   } = {}
 ): (() => void) & { cancelInput: () => void } {
-  const doc = element.ownerDocument
-  const win = doc.defaultView
+  const doc = element.ownerDocument, win = doc.defaultView
   if (win === null) return Object.assign(() => {}, { cancelInput: () => {} })
   const frameScheduler = options.frameScheduler ?? {
     request: (callback: (time: number) => void) => win.requestAnimationFrame(callback),
     cancel: (id: number) => win.cancelAnimationFrame(id)
   }
-  const abort = new win.AbortController()
-  const pointers = new Map<number, Point>()
+  const abort = new win.AbortController(), pointers = new Map<number, Point>()
   const reduced = win.matchMedia?.('(prefers-reduced-motion: reduce)')
   const oldTouchAction = element.style.touchAction
   element.style.touchAction = 'none'
-  let disposed = false
+  let disposed = false, inspection = false
   let drag: Drag | null = null
   let pending: { next: Viewport, frame: Frame } | null = null
-  let wheel: { start: Viewport, delta: number, frame: Frame } | null = null
-  let raf: number | null = null
-  let velocity = 0
-  let sample = { x: 0, time: 0 }
-  let coast: { frame: Frame, start: Viewport, velocity: number, elapsed: number, time: number } | null = null
+  let wheel: { mode: 'pan' | 'zoom', target: Viewport, direction: number, frame: Frame, time: number, lastInput: number } | null = null
+  let raf: number | null = null, rectFrame: number | null = null
+  let rect: DOMRect | null = null
+  let velocity = 0, sample = { x: 0, time: 0 }
+  let coast: { frame: Frame, start: Viewport, velocity: number, started: number } | null = null
+  let hold: { id: number, point: Point, timer: number } | null = null
 
   const editable = (target: EventTarget | null): boolean =>
     target instanceof win.Element && target.closest('input,textarea,select,button,a,[contenteditable]:not([contenteditable="false"])') !== null
+  const invalidateRect = (): void => { rect = null }
+  const bounds = (): DOMRect => {
+    if (rect === null) rect = element.getBoundingClientRect()
+    if (rectFrame === null) rectFrame = frameScheduler.request(() => { rectFrame = null; rect = null })
+    return rect
+  }
+  const eventTime = (event: PointerEvent): number => {
+    const now = win.performance.now()
+    return Number.isFinite(event.timeStamp) && Math.abs(event.timeStamp - now) < 60000 ? event.timeStamp : now
+  }
+  const cancelHold = (): void => {
+    if (hold !== null) win.clearTimeout(hold.timer)
+    hold = null
+  }
   const readFrame = (): Frame | null => {
     const g = geometry(), snapshot = view.getSnapshot()
     return g !== null && Number.isFinite(g.left) && Number.isFinite(g.plotWidth) && g.plotWidth > 0 && snapshot.length > 0
@@ -64,12 +65,13 @@ export function attachEngineGestures (
   }
   const commit = (): void => {
     const value = pending
-    pending = null; wheel = null
+    pending = null
     if (value === null || !valid(value.frame)) return
     view.setViewport(value.next)
-    if (drag !== null) drag.observed = view.getSnapshot().viewport
-    if (coast !== null) coast.frame.observed = view.getSnapshot().viewport
     const snapshot = view.getSnapshot()
+    if (drag !== null) drag.observed = snapshot.viewport
+    if (coast !== null) coast.frame.observed = snapshot.viewport
+    if (wheel !== null) wheel.frame.observed = snapshot.viewport
     if (snapshot.viewport.i0 === 0 && snapshot.hasMore) view.requestMore()
   }
   const schedule = (): void => {
@@ -80,51 +82,63 @@ export function attachEngineGestures (
       if (coast !== null) {
         if (!valid(coast.frame) || reduced?.matches === true || options.reducedMotion === true) coast = null
         else {
-          const dt = Math.max(0, Math.min(50, time - coast.time))
-          coast.time = time; coast.elapsed += dt
-          const decay = Math.exp(-coast.elapsed / 180)
-          const distance = coast.velocity * 180 * (1 - decay)
+          // Absolute elapsed time avoids extending momentum after a long foreground frame.
+          const elapsed = Math.max(0, time - coast.started), decay = Math.exp(-elapsed / 220)
+          const distance = coast.velocity * 220 * (1 - decay)
           const delta = -distance / coast.frame.width * Math.max(0, viewportSpan(coast.start) - 1)
-          const next = clampViewport({ i0: coast.start.i0 + delta, i1: coast.start.i1 + delta }, coast.frame.length)
+          const proposed = { i0: coast.start.i0 + delta, i1: coast.start.i1 + delta }
+          const next = clampViewport(proposed, coast.frame.length, view.getLimits())
           pending = { next, frame: coast.frame }
-          const blocked = (delta < 0 && next.i0 === 0) || (delta > 0 && next.i1 === coast.frame.length - 1)
-          if (Math.abs(coast.velocity * decay) < 0.01 || coast.elapsed >= 1000 || blocked) coast = null
+          const blocked = (delta < 0 && next.i0 > proposed.i0 + 1e-9) || (delta > 0 && next.i1 < proposed.i1 - 1e-9)
+          if (Math.abs(coast.velocity * decay) < 0.01 || elapsed >= 1400 || blocked) coast = null
         }
       }
-      // Queue the next input update before setViewport notifies the renderer.
-      if (coast !== null) schedule()
+      if (wheel !== null) {
+        if (!valid(wheel.frame)) wheel = null
+        else {
+          const current = view.getSnapshot().viewport, target = wheel.target
+          const dt = Math.max(0, time - wheel.time)
+          wheel.time = time
+          const alpha = options.reducedMotion === true || reduced?.matches === true ? 1 : 1 - Math.exp(-dt / 40)
+          const span = viewportSpan(current), targetSpan = viewportSpan(target)
+          const nextSpan = span * Math.exp(Math.log(targetSpan / span) * alpha)
+          const blend = Math.abs(targetSpan - span) > 1e-9 ? (nextSpan - span) / (targetSpan - span) : alpha
+          const next = { i0: current.i0 + (target.i0 - current.i0) * blend, i1: current.i1 + (target.i1 - current.i1) * blend }
+          const remainingPixels = Math.max(Math.abs(next.i0 - target.i0), Math.abs(next.i1 - target.i1)) * wheel.frame.width / Math.max(1, targetSpan - 1)
+          const settled = alpha === 1 || remainingPixels < 0.15 || time - wheel.lastInput >= 280
+          pending = { next: settled ? target : next, frame: wheel.frame }
+          if (settled) wheel = null
+        }
+      }
+      if (coast !== null || wheel !== null) schedule()
       commit()
+      if (pointers.size === 0 && coast === null && wheel === null) view.endNavigation()
     })
   }
   const cancelScheduled = (): void => {
     if (raf !== null) frameScheduler.cancel(raf)
     raf = null
   }
-  const flush = (): void => {
-    cancelScheduled()
-    commit()
-  }
-  const stop = (): void => {
-    cancelScheduled()
-    pending = null; wheel = null; coast = null; velocity = 0
-  }
+  const flush = (): void => { cancelScheduled(); wheel = null; coast = null; commit() }
+  const stop = (): void => { cancelScheduled(); pending = null; wheel = null; coast = null; velocity = 0 }
   const position = (): { x: number, distance: number } => {
-    const [a, b] = [...pointers.values()]
+    const iterator = pointers.values(), a = iterator.next().value as Point, b = iterator.next().value as Point | undefined
     return b === undefined ? { x: a.x, distance: 0 } : { x: (a.x + b.x) / 2, distance: Math.hypot(b.x - a.x, b.y - a.y) }
   }
   const rebase = (): void => {
     const frame = readFrame()
     if (pointers.size === 0 || frame === null) { drag = null; return }
     const p = position()
+    view.beginNavigation()
     drag = { ...frame, start: { ...frame.observed }, x: p.x, distance: p.distance }
     sample = { x: p.x, time: win.performance.now() }; velocity = 0
   }
   const clear = (): void => {
-    stop(); drag = null
+    stop(); cancelHold(); drag = null; inspection = false
     const ids = [...pointers.keys()]
     pointers.clear()
     for (const id of ids) if (element.hasPointerCapture(id)) element.releasePointerCapture(id)
-    cursor(null)
+    view.endNavigation(); cursor(null)
   }
   const on = (type: string, listener: EventListener, passive = true): void => {
     element.addEventListener(type, listener, { signal: abort.signal, passive })
@@ -132,69 +146,128 @@ export function attachEngineGestures (
   on('pointerdown', event => {
     const e = event as PointerEvent
     if (e.button !== 0 || pointers.size >= 2 || editable(e.target) || readFrame() === null) return
-    flush(); stop()
-    const rect = element.getBoundingClientRect()
-    pointers.set(e.pointerId, { x: e.clientX - rect.left, y: e.clientY - rect.top })
-    element.setPointerCapture(e.pointerId)
-    element.focus({ preventScroll: true })
-    rebase()
+    flush(); stop(); cancelHold()
+    if (pointers.size === 0) view.endNavigation()
+    inspection = false
+    view.beginNavigation()
+    const r = bounds(), point = { x: e.clientX - r.left, y: e.clientY - r.top }
+    pointers.set(e.pointerId, point)
+    element.setPointerCapture(e.pointerId); element.focus({ preventScroll: true }); rebase()
+    if (e.pointerType === 'touch' && pointers.size === 1) {
+      const id = e.pointerId
+      hold = {
+        id,
+        point,
+        timer: win.setTimeout(() => {
+          const current = pointers.get(id)
+          if (hold?.id !== id || current === undefined || pointers.size !== 1 || drag === null || !valid(drag)) { cancelHold(); return }
+          hold = null; inspection = true; pending = null; velocity = 0
+          view.endNavigation(); cursor(current.x)
+        }, 450)
+      }
+    } else cursor(null)
   })
-  on('pointermove', event => {
-    const e = event as PointerEvent, rect = element.getBoundingClientRect()
-    const x = e.clientX - rect.left, y = e.clientY - rect.top
-    if (!pointers.has(e.pointerId)) { if (pointers.size === 0 && !editable(e.target)) cursor(x); return }
+  const movePointer = (e: PointerEvent, target: EventTarget | null = e.target): void => {
+    const r = bounds(), x = e.clientX - r.left, y = e.clientY - r.top
+    if (!pointers.has(e.pointerId)) {
+      if (pointers.size === 0 && !inspection && !editable(target)) cursor(x)
+      return
+    }
     pointers.set(e.pointerId, { x, y })
+    if (hold !== null) {
+      if (Math.hypot(x - hold.point.x, y - hold.point.y) <= 8) return
+      cancelHold()
+    }
+    if (inspection && pointers.size === 1) { cursor(x); return }
     if (drag === null || !valid(drag)) { pending = null; rebase(); return }
-    const p = position(), now = win.performance.now()
+    const p = position(), now = eventTime(e)
     const factor = pointers.size === 2 && drag.distance > 1 ? Math.max(1, p.distance) / drag.distance : 1
     const anchor = Math.max(0, Math.min(1, (drag.x - drag.left) / drag.width))
-    const zoomed = zoomViewport(drag.start, drag.length, factor, anchor)
+    const zoomed = zoomViewport(drag.start, drag.length, factor, anchor, view.getLimits())
     const delta = (drag.x - p.x) / drag.width * Math.max(0, viewportSpan(zoomed) - 1)
     pending = { next: { i0: zoomed.i0 + delta, i1: zoomed.i1 + delta }, frame: drag }
     const elapsed = now - sample.time
-    if (pointers.size === 1 && elapsed > 0) velocity = Math.max(-3, Math.min(3, (p.x - sample.x) / elapsed))
-    else velocity = 0
+    if (pointers.size === 1 && elapsed > 0) {
+      const instantaneous = Math.max(-3, Math.min(3, (p.x - sample.x) / elapsed))
+      if (elapsed > 80 || instantaneous * velocity < 0) velocity = 0
+      velocity += (instantaneous - velocity) * (1 - Math.exp(-elapsed / 30))
+    } else if (pointers.size !== 1) velocity = 0
     sample = { x: p.x, time: now }
     schedule(); cursor(p.x)
+  }
+  on('pointermove', event => {
+    const e = event as PointerEvent, coalesced = e.getCoalescedEvents?.()
+    // The final physical sample controls the viewport; intermediate samples need no layout work.
+    const latest = coalesced === undefined || coalesced.length === 0 ? e : coalesced[coalesced.length - 1]
+    movePointer(latest, e.target)
   })
   on('pointerup', event => {
     const e = event as PointerEvent
     if (!pointers.has(e.pointerId)) return
+    const last = pointers.get(e.pointerId)!, r = bounds()
+    if (last.x !== e.clientX - r.left || last.y !== e.clientY - r.top) movePointer(e)
     const wasSingle = pointers.size === 1, recent = win.performance.now() - sample.time < 80
     const currentDrag = drag !== null && valid(drag)
-    flush()
-    pointers.delete(e.pointerId)
+    flush(); cancelHold(); pointers.delete(e.pointerId)
     if (element.hasPointerCapture(e.pointerId)) element.releasePointerCapture(e.pointerId)
     if (pointers.size > 0) { rebase(); return }
     const frame = readFrame(), speed = velocity
     drag = null
-    if (wasSingle && currentDrag && recent && frame !== null && options.inertia === true && options.reducedMotion !== true && reduced?.matches !== true && Math.abs(speed) > 0.05) {
-      coast = { frame, start: { ...frame.observed }, velocity: speed, elapsed: 0, time: win.performance.now() }
+    if (!inspection && wasSingle && currentDrag && recent && frame !== null && options.inertia === true && options.reducedMotion !== true && reduced?.matches !== true && Math.abs(speed) > 0.05) {
+      coast = { frame, start: { ...frame.observed }, velocity: speed, started: win.performance.now() }
       schedule()
-    }
-    if (e.pointerType !== 'mouse') cursor(null)
+    } else view.endNavigation()
+    if (e.pointerType !== 'mouse' && !inspection) cursor(null)
   })
   on('pointercancel', clear)
   on('lostpointercapture', event => { if (pointers.has((event as PointerEvent).pointerId)) clear() })
-  on('pointerleave', () => { if (pointers.size === 0) cursor(null) })
+  on('pointerleave', () => { if (pointers.size === 0 && !inspection) cursor(null) })
   on('blur', clear)
   on('focusin', event => { if (editable(event.target)) clear() })
   win.addEventListener('blur', clear, { signal: abort.signal })
+  win.addEventListener('resize', invalidateRect, { signal: abort.signal })
+  doc.addEventListener('scroll', invalidateRect, { signal: abort.signal, capture: true, passive: true })
   doc.addEventListener('visibilitychange', () => { if (doc.hidden) clear() }, { signal: abort.signal })
   on('wheel', event => {
     const e = event as WheelEvent, frame = readFrame()
     if (frame === null || editable(e.target) || pointers.size > 0) return
-    e.preventDefault(); coast = null
-    if (wheel === null || !valid(wheel.frame)) wheel = { start: { ...frame.observed }, delta: 0, frame }
-    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? element.clientHeight : 1
-    wheel.delta = Math.max(-4000, Math.min(4000, wheel.delta + Math.max(-400, Math.min(400, e.deltaY * unit))))
-    const x = e.clientX - element.getBoundingClientRect().left
-    pending = { next: zoomViewport(wheel.start, frame.length, Math.exp(-wheel.delta * 0.002), (x - frame.left) / frame.width), frame: wheel.frame }
+    const unitX = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? frame.width : 1
+    const unitY = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? element.clientHeight : 1
+    const dx = e.deltaX * unitX, dy = e.deltaY * unitY, now = win.performance.now()
+    const locked = wheel !== null && now - wheel.lastInput < 160 ? wheel.mode : null
+    const mode = e.ctrlKey ? 'zoom' : e.shiftKey ? 'pan' : locked ?? (Math.abs(dx) > Math.abs(dy) * 1.2 ? 'pan' : 'zoom')
+    const raw = mode === 'pan' ? (e.shiftKey && dx === 0 ? dy : dx) : dy
+    const delta = Math.max(-400, Math.min(400, raw))
+    if (!Number.isFinite(delta) || delta === 0) return
+    e.preventDefault()
+    if (coast !== null) { flush(); view.endNavigation() }
+    coast = null; cancelHold(); inspection = false
+    const direction = Math.sign(delta)
+    if (wheel === null || !valid(wheel.frame) || wheel.direction !== direction || wheel.mode !== mode) {
+      if (wheel !== null && wheel.mode !== mode) view.endNavigation()
+      view.beginNavigation()
+      wheel = { mode, target: { ...frame.observed }, direction, frame, time: now, lastInput: now }
+    }
+    const x = e.clientX - bounds().left
+    if (mode === 'zoom') wheel.target = zoomViewport(wheel.target, frame.length, Math.exp(-delta * 0.002), (x - frame.left) / frame.width, view.getLimits())
+    else {
+      const bars = delta / frame.width * Math.max(0, viewportSpan(wheel.target) - 1)
+      wheel.target = clampViewport({ i0: wheel.target.i0 + bars, i1: wheel.target.i1 + bars }, frame.length, view.getLimits())
+    }
+    wheel.lastInput = now
     schedule(); cursor(x)
   }, false)
   on('keydown', event => {
     const e = event as KeyboardEvent
-    if (editable(e.target) || e.altKey || e.ctrlKey || e.metaKey || e.isComposing) return
+    if (editable(e.target) || e.ctrlKey || e.metaKey || e.isComposing) return
+    if (e.altKey) {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        flush(); clear()
+        if (e.key === 'ArrowLeft') view.undoNavigation(); else view.redoNavigation()
+        e.preventDefault()
+      }
+      return
+    }
     if (e.key === 'Escape') { clear(); e.preventDefault(); return }
     if (!['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', '+', '=', '-', 'Home'].includes(e.key)) return
     flush(); clear()
@@ -215,6 +288,8 @@ export function attachEngineGestures (
   const cleanup = (): void => {
     if (disposed) return
     disposed = true; abort.abort(); clear()
+    if (rectFrame !== null) frameScheduler.cancel(rectFrame)
+    rectFrame = null; rect = null
     element.style.touchAction = oldTouchAction
   }
   return Object.assign(cleanup, { cancelInput: clear })

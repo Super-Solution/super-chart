@@ -45,6 +45,13 @@ export interface VolumeProfileOptions {
   valueArea?: number
 }
 
+/** Upper bound for `rows`: far above any useful profile, far below an allocation that can exhaust memory. */
+const MAX_ROWS = 10_000
+
+const usable = (bar: VolumeProfileBar): boolean => Number.isFinite(bar.high) && Number.isFinite(bar.low)
+/** A volume that is not a finite positive number counts as none, so one bad bar cannot poison every row. */
+const volumeOf = (bar: VolumeProfileBar): number => Number.isFinite(bar.volume) && bar.volume > 0 ? bar.volume : 0
+
 function clampBin (bin: number, rows: number): number {
   return Math.max(0, Math.min(rows - 1, bin))
 }
@@ -53,9 +60,14 @@ function clampBin (bin: number, rows: number): number {
 export function volumeProfile (bars: readonly VolumeProfileBar[], options: VolumeProfileOptions = {}): VolumeProfileResult {
   const rows = options.rows ?? 24
   const valueArea = options.valueArea ?? 0.7
+  // `rows` sizes an allocation, so an unbounded or fractional value must not reach it.
+  if (!Number.isInteger(rows) || rows < 1 || rows > MAX_ROWS) throw new RangeError(`Volume profile rows must be an integer from 1 to ${MAX_ROWS}`)
+  if (!(valueArea > 0 && valueArea <= 1)) throw new RangeError('Volume profile value area must be above 0 and at most 1')
   let pmin = Infinity
   let pmax = -Infinity
   for (const b of bars) {
+    // A bar without a finite range says nothing about price; it is skipped everywhere below.
+    if (!usable(b)) continue
     if (b.low < pmin) pmin = b.low
     if (b.high > pmax) pmax = b.high
   }
@@ -64,7 +76,7 @@ export function volumeProfile (bars: readonly VolumeProfileBar[], options: Volum
   }
   if (!(pmax > pmin)) {
     // A flat range (every bar's high === low, or a single price): one row holds everything.
-    const total = bars.reduce((s, b) => s + Math.max(0, b.volume), 0)
+    const total = bars.reduce((s, b) => s + (usable(b) ? volumeOf(b) : 0), 0)
     return {
       rows: [{ priceLow: pmin, priceHigh: pmin, volume: total }],
       poc: pmin,
@@ -77,7 +89,7 @@ export function volumeProfile (bars: readonly VolumeProfileBar[], options: Volum
   const vol = new Array<number>(rows).fill(0)
   const binH = (pmax - pmin) / rows
   for (const b of bars) {
-    const v = Math.max(0, b.volume)
+    const v = usable(b) ? volumeOf(b) : 0
     if (v <= 0) continue
     if (!(b.high > b.low)) {
       vol[clampBin(Math.floor((b.low - pmin) / binH), rows)] += v

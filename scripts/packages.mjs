@@ -27,7 +27,8 @@ export const PACKAGES = [
     description: 'Canvas chart engine and workspace for the browser: drawing tools, replay, annotations and market overlays.',
     deps: ['core'],
     global: { entry: 'src/index.ts', file: 'super-chart.global', name: 'SuperChart' },
-    entries: { '.': ['src/index.ts', 'index'], './annotations': ['src/annotations.ts', 'annotations'], './overlays': ['src/overlayEntry.ts', 'overlays'] }
+    additionalGlobals: [{ entry: 'src/engine.ts', file: 'super-chart.engine.global', name: 'SuperChartEngine' }],
+    entries: { '.': ['src/index.ts', 'index'], './engine': ['src/engine.ts', 'engine'], './annotations': ['src/annotations.ts', 'annotations'], './overlays': ['src/overlayEntry.ts', 'overlays'] }
   },
   {
     dir: 'chat-plugin', path: 'packages/integrations/chat-plugin', name: `${SCOPE}/super-chart-chat-plugin`,

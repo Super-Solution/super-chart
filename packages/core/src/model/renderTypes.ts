@@ -10,6 +10,8 @@ export type EngineChartType = typeof ENGINE_CHART_TYPES[number]
 
 export interface EngineRenderOptions {
   chartType?: EngineChartType
+  /** Explicit dense-candle paint aggregation; raw prices and inspection stay unchanged. */
+  candleDensity?: 'raw' | 'pixel-envelope'
   /** Baseline chart reference price; defaults to the first visible close. */
   baseline?: number
   /** Selects the Super Chart light or dark palette; the single colours below override it. Default dark. */

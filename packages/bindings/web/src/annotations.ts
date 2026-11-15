@@ -286,8 +286,10 @@ export class EngineAnnotations implements EngineLayer {
         const tone = this.applyTone(context, annotation)
         if (annotation.spec.kind !== 'marker') {
           for (const point of annotation.spec.kind === 'zone' ? annotation.spec.anchors : annotation.spec.anchors.slice(0, 1)) {
-            const projected = this.frame?.project(point.time, point.price!)
-            if (projected != null && Number.isFinite(projected.y)) tags.push({ y: projected.y, price: point.price!, color: tone })
+            const price = point.price
+            if (price === undefined) continue
+            const projected = this.frame?.project(point.time, price)
+            if (projected != null && Number.isFinite(projected.y)) tags.push({ y: projected.y, price, color: tone })
           }
         }
         // A label never sits over a price other than the one it names: it is centred on its

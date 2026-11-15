@@ -153,6 +153,19 @@ function describe (pair: Pair): string {
   return `${String(pair.symbol?.ticker)} ${String(pair.period?.text ?? `${pair.period?.multiplier} ${pair.period?.timespan}`)}`
 }
 
+/** The longest delay setTimeout honours; a larger one fires at once. */
+const MAX_TIMER_MS = 2_147_483_647
+
+function optionInt (name: string, value: number, min: number, max: number): number {
+  if (!Number.isSafeInteger(value) || value < min || value > max) throw new RangeError(`Loader option ${name} must be an integer from ${min} to ${max}, got ${String(value)}`)
+  return value
+}
+
+function optionMs (name: string, value: number, min: number, max: number): number {
+  if (!Number.isFinite(value) || value < min || value > max) throw new RangeError(`Loader option ${name} must be from ${min} to ${max} milliseconds, got ${String(value)}`)
+  return value
+}
+
 export class DataLoader {
   private readonly _env: LoaderEnv
   private readonly _datafeed: Datafeed
@@ -215,12 +228,18 @@ export class DataLoader {
   constructor (options: LoaderOptions) {
     this._env = createRuntimeEnvironment(options.env)
     this._datafeed = options.datafeed
-    this._count = options.count ?? 500
-    this._timeoutMs = options.loadTimeoutMs ?? 20_000
-    this._syncMinMs = options.syncMinIntervalMs ?? 30_000
-    this._syncTimeoutMs = options.syncTimeoutMs ?? 10_000
-    this._moreRetry = options.moreRetryMs ?? { base: 1000, max: 30_000 }
-    this._coalescer = new TickCoalescer(bars => { this._applyTicks(bars) }, this._env, Math.max(0, options.tickThrottleMs ?? 0))
+    // These size requests and timers. A NaN or negative count used to ask a feed for its whole history or for nothing,
+    // and a timer past the 32-bit limit fires at once, so each is checked and named instead.
+    this._count = optionInt('count', options.count ?? 500, 1, 1_000_000)
+    this._timeoutMs = optionMs('loadTimeoutMs', options.loadTimeoutMs ?? 20_000, 1, MAX_TIMER_MS)
+    this._syncMinMs = optionMs('syncMinIntervalMs', options.syncMinIntervalMs ?? 30_000, 0, Number.MAX_SAFE_INTEGER)
+    this._syncTimeoutMs = optionMs('syncTimeoutMs', options.syncTimeoutMs ?? 10_000, 1, MAX_TIMER_MS)
+    this._moreRetry = options.moreRetryMs === undefined
+      ? { base: 1000, max: 30_000 }
+      : { base: optionMs('moreRetryMs.base', options.moreRetryMs.base, 1, MAX_TIMER_MS), max: optionMs('moreRetryMs.max', options.moreRetryMs.max, 1, MAX_TIMER_MS) }
+    if (options.tickThrottleMs !== undefined && !Number.isFinite(options.tickThrottleMs)) throw new RangeError('Loader option tickThrottleMs must be a finite number of milliseconds')
+    const tickThrottleMs = optionMs('tickThrottleMs', Math.max(0, options.tickThrottleMs ?? 0), 0, MAX_TIMER_MS)
+    this._coalescer = new TickCoalescer(bars => { this._applyTicks(bars) }, this._env, tickThrottleMs)
     this._cache = options.historyCache === undefined || options.historyCache === false ? null : new HistoryCache(options.historyCache)
   }
 
@@ -463,7 +482,7 @@ export class DataLoader {
       state = tickReplay(state, bar)
     }
     this._replay = state
-    chart.applyNewData(replayBars(state), this._more)
+    this._replaceData(replayBars(state), this._more)
     this._emit('replay', true)
     return true
   }
@@ -476,18 +495,35 @@ export class DataLoader {
       return
     }
     const next = stepReplay(prev, dir)
-    const apply = replayApply(prev, next, lastTimestamp(chart))
     this._replay = next
+    // Only shorten the same replay source. A mismatching sink falls back to a full rebuild.
+    if (next !== prev && next.full === prev.full && next.idx < prev.idx &&
+        chart.truncateData?.(next.idx + 1, prev.idx + 1, prev.full[prev.idx].timestamp) === true) return
+    const currentHead = lastTimestamp(chart)
+    if (next.full === prev.full && next.idx > prev.idx + 1 && chart.updateDataBatch !== undefined &&
+        currentHead === prev.full[prev.idx].timestamp) {
+      chart.updateDataBatch(next.full.slice(prev.idx + 1, next.idx + 1), this._more)
+      return
+    }
+    const apply = replayApply(prev, next, currentHead)
     if (apply.kind === 'append') {
       chart.updateData(apply.bar)
     } else if (apply.kind === 'rebuild') {
-      chart.applyNewData(apply.bars, this._more)
+      this._replaceData(apply.bars, this._more)
     }
   }
 
   /** End the replay and show every bar, including what arrived during it. */
   exitReplay (): void {
     this._endReplay(true)
+  }
+
+  /** Loader batches are normalized; optional sinks avoid repeating normalization, never validation. */
+  private _replaceData (bars: MarketBar[], more = false): void {
+    const chart = this._chart
+    if (chart === null) return
+    if (chart.applyNormalizedData !== undefined) chart.applyNormalizedData(bars, more)
+    else chart.applyNewData(bars, more)
   }
 
   // ---- loading --------------------------------------------------------------
@@ -532,7 +568,7 @@ export class DataLoader {
       const entry = this._cache.get(historyKey(pair.symbol, pair.period), this._env.now())
       if (entry !== undefined) {
         cachedBars = entry.bars
-        this._chart.applyNewData(entry.bars.slice(), entry.more)
+        this._replaceData(entry.bars.slice(), entry.more)
       }
     }
     const [from, to] = requestRange(pair.period, this._env.now(), this._count)
@@ -612,7 +648,7 @@ export class DataLoader {
         for (const bar of tail) chart.updateData(bar)
       }
     } else {
-      chart.applyNewData(bars, this._more)
+      this._replaceData(bars, this._more)
     }
     if (this._cache !== null) {
       this._cache.set(historyKey(pair.symbol, pair.period), { bars, more: this._more, at: this._env.now() })
@@ -629,7 +665,7 @@ export class DataLoader {
     const e: DataLoadError = { phase: 'initial', symbol: pair.symbol, period: pair.period, error, timeout }
     this._setStatus({ state: 'error', loadingMore: false, error: e })
     // Clear the old pair's bars: the new pair's label must not sit over them.
-    this._chart?.applyNewData([], false)
+    this._replaceData([], false)
     this._emitError(e)
   }
 
@@ -924,7 +960,7 @@ export class DataLoader {
         this._sparse = hasHoles(window, pair.period)
         // Status first: applyNewData may ask for older bars at once (see _show).
         this._setStatus({ state: window.length > 0 || held.length > 0 ? 'ready' : 'empty', loadingMore: false, error: null })
-        chart.applyNewData(window, this._more)
+        this._replaceData(window, this._more)
       }
       for (const bar of held) {
         this._coalescer.push(bar)
@@ -984,7 +1020,7 @@ export class DataLoader {
     }
     this._replay = null
     if (restore) {
-      this._chart?.applyNewData(state.full.slice(), this._more)
+      this._replaceData(state.full.slice(), this._more)
     }
     this._emit('replay', false)
   }

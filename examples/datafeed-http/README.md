@@ -18,7 +18,7 @@ new SuperChart(host, { datafeed, symbol: { ticker: 'SAMPLE-USD', pricePrecision:
 
 | File | What it is |
 | --- | --- |
-| `httpDatafeed.ts` | `createHttpDatafeed({ baseUrl, token?, pollMs? })`: search, paged history, polling for the live bar |
+| `httpDatafeed.ts` | `createHttpDatafeed({ baseUrl, token?, pollMs?, timeoutMs? })`: search, paged history, polling for the live bar; every request is cut off after `timeoutMs` (default 15 s) and a market keeps one poll timer however often it is re-subscribed |
 | `serve.mjs` | the contract over `data/<TICKER>.<period>.csv`; no auth, no rate limit, no TLS (an example) |
 | `data/SAMPLE-USD.1h.csv`, `.1d.csv` | fictional random-walk bars, `timestamp` as ISO-8601 UTC or epoch milliseconds |
 | `data/symbols.json` | the symbol list the server answers `/v1/symbols` with |

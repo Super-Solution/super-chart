@@ -37,8 +37,21 @@ function polyline (sink: DrawingGeometrySink, points: readonly Point[]): void {
   for (let i = 1; i < points.length; i++) sink.line(points[i - 1], points[i])
 }
 
-/** Sample a Bézier curve of any degree with de Casteljau's recurrence and draw it as `steps` segments. */
-function bezier (sink: DrawingGeometrySink, controls: readonly Point[], steps: number): void {
+/** Linear interpolation error is bounded by max |second derivative| / (8 * steps²).
+ * Screen-space curvature reduces work for small curves and preserves detail when zoomed. */
+function curveSegments (controls: readonly Point[]): number {
+  const degree = controls.length - 1
+  let secondDerivative = 0
+  for (let i = 2; i < controls.length; i++) {
+    const a = controls[i - 2], b = controls[i - 1], c = controls[i]
+    secondDerivative = Math.max(secondDerivative, degree * (degree - 1) * Math.hypot(a.x - 2 * b.x + c.x, a.y - 2 * b.y + c.y))
+  }
+  return Math.max(1, Math.min(1024, Math.ceil(Math.sqrt(secondDerivative / (8 * 0.35)))))
+}
+
+/** Sample a Bézier curve with de Casteljau's recurrence at screen-dependent density. */
+function bezier (sink: DrawingGeometrySink, controls: readonly Point[]): void {
+  const steps = curveSegments(controls)
   let previous = controls[0]
   for (let step = 1; step <= steps; step++) {
     const t = step / steps
@@ -168,10 +181,10 @@ const BUILDERS: Readonly<Partial<Record<Drawing['type'], Builder>>> = {
     arc(sink, { x: a.x, y: a.y - 18 }, 8, 0, TAU)
   },
   // The second anchor is the control point of a quadratic curve.
-  curve: ({ points: [a, b, c], sink }) => bezier(sink, [a, b, c], 64),
+  curve: ({ points: [a, b, c], sink }) => bezier(sink, [a, b, c]),
   // The second anchor lies on the arc: the control point is chosen so the quadratic passes through it at t = 1/2.
-  arc: ({ points: [a, b, c], sink }) => bezier(sink, [a, { x: 2 * b.x - (a.x + c.x) / 2, y: 2 * b.y - (a.y + c.y) / 2 }, c], 64),
-  'double-curve': ({ points: [a, b, c, d], sink }) => bezier(sink, [a, b, c, d], 96),
+  arc: ({ points: [a, b, c], sink }) => bezier(sink, [a, { x: 2 * b.x - (a.x + c.x) / 2, y: 2 * b.y - (a.y + c.y) / 2 }, c]),
+  'double-curve': ({ points: [a, b, c, d], sink }) => bezier(sink, [a, b, c, d]),
   'disjoint-channel': ({ points: [a, b, c], sink }) => sink.polygon([a, b, { x: c.x + b.x - a.x, y: c.y + b.y - a.y }, c]),
   'rotated-rectangle': ({ points: [a, b, c], sink }) => {
     const length = distance(a, b)

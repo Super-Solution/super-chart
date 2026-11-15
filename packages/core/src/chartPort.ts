@@ -3,6 +3,10 @@ import type { MarketBar } from './types'
 /** Small renderer-owned data sink. The core owns no canvas or native view. */
 export interface ChartDataPort<Bar = MarketBar> {
   applyNewData: (data: Bar[], more?: boolean) => void
+  /** Already-normalized input; the sink must still validate and take ownership. */
+  applyNormalizedData?: (data: Bar[], more?: boolean) => void
+  /** Remove a visible replay suffix only when the expected current head matches. */
+  truncateData?: (length: number, expectedLength: number, expectedLastTimestamp: number) => boolean
   applyMoreData: (data: Bar[], more?: boolean) => void
   updateData: (data: Bar) => void
   /** Optional ordered tail batch; equivalent to updateData in order, with one render notification. */

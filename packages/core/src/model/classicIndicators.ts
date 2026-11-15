@@ -1,4 +1,5 @@
 import type { MarketBar } from '../types'
+import { indicatorField } from './indicatorInputs'
 import {
   sma, ema, rma, sum, highest, lowest, trueRange, cci, obv, roc, mom, type Series
 } from '../ta'
@@ -16,10 +17,7 @@ function finite (value: unknown): number | null {
 }
 
 function field (bars: readonly MarketBar[], key: 'open' | 'high' | 'low' | 'close' | 'volume'): Series {
-  return bars.map(bar => {
-    const value = finite(bar[key])
-    return key === 'volume' && value !== null && value < 0 ? null : value
-  })
+  return indicatorField(bars, key, key === 'volume' ? 'volume' : 'finite')
 }
 
 function combine (a: Series, b: Series, operation: (x: number, y: number) => number): Series {

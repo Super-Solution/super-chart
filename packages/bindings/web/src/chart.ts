@@ -1,4 +1,4 @@
-import { RealtimeSeries, RealtimeView, normalizeBars, normalizeBar, ENGINE_CHART_TYPES, buildEngineFrame, validateEngineLayout, validatePriceScale, EngineIndicators, DrawingStore, projectDrawing, type CandleMode, type MarketBar, type ChartDataPort, type EngineRenderOptions, type EngineFrame, type EngineLayout, type EngineInspection, type EngineIndicatorSpec, type IndicatorDefinition, type Drawing, type DrawingType } from '@supersolutions/super-chart-core'
+import { RealtimeSeries, RealtimeView, normalizeBars, normalizeBar, ENGINE_CHART_TYPES, buildEngineFrame, validateEngineLayout, validatePriceScale, EngineIndicators, DrawingStore, DRAWING_TYPES, projectDrawing, viewportLimitsForWidth, financialGeometry, type CandleMode, type MarketBar, type ChartDataPort, type EngineRenderOptions, type EngineFrame, type EngineLayout, type EngineInspection, type EngineIndicatorSpec, type IndicatorDefinition, type Drawing, type DrawingType } from '@supersolutions/super-chart-core'
 import { paintEngineFrame, paintEngineCursor } from './canvasRenderer'
 import { attachEngineGestures } from './gestures'
 import { attachDrawingInteraction } from './drawingInteraction'
@@ -9,6 +9,10 @@ import { DrawingImageRenderer } from './drawingMedia'
 
 export interface EngineChartOptions {
   count?: number
+  /** Visible candle bounds for wheel, pinch, keyboard and programmatic navigation. */
+  viewport?: { minBars?: number, maxBars?: number, rightPaddingBars?: number, minCandleSpacing?: number, maxCandleSpacing?: number }
+  /** Optional quality budget per Canvas layer; default uses the device pixel ratio. */
+  resolution?: { maxPixelRatio?: number, maxCanvasPixels?: number }
   mode?: CandleMode
   layout?: EngineLayout
   render?: EngineRenderOptions
@@ -45,6 +49,8 @@ export class EngineChart {
   /** Loader boundary. Data reads return copies and are not used by the render hot path. */
   readonly dataPort: ChartDataPort = Object.freeze({
     applyNewData: (bars: MarketBar[], more?: boolean) => { this.setData(bars, more) },
+    applyNormalizedData: (bars: MarketBar[], more?: boolean) => { this.assertLive(); this.validateBars(bars, this.layout, bars[0]?.close, true); this.series.applyNewData(bars, more) },
+    truncateData: (length: number, expectedLength: number, expectedLastTimestamp: number) => { this.assertLive(); return this.series.truncateData(length, expectedLength, expectedLastTimestamp) },
     applyMoreData: (bars: MarketBar[], more?: boolean) => { this.prependData(bars, more) },
     updateData: (bar: MarketBar) => { this.update(bar) },
     updateDataBatch: (bars: MarketBar[], more?: boolean) => { this.updateBatch(bars, more) },
@@ -91,6 +97,9 @@ export class EngineChart {
   private cursorDirty = true
   private disposed = false
   private readonly invalidateDrawings = (): void => { if (!this.disposed) { this.drawingDirty = true; this.schedule() } }
+  private readonly viewportOptions: NonNullable<EngineChartOptions['viewport']>
+  private readonly resolution: NonNullable<EngineChartOptions['resolution']>
+  private densityWidth = -1
   private layout: EngineLayout
   private renderOptions: EngineRenderOptions
   private dprQuery: MediaQueryList | null = null
@@ -105,10 +114,15 @@ export class EngineChart {
     this.layout = copyLayout(options.layout ?? {})
     validateEngineLayout(this.layout)
     validatePriceScale(this.layout.priceScale ?? {})
+    this.viewportOptions = { minBars: 20, maxBars: 1200, rightPaddingBars: 12, ...options.viewport }
+    viewportLimitsForWidth(0, this.viewportOptions)
+    this.resolution = { ...options.resolution }
+    if (this.resolution.maxPixelRatio !== undefined && (!Number.isFinite(this.resolution.maxPixelRatio) || this.resolution.maxPixelRatio <= 0)) throw new RangeError('Pixel ratio cap must be positive and finite')
+    if (this.resolution.maxCanvasPixels !== undefined && (!Number.isSafeInteger(this.resolution.maxCanvasPixels) || this.resolution.maxCanvasPixels < 1)) throw new RangeError('Canvas pixel budget must be a positive safe integer')
     this.renderOptions = { ...options.render }
     this.validateRender(this.renderOptions)
     for (const spec of options.indicators ?? [{ name: 'MA', params: [20] }, { name: 'EMA', params: [21] }]) this.indicators.add(spec)
-    this.view = new RealtimeView(this.series, { count: options.count, mode: options.mode, continuous: true })
+    this.view = new RealtimeView(this.series, { count: options.count, mode: options.mode, continuous: true, limits: this.viewportOptions })
     this.onInspect = options.onInspect
     this.root = this.doc.createElement('div')
     this.root.style.cssText = 'position:relative;width:100%;height:100%;min-height:0;overflow:hidden;touch-action:none;'
@@ -117,6 +131,7 @@ export class EngineChart {
     this.root.setAttribute('aria-label', 'Chart. Drag to pan, pinch or wheel to zoom; Home follows the latest candle.')
     this.canvas = this.doc.createElement('canvas')
     this.drawingCanvas = this.doc.createElement('canvas')
+    this.drawingCanvas.width = this.drawingCanvas.height = 1
     this.cursorCanvas = this.doc.createElement('canvas')
     for (const canvas of [this.canvas, this.drawingCanvas, this.cursorCanvas]) {
       canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;'
@@ -138,25 +153,26 @@ export class EngineChart {
     this.unsubscribers.push(this.view.subscribe(() => {
       const snapshot = this.view.getSnapshot(), previous = this.frame?.snapshot
       // Offscreen appends can change total length without changing visible pixels.
-      if (previous === undefined || snapshot.bars !== previous.bars || snapshot.ma20 !== previous.ma20 || snapshot.ema21 !== previous.ema21) {
+      if (previous === undefined || snapshot.viewport !== previous.viewport || snapshot.bars !== previous.bars || snapshot.ma20 !== previous.ma20 || snapshot.ema21 !== previous.ema21) {
         this.geometryDirty = true
       }
       this.cursorDirty = true
       this.schedule()
     }))
     this.unsubscribers.push(this.drawings.subscribe(() => { this.retainDrawingImages(); this.drawingDirty = true; this.schedule() }))
-    this.unsubscribers.push(attachPaneInteraction(this.root, () => this.frame, () => this.layout, options => this.setLayout(options), () => this.stopGestures.cancelInput()))
+    const frameScheduler = {
+      request: (callback: (time: number) => void): number => { const id = ++this.inputId; this.inputs.set(id, callback); this.schedule(); return id },
+      cancel: (id: number): void => { this.inputs.delete(id) }
+    }
+    this.unsubscribers.push(attachPaneInteraction(this.root, () => this.frame, () => this.layout, options => this.setLayout(options), () => this.stopGestures.cancelInput(), this.view, frameScheduler))
     this.drawingInput = attachDrawingInteraction(this.root, this.drawings, () => this.frame, preview => {
       this.preview = preview; this.drawingDirty = true; this.schedule()
     }, options.onToolComplete, () => this.stopGestures.cancelInput(), this.drawingImages)
     this.stopGestures = attachEngineGestures(this.root, this.view, () => this.frame?.model.geometry ?? null, x => {
-      this.cursorX = x; this.cursorDirty = true; this.schedule()
+      if (this.cursorX !== x) { this.cursorX = x; this.cursorDirty = true; this.schedule() }
     }, {
-      inertia: options.inertia,
-      frameScheduler: {
-        request: callback => { const id = ++this.inputId; this.inputs.set(id, callback); this.schedule(); return id },
-        cancel: id => { this.inputs.delete(id) }
-      }
+      inertia: options.inertia !== false,
+      frameScheduler
     })
     this.resizeObserver = new this.win.ResizeObserver(() => this.schedule())
     this.resizeObserver.observe(this.root)
@@ -249,7 +265,12 @@ export class EngineChart {
     })
   }
 
-  setDrawingTool (tool: DrawingType | null): void { this.assertLive(); this.drawingInput.setTool(tool) }
+  setDrawingTool (tool: DrawingType | null): void {
+    this.assertLive()
+    // An unknown name would arm a tool that swallows every pointer gesture and draws nothing.
+    if (tool !== null && !(DRAWING_TYPES as readonly string[]).includes(tool)) throw new RangeError(`Unknown drawing tool ${JSON.stringify(tool)}`)
+    this.drawingInput.setTool(tool)
+  }
 
   /** Own this layer until removal or chart disposal. It receives only revealed replay data. */
   addLayer (layer: EngineLayer): () => void {
@@ -274,7 +295,9 @@ export class EngineChart {
     const next = copyLayout({ ...this.layout, ...options })
     validateEngineLayout(next)
     validatePriceScale(next.priceScale ?? {})
-    this.validateBars(this.series.getDataList(), next)
+    // Stored bars were validated at ingestion. Only a scale-mode transition
+    // introduces new raw-price requirements; resizing panes need not rescan history.
+    if ((next.priceScale?.mode ?? 'linear') !== (this.layout.priceScale?.mode ?? 'linear')) this.validateBars(this.series.getDataList(), next)
     this.layout = next
     this.geometryDirty = true; this.schedule()
   }
@@ -333,6 +356,11 @@ export class EngineChart {
   /** Repaint owned layers after their model changes without rebuilding candle geometry. */
   requestPaint (): void { this.assertLive(); this.paintDirty = true; this.drawingDirty = true; this.schedule() }
 
+  private hasLayerLabels (): boolean {
+    for (const layer of this.layers) if (layer.paintLabels !== undefined) return true
+    return false
+  }
+
   private paintLayerLabels (context: CanvasRenderingContext2D): void {
     for (const layer of this.layers) {
       if (layer.paintLabels === undefined) continue
@@ -387,7 +415,7 @@ export class EngineChart {
       const ctx = copy.getContext('2d')
       if (ctx === null) throw new Error('Canvas 2D is unavailable')
       ctx.drawImage(this.canvas, 0, 0)
-      ctx.setTransform(this.ratio, 0, 0, this.ratio, 0, 0)
+      ctx.setTransform(this.canvas.width / this.width, 0, 0, this.canvas.height / this.height, 0, 0)
       const bounds = this.frame.model.geometry
       paintDrawings(ctx, this.drawings.geometry(this.frame.project, bounds, this.frame.drawingContext), null, { theme: this.renderOptions.theme, bounds, imageRenderer: this.drawingImages })
       this.paintLayerLabels(ctx)
@@ -422,17 +450,20 @@ export class EngineChart {
     return current.length === 0 ? bars[0]?.close : current.length === 1 ? bars.find(bar => bar.timestamp === current[0].timestamp)?.close ?? current[0].close : current[0].close
   }
 
-  private validateBars (bars: readonly MarketBar[], layout = this.layout, base = this.series.getDataList()[0]?.close ?? bars[0]?.close): void {
+  private validateBars (bars: readonly MarketBar[], layout = this.layout, base = this.series.getDataList()[0]?.close ?? bars[0]?.close, normalized = false): void {
     if (layout.priceScale?.mode === 'percentage' && base === 0) throw new RangeError('Percentage scale needs a nonzero reference price')
     for (const bar of bars) {
-      if (![bar.timestamp, bar.open, bar.high, bar.low, bar.close].every(Number.isFinite) || bar.high < Math.max(bar.open, bar.close) || bar.low > Math.min(bar.open, bar.close)) throw new RangeError('Candle has invalid OHLC bounds')
-      if (Math.abs(bar.timestamp) > 8.64e15) throw new RangeError('Candle timestamp is outside the supported Date range')
-      if (layout.priceScale?.mode === 'log' && Math.min(bar.open, bar.high, bar.low, bar.close) <= 0) throw new RangeError('Log scale requires positive prices')
+      const { timestamp, open, high, low, close, volume, turnover } = bar
+      if (normalized && ((volume != null && !Number.isFinite(volume)) || (turnover != null && !Number.isFinite(turnover)))) throw new TypeError('Normalized candle has invalid volume or turnover')
+      if (!Number.isFinite(timestamp) || !Number.isFinite(open) || !Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(close) || high < Math.max(open, close) || low > Math.min(open, close)) throw new RangeError('Candle has invalid OHLC bounds')
+      if (Math.abs(timestamp) > 8.64e15) throw new RangeError('Candle timestamp is outside the supported Date range')
+      if (layout.priceScale?.mode === 'log' && Math.min(open, high, low, close) <= 0) throw new RangeError('Log scale requires positive prices')
     }
   }
 
   private validateRender (options: EngineRenderOptions): void {
     if (options.timeZone !== undefined) new Intl.DateTimeFormat('en', { timeZone: options.timeZone }).format(0)
+    if (options.candleDensity !== undefined && options.candleDensity !== 'raw' && options.candleDensity !== 'pixel-envelope') throw new RangeError('Unknown candle density mode')
     if (options.chartType !== undefined && !ENGINE_CHART_TYPES.includes(options.chartType)) throw new RangeError('Unknown chart type')
     if (options.baseline !== undefined && !Number.isFinite(options.baseline)) throw new RangeError('Baseline must be a finite price')
   }
@@ -463,19 +494,37 @@ export class EngineChart {
     }
   }
 
+  /** Keep an unused transparent layer tiny without changing its CSS or hit geometry. */
+  private sizeDrawingCanvas (active: boolean): void {
+    const width = active ? this.canvas.width : 1, height = active ? this.canvas.height : 1
+    if (this.drawingCanvas.width !== width) this.drawingCanvas.width = width
+    if (this.drawingCanvas.height !== height) this.drawingCanvas.height = height
+  }
+
   private flush (): void {
     if (this.disposed) return
-    const started = this.win.performance.now(), rect = this.root.getBoundingClientRect(), ratio = this.win.devicePixelRatio || 1
+    const started = this.win.performance.now(), rect = this.root.getBoundingClientRect()
+    const pixelBudget = this.resolution.maxCanvasPixels
+    const ratio = Math.min(this.win.devicePixelRatio || 1, this.resolution.maxPixelRatio ?? Infinity,
+      pixelBudget === undefined || rect.width <= 0 || rect.height <= 0 ? Infinity : Math.sqrt(pixelBudget / (rect.width * rect.height)))
+    const plotWidth = rect.width > 0 ? financialGeometry(rect.width, rect.height, this.layout.axisGutter, 12).plotWidth : 0
+    if (plotWidth > 0 && plotWidth !== this.densityWidth) {
+      this.densityWidth = plotWidth; this.view.setLimits(viewportLimitsForWidth(plotWidth, this.viewportOptions))
+    }
     const sizeChanged = rect.width !== this.width || rect.height !== this.height
     if (sizeChanged || ratio !== this.ratio) {
       this.width = rect.width; this.height = rect.height; this.ratio = ratio
-      for (const canvas of [this.canvas, this.drawingCanvas, this.cursorCanvas]) {
-        canvas.width = Math.round(this.width * ratio); canvas.height = Math.round(this.height * ratio)
+      for (const canvas of [this.canvas, this.cursorCanvas]) {
+        canvas.width = Math.min(pixelBudget ?? Infinity, Math.max(this.width > 0 ? 1 : 0, Math.floor(this.width * ratio)))
+        canvas.height = Math.min(pixelBudget === undefined || canvas.width === 0 ? Infinity : Math.floor(pixelBudget / canvas.width), Math.max(this.height > 0 ? 1 : 0, Math.floor(this.height * ratio)))
       }
       this.geometryDirty = this.geometryDirty || sizeChanged
       this.paintDirty = true; this.drawingDirty = true; this.cursorDirty = true
     }
-    if (this.width <= 0 || this.height <= 0) return
+    if (this.width <= 0 || this.height <= 0) {
+      if (this.preview === null && this.drawings.getSnapshot().drawings.length === 0) this.sizeDrawingCanvas(false)
+      return
+    }
     if (this.geometryDirty || this.frame === null) {
       const bars = this.series.getDataList()
       const indicators = this.indicators.compute(bars).map(result => ({ ...result, pane: result.pane === 'price' ? 'price' : `indicator:${result.paneId ?? result.id}` }))
@@ -488,7 +537,7 @@ export class EngineChart {
       this.counters.geometryBuilds++
     }
     if (this.paintDirty) {
-      this.context.setTransform(ratio, 0, 0, ratio, 0, 0)
+      this.context.setTransform(this.canvas.width / this.width, 0, 0, this.canvas.height / this.height, 0, 0)
       this.context.clearRect(0, 0, this.width, this.height)
       for (const [i, pane] of this.frame.panes.entries()) {
         this.context.save(); this.context.translate(0, pane.top)
@@ -503,7 +552,10 @@ export class EngineChart {
       this.paintDirty = false; this.counters.plotPaints++
     }
     if (this.drawingDirty) {
-      this.drawingContext.setTransform(ratio, 0, 0, ratio, 0, 0)
+      const drawingState = this.drawings.getSnapshot()
+      // Layer labels (agent chips, axis price tags) paint here too, so a chart with marks but no drawings still needs it.
+      this.sizeDrawingCanvas(this.preview !== null || drawingState.drawings.length > 0 || this.hasLayerLabels())
+      this.drawingContext.setTransform(this.canvas.width / this.width, 0, 0, this.canvas.height / this.height, 0, 0)
       this.drawingContext.clearRect(0, 0, this.width, this.height)
       const g = this.frame.model.geometry
       this.retainDrawingImages()
@@ -512,14 +564,14 @@ export class EngineChart {
       this.frame.drawingContext = { bars: this.series.getDataList(), revision: this.series.version, visibleRange: [this.frame.snapshot.viewport.i0, this.frame.snapshot.viewport.i1] }
       const geometries = this.drawings.geometry(this.frame.project, g, this.frame.drawingContext).filter(item => item.id !== this.preview?.id)
       if (this.preview !== null) { const geometry = projectDrawing(this.preview, this.frame.project, g, this.frame.drawingContext); if (geometry !== null) geometries.push(geometry) }
-      paintDrawings(this.drawingContext, geometries, this.preview?.id ?? this.drawings.getSnapshot().selectedId, { theme: this.renderOptions.theme, bounds: g, imageRenderer: this.drawingImages, onInvalidate: this.invalidateDrawings })
+      paintDrawings(this.drawingContext, geometries, this.preview?.id ?? drawingState.selectedId, { theme: this.renderOptions.theme, bounds: g, imageRenderer: this.drawingImages, onInvalidate: this.invalidateDrawings })
       // Labels above every line, the person's drawings included (layer.ts has the full order).
       this.paintLayerLabels(this.drawingContext)
       if (this.disposed) return
       this.drawingDirty = false; this.counters.drawingPaints++
     }
     if (this.cursorDirty) {
-      this.cursorContext.setTransform(ratio, 0, 0, ratio, 0, 0)
+      this.cursorContext.setTransform(this.canvas.width / this.width, 0, 0, this.canvas.height / this.height, 0, 0)
       this.cursorContext.clearRect(0, 0, this.width, this.height)
       if (this.cursorX !== null) { for (const [i, pane] of this.frame.panes.entries()) {
         this.cursorContext.save(); this.cursorContext.translate(0, pane.top)

@@ -57,8 +57,12 @@ for (const pkg of PACKAGES) {
     }
   }
   // Packed contents and size.
-  const packed = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: dir, encoding: 'utf8' })
-  if (packed.status !== 0) { at(`npm pack failed: ${packed.stderr.slice(0, 300)}`); continue }
+  const npmCli = process.env.npm_execpath
+  const packArgs = ['pack', '--dry-run', '--json', '--ignore-scripts']
+  const packed = spawnSync(npmCli ? process.execPath : 'npm', npmCli ? [npmCli, ...packArgs] : packArgs, {
+    cwd: dir, encoding: 'utf8', shell: !npmCli && process.platform === 'win32'
+  })
+  if (packed.error || packed.status !== 0) { at(`npm pack failed: ${String(packed.error ?? packed.stderr ?? '').slice(0, 300)}`); continue }
   const info = JSON.parse(packed.stdout)[0]
   const names = info.files.map(f => f.path)
   for (const name of names) if (!/^(dist\/|LICENSE$|README\.md$|package\.json$)/.test(name)) at(`unexpected packed file ${name}`)

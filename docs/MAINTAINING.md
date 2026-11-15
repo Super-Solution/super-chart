@@ -1,6 +1,6 @@
-# Maintaining this private snapshot
+# Maintaining this snapshot
 
-This repository is Super-Solution/super-chart and remains private.
+This repository is Super-Solution/super-chart (public since 2026-11-15).
 
 Imported version: 0.0.40. Source: ZzyzxLabs/zzyzx-full-repo, main commit de693554a087299df77fbd65be8e1f1f445f9fee, directory frontend/super-chart. The initial tag v0.0.40 identifies this source snapshot; no npm or GitHub Packages publication was performed.
 
@@ -10,9 +10,9 @@ The packages are GPL-3.0-or-later (commercial licence available); LICENSE holds 
 
 This snapshot includes source, existing tests, examples and lockfiles. It excludes monorepo history, node_modules, build output and the inherited hosted CI/package-publish workflows. The owner subsequently authorized the manual npm Trusted Publishing workflow documented in docs/NPM-PUBLISHING.md; no push/PR test pipeline is installed.
 
-For local development: npm install, npm run build, npm test, npm run typecheck, npm run lint (the repository is an npm workspace of four packages; bun.lock was removed with the split and no lockfile exists until super-protocol is published). Run browser checks only when relevant; no package is published by these local commands.
+For local development: `npm ci`, then `npm run build`, `npm test`, `npm run typecheck` and `npm run lint`. See [LOCAL-DEVELOPMENT.md](LOCAL-DEVELOPMENT.md) for the real protocol source, prerequisites and installation limitations. The repository is an npm workspace of four packages; `package-lock.json` pins `@supersolutions/super-protocol@0.1.0` from the registry, so a plain `npm ci` works. Run browser checks only when relevant; these commands publish nothing.
 
-Owner authorized public npm publication on 2026-11-03 as @super-solution/super-chart, followed by manual Trusted Publishing automation. publishConfig targets registry.npmjs.org with public access. The GitHub repository stays private; making it public or adding other automation requires separate authorization. Existing original-monorepo consumers are unchanged.
+Owner authorized public npm publication on 2026-11-03 as @super-solution/super-chart, followed by manual Trusted Publishing automation. publishConfig targets registry.npmjs.org with public access. The owner made the GitHub repository public on 2026-11-15; adding other automation requires separate authorization. Existing original-monorepo consumers are unchanged.
 
 See docs/NORMALIZATION-BUFFER.md for the subsequent normalization buffer optimization.
 

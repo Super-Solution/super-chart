@@ -1,4 +1,4 @@
-import { baselineSegments, columnExtents, highLowExtents, hlcAreaPoints, stepLinePoints, volumeIntensities, type Bar } from './geometry'
+import { baselineSegments, halfBarWidth, columnExtents, hlcAreaPoints, stepLinePoints, type Bar } from './geometry'
 import { nearestBarIndex, type ChartCandlePoint, type FinancialChartModel, type EngineRenderFrame, type EngineRenderOptions } from '@supersolutions/super-chart-core'
 import { colors } from './tokens'
 
@@ -6,14 +6,6 @@ export { ENGINE_CHART_TYPES } from '@supersolutions/super-chart-core'
 
 interface Point { x: number, y: number }
 
-function halfWidth (model: FinancialChartModel): number {
-  let spacing = model.geometry.plotWidth
-  for (let i = 1; i < model.xPositions.length; i++) {
-    const gap = model.xPositions[i] - model.xPositions[i - 1]
-    if (gap > 0) spacing = Math.min(spacing, gap)
-  }
-  return Math.max(0.25, Math.min(6, spacing * 0.34))
-}
 function barsOf (candles: readonly ChartCandlePoint[]): Bar[] {
   return candles.map(bar => ({ open: bar.o, high: bar.h, low: bar.l, close: bar.c, volume: bar.v }))
 }
@@ -76,11 +68,12 @@ function drawBaseline (
 export function paintPriceSeries (
   ctx: CanvasRenderingContext2D,
   frame: EngineRenderFrame,
-  options: EngineRenderOptions = {}
+  options: EngineRenderOptions = {},
+  bodyHalfWidth?: number
 ): boolean {
   const type = options.chartType ?? 'candles'
   if (type === 'candles' || type === 'ohlc' || type === 'line' || type === 'area') return false
-  const model = frame.model, candles = model.plottedCandles, half = halfWidth(model)
+  const model = frame.model, candles = model.plottedCandles, half = bodyHalfWidth ?? halfBarWidth(model)
   const theme = colors(options.theme)
   const up = options.up ?? theme.up, down = options.down ?? theme.down, line = options.line ?? theme.ink
   const color = (rising: boolean): string => rising ? up : down
@@ -97,19 +90,19 @@ export function paintPriceSeries (
           ctx.beginPath()
           for (const candle of candles) {
             if ((candle.c >= candle.o) !== rising) continue
-            const open = model.y(candle.o), close = model.y(candle.c)
-            if (![open, close, candle.wickTop, candle.wickBottom].every(Number.isFinite)) continue
-            const height = Math.max(1, Math.abs(close - open)), top = (open + close - height) / 2
+            const { bodyTop, bodyBottom, wickTop, wickBottom } = candle
+            if (!Number.isFinite(bodyTop) || !Number.isFinite(bodyBottom) || !Number.isFinite(wickTop) || !Number.isFinite(wickBottom)) continue
+            const height = Math.max(1, bodyBottom - bodyTop), top = (bodyTop + bodyBottom - height) / 2
             ctx.moveTo(candle.x, candle.wickTop); ctx.lineTo(candle.x, top)
             ctx.moveTo(candle.x, top + height); ctx.lineTo(candle.x, candle.wickBottom)
           }
           ctx.stroke(); ctx.beginPath()
           for (const candle of candles) {
             if ((candle.c >= candle.o) !== rising) continue
-            const open = model.y(candle.o), close = model.y(candle.c)
-            if (!Number.isFinite(open) || !Number.isFinite(close)) continue
-            const height = Math.max(1, Math.abs(close - open))
-            ctx.rect(candle.x - half, (open + close - height) / 2, half * 2, height)
+            const { bodyTop, bodyBottom } = candle
+            if (!Number.isFinite(bodyTop) || !Number.isFinite(bodyBottom)) continue
+            const height = Math.max(1, bodyBottom - bodyTop)
+            ctx.rect(candle.x - half, (bodyTop + bodyBottom - height) / 2, half * 2, height)
           }
           if (hollow) ctx.stroke(); else ctx.fill()
         }
@@ -124,7 +117,8 @@ export function paintPriceSeries (
           const rising = group === 0
           ctx.fillStyle = color(rising); ctx.beginPath()
           for (const candle of candles) {
-            const index = typeof candle.t === 'number' ? nearestBarIndex(frame.snapshot.bars, candle.t) : null
+            const index = frame.snapshot.bars[candle.index]?.timestamp === candle.t ? candle.index
+              : typeof candle.t === 'number' ? nearestBarIndex(frame.snapshot.bars, candle.t) : null
             if (index === null || frame.snapshot.bars[index].timestamp !== candle.t) continue
             const extent = extents[index]
             if (extent.up !== rising) continue
@@ -137,14 +131,13 @@ export function paintPriceSeries (
         break
       }
       case 'high-low': {
-        const extents = highLowExtents(barsOf(candles))
         ctx.lineWidth = 2
         for (let group = 0; group < 2; group++) {
           const rising = group === 0
           ctx.strokeStyle = color(rising); ctx.beginPath()
-          for (const extent of extents) {
-            if (extent.up !== rising) continue
-            const x = candles[extent.index].x, a = model.y(extent.high), b = model.y(extent.low)
+          for (const candle of candles) {
+            if ((candle.c >= candle.o) !== rising) continue
+            const x = candle.x, a = model.y(candle.h), b = model.y(candle.l)
             if (!Number.isFinite(a) || !Number.isFinite(b)) continue
             ctx.moveTo(x, a); ctx.lineTo(x, b)
           }
@@ -153,12 +146,13 @@ export function paintPriceSeries (
         break
       }
       case 'volume-bars': {
-        const intensities = volumeIntensities(barsOf(candles))
+        let maximum = 0
+        for (const candle of candles) maximum = Math.max(maximum, candle.v ?? 0)
         ctx.lineWidth = 2
         for (let i = 0; i < candles.length; i++) {
           const candle = candles[i], open = model.y(candle.o), close = model.y(candle.c)
           if (!Number.isFinite(open) || !Number.isFinite(close)) continue
-          ctx.strokeStyle = color(candle.c >= candle.o); ctx.globalAlpha = 0.25 + 0.65 * intensities[i]
+          ctx.strokeStyle = color(candle.c >= candle.o); ctx.globalAlpha = 0.25 + 0.65 * (maximum <= 0 ? 0 : Math.max(0, Math.min(1, (candle.v ?? 0) / maximum)))
           ctx.beginPath(); ctx.moveTo(candle.x, candle.wickTop); ctx.lineTo(candle.x, candle.wickBottom)
           ctx.moveTo(candle.x - half, open); ctx.lineTo(candle.x, open)
           ctx.moveTo(candle.x, close); ctx.lineTo(candle.x + half, close); ctx.stroke()

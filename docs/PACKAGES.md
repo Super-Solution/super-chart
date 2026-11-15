@@ -48,9 +48,11 @@ that they stay assignable.
 
 ## Open items
 
-* No lockfile: `@supersolutions/super-protocol` is not on npm yet, so the plugin's
-  dependency cannot resolve from a registry. Publish protocol first, then
-  `npm install` to create `package-lock.json`.
+* `@supersolutions/super-protocol@0.1.0` is not on npm yet. Until its separate
+  release, [the explicit local setup](LOCAL-DEVELOPMENT.md) builds the real
+  sibling protocol package and installs it without rewriting the published
+  dependency or saving a machine-specific lockfile. Registry-only `npm install`
+  remains unavailable; publish protocol first, then create `package-lock.json`.
 * The old UMD/CJS bundles are gone: packages are ESM only. `super-chart-web` also ships
   `dist/super-chart.global.js`, a self-contained script that sets `window.SuperChart`
   (core included) for pages without a bundler.
