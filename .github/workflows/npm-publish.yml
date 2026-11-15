@@ -24,8 +24,6 @@ jobs:
       contents: read
       id-token: write
     env:
-      # npm provenance is unavailable for a private source repository.
-      NPM_CONFIG_PROVENANCE: 'false'
       RELEASE_VERSION: ${{ inputs.version }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -53,5 +51,5 @@ jobs:
         # Dependency order: core, then superscript and web, then the plugin.
         run: |
           for dir in core superscript web chat-plugin; do
-            npm publish "./packages/$dir" --registry=https://registry.npmjs.org/ --access=public --tag=latest --ignore-scripts
+            npm publish "./packages/$dir" --registry=https://registry.npmjs.org/ --access=public --provenance --tag=latest --ignore-scripts
           done
