@@ -37,7 +37,7 @@ jobs:
         run: |
           node --input-type=module -e "
             import fs from 'node:fs'
-            for (const dir of ['core', 'superscript', 'web', 'chat-plugin']) {
+            for (const dir of ['core', 'superscript', 'bindings/web', 'integrations/chat-plugin']) {
               const p = JSON.parse(fs.readFileSync('packages/' + dir + '/package.json', 'utf8'))
               if (p.version !== process.env.RELEASE_VERSION) throw new Error(p.name + ' is ' + p.version + ', not ' + process.env.RELEASE_VERSION)
             }"
@@ -48,6 +48,6 @@ jobs:
       - name: Publish with npm Trusted Publishing
         # Dependency order: core, then superscript and web, then the plugin.
         run: |
-          for dir in core superscript web chat-plugin; do
+          for dir in core superscript bindings/web integrations/chat-plugin; do
             npm publish "./packages/$dir" --registry=https://registry.npmjs.org/ --access=public --provenance --tag=latest --ignore-scripts
           done
