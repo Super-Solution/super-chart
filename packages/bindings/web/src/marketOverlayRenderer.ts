@@ -1,6 +1,9 @@
 import type { MarketOverlayFrame } from '@supersolutions/super-chart-core'
+import { colors, type ThemeName } from './tokens'
 
 export interface MarketOverlayRenderOptions {
+  /** Picks the default colours; up, down and profile below override them. */
+  theme?: ThemeName
   up?: string
   down?: string
   profile?: string
@@ -14,8 +17,10 @@ export function paintMarketOverlays (
 ): void {
   const { bounds, profile, zones } = frame
   if (profile === null && zones.length === 0) return
-  const up = options.up ?? '#26a69a', down = options.down ?? '#ef5350'
-  const profileColor = options.profile ?? '#7e57c2'
+  // Zones are market data (up/down); the volume profile is a neutral measure, so it takes line-strong.
+  const theme = colors(options.theme)
+  const up = options.up ?? theme.up, down = options.down ?? theme.down
+  const profileColor = options.profile ?? theme.lineStrong
   ctx.save()
   try {
     ctx.beginPath(); ctx.rect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top); ctx.clip()

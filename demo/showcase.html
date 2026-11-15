@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Super Chart — design showcase</title>
+  <style>
+    /* A fixed scene for comparing the chart's look: the same seeded bars, drawing and agent marks in both themes. */
+    body { margin: 0; background: #77777d; }
+    .scene { display: grid; grid-template-columns: repeat(auto-fit, minmax(560px, 1fr)); gap: 1px; }
+    .scene > main { height: 600px; }
+  </style>
+</head>
+<body>
+  <div class="scene">
+    <main id="dark" aria-label="Dark theme"></main>
+    <main id="light" aria-label="Light theme"></main>
+  </div>
+  <script type="module" src="/demo/showcase.ts"></script>
+</body>
+</html>

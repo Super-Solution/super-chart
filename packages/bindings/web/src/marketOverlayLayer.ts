@@ -1,6 +1,7 @@
 import { projectMarketOverlays, type MarketOverlayFrame, type MarketOverlayOptions } from '@supersolutions/super-chart-core'
 import { paintMarketOverlays, type MarketOverlayRenderOptions } from './marketOverlayRenderer'
 import type { EngineLayer } from './layer'
+import { colors, CANVAS_LABEL_FONT } from './tokens'
 
 /** Import on demand; the base engine does not import the market detectors. */
 export function createMarketOverlayLayer (
@@ -26,7 +27,7 @@ export function createMarketOverlayLayer (
       if (message !== '') {
         context.save()
         try {
-          context.font = '12px system-ui'; context.textAlign = 'left'; context.textBaseline = 'bottom'; context.fillStyle = '#d6deea'
+          context.font = CANVAS_LABEL_FONT; context.textAlign = 'left'; context.textBaseline = 'bottom'; context.fillStyle = colors(style.theme).inkMuted
           context.fillText(message, projected.bounds.left + 6, projected.bounds.bottom - 6, Math.max(1, projected.bounds.right - projected.bounds.left - 12))
         } finally { context.restore() }
       }

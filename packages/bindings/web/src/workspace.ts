@@ -245,7 +245,7 @@ export class ChartWorkspace {
       }))
       if (registered.includes(selected)) this.indicatorSelect.value = selected
       const currentIndicators = this.chart.listIndicators()
-      this.setText(indicators.summary, `Indicators${currentIndicators.length > 0 ? ` · ${currentIndicators.length}` : ''}`)
+      this.setParts(indicators.summary, [['Indicators'], [currentIndicators.length > 0 ? String(currentIndicators.length) : '', 'sc-count']])
       indicatorList.replaceChildren(...currentIndicators.map(indicator => {
         const settings = this.node('details'), title = this.node('summary')
         settings.className = 'sc-indicator'; settings.dataset.indicator = indicator.id; settings.open = expanded.has(indicator.id)
@@ -294,7 +294,7 @@ export class ChartWorkspace {
     const refreshIndicators = (): void => {
       indicatorEditorDirty = true
       const count = this.chart.listIndicators().length
-      this.setText(indicators.summary, `Indicators${count > 0 ? ` · ${count}` : ''}`)
+      this.setParts(indicators.summary, [['Indicators'], [count > 0 ? String(count) : '', 'sc-count']])
       renderIndicators()
     }
     // Registry and model updates may arrive while the menu is closed. Build the
@@ -841,15 +841,18 @@ export class ChartWorkspace {
 
   private updateStatus (): void {
     if (this.disposed) return
-    const status = this.getStatus(), pair = `${this.symbol.ticker} · ${this.period.text}`
-    const text = this.cancelled ? `Loading cancelled · ${pair}` : status.state === 'loading' ? `Loading ${pair}…`
-      : status.state === 'error' ? `Could not load ${pair}: ${this.errorMessage(status.error?.error)}`
-        : status.state === 'empty' ? `No data for ${pair}` : status.loadingMore ? `${pair} · Loading older bars…` : pair
+    const status = this.getStatus(), ticker = this.symbol.ticker, interval = this.period.text, pair = `${ticker} ${interval}`
+    const reason = status.state === 'error' ? this.errorMessage(status.error?.error) : ''
+    const text = this.cancelled ? `Loading ${pair} was cancelled` : status.state === 'loading' ? `Loading ${pair}…`
+      : status.state === 'error' ? `Could not load ${pair}: ${reason}`
+        : status.state === 'empty' ? `No data for ${pair}` : status.loadingMore ? `Loading older ${pair} bars…` : pair
+    const message = this.cancelled ? 'Loading cancelled' : status.state === 'loading' ? 'Loading…'
+      : status.state === 'error' ? `Could not load: ${reason}` : status.state === 'empty' ? 'No data' : status.loadingMore ? 'Loading older bars…' : ''
     const shown = status.state === 'ready' && this.displayedPair === this.requestedPair()
     const hasMore = this.chart.view.getSnapshot().hasMore
     const signatureUI = `${text}|${shown}|${this.olderPending}|${hasMore}|${this.downloading}`
     if (signatureUI !== this.reportedStatusUI) {
-      this.reportedStatusUI = signatureUI; this.setText(this.statusNode, text)
+      this.reportedStatusUI = signatureUI; this.setParts(this.statusNode, [[ticker, 'sc-ticker'], [interval, 'sc-interval'], [message]])
       this.root.dataset.state = this.cancelled ? 'cancelled' : status.state
       this.chartHost.style.visibility = shown ? 'visible' : 'hidden'; this.chartHost.inert = !shown
       this.setText(this.stageStatus, shown ? '' : text); this.stageStatus.hidden = shown
@@ -894,7 +897,7 @@ export class ChartWorkspace {
     }
     this.replaySpeed.value = speed
     this.countdown?.refresh()
-    this.setText(this.replayInfo, info === null ? '' : `${info.index + 1} / ${info.length} · ${Number.isFinite(info.timestamp) ? new Date(info.timestamp).toISOString().replace('T', ' ').replace('.000Z', ' UTC') : ''}`)
+    this.setParts(this.replayInfo, info === null ? [] : [[`${info.index + 1} / ${info.length}`], [Number.isFinite(info.timestamp) ? new Date(info.timestamp).toISOString().replace('T', ' ').replace('.000Z', ' UTC') : '']])
     const state = this.getReplayState(), signature = JSON.stringify(state)
     if (signature !== this.reportedReplayState) { this.reportedReplayState = signature; this.events.emit('replayChange', state) }
   }
@@ -958,13 +961,14 @@ export class ChartWorkspace {
       this.searchResults.setAttribute('aria-busy', 'false')
       this.searchStatus.textContent = results.length === 0 ? 'No matching symbols' : symbols.length > 50 ? 'Showing the first 50 matches' : `${results.length} matches`
       this.searchResults.replaceChildren(...results.map((symbol, index) => {
-        const item = this.node('li'), button = this.button(`${symbol.ticker}${symbol.name ? ` · ${symbol.name}` : ''}${symbol.exchange ? ` · ${symbol.exchange}` : ''}`, () => {
+        const item = this.node('li'), button = this.button([symbol.ticker, symbol.name, symbol.exchange].filter(Boolean).join(', '), () => {
           this.chooseSearchResult(index)
         })
         button.classList.add('sc-search-result')
         const ticker = this.node('strong'); ticker.textContent = symbol.ticker
-        const description = this.node('span'); description.textContent = [symbol.name, symbol.exchange].filter(Boolean).join(' · ')
-        button.replaceChildren(ticker, description); item.append(button); return item
+        const name = this.node('span'); name.textContent = symbol.name ?? ''
+        const venue = this.node('span'); venue.className = 'sc-venue'; venue.textContent = symbol.exchange ?? ''; venue.hidden = !symbol.exchange
+        button.replaceChildren(ticker, name, venue); item.append(button); return item
       }))
     } catch (error) {
       if (this.disposed || controller.signal.aborted || generation !== this.searchGeneration) return
@@ -1048,6 +1052,19 @@ export class ChartWorkspace {
   }
 
   private setText (node: HTMLElement, value: string): void { if (node.textContent !== value) node.textContent = value }
+
+  /** Separate values as separate elements that CSS spaces apart, never one string joined with separators. Empty parts are left out. */
+  private setParts (node: HTMLElement, parts: ReadonlyArray<readonly [text: string, className?: string]>): void {
+    const shown = parts.filter(([text]) => text !== '')
+    const signature = JSON.stringify(shown)
+    if (node.dataset.parts === signature) return
+    node.dataset.parts = signature
+    node.replaceChildren(...shown.map(([text, className]) => {
+      const part = this.node('span'); part.textContent = text
+      if (className !== undefined) part.className = className
+      return part
+    }))
+  }
 
   private menu (name: string, description: string): { root: HTMLDetailsElement, summary: HTMLElement, panel: HTMLDivElement } {
     const root = this.node('details'); root.className = 'sc-menu'

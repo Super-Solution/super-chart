@@ -33,3 +33,5 @@ See docs/MODEL-IDENTITY-PERFORMANCE.md for build-local time-key reuse and measur
 The owner has authorized an owned replacement of both the Pro shell and the underlying engine, and explicitly chose a new API with a migration guide over compatibility with upstream internals. The 0.1 package entries use the owned engine. See docs/OWNED-ENGINE.md for implemented behavior and measurements, and docs/OWNED-API-MIGRATION.md for the breaking changes and intentionally retired features. A local candidate version is not a published release.
 
 The owner's testing preference persists: ask before adding test cases, test assertions, fixtures or snapshot baselines. Run relevant existing validation and use bounded manual observations for changed behavior. Do not add CI workflows for this rewrite.
+
+See docs/TRADE-HEADS.md for the planned trade-heads layer (avatars on the candles where people traded): designed, not implemented.

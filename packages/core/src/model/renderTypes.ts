@@ -14,6 +14,8 @@ export interface EngineRenderOptions {
   candleDensity?: 'raw' | 'pixel-envelope'
   /** Baseline chart reference price; defaults to the first visible close. */
   baseline?: number
+  /** Selects the Super Chart light or dark palette; the single colours below override it. Default dark. */
+  theme?: 'light' | 'dark'
   background?: string
   grid?: string
   text?: string

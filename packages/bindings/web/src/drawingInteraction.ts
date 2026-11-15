@@ -74,7 +74,7 @@ export function attachDrawingInteraction (
     const position = currentFrame?.project(first.timestamp, first.price)
     if (position === undefined || position === null) { onPreview(null); finishTool(); return }
     const input = doc.createElement('textarea')
-    input.setAttribute('aria-label', 'Drawing text'); input.placeholder = 'Text · Enter to save · Shift+Enter for a new line'
+    input.setAttribute('aria-label', 'Drawing text'); input.placeholder = 'Label (Enter saves, Shift+Enter adds a line)'
     input.maxLength = 512; input.rows = 3; input.value = preview.text ?? ''
     const width = Math.min(260, element.clientWidth), height = Math.min(100, element.clientHeight)
     input.style.cssText = `position:absolute;z-index:4;box-sizing:border-box;resize:none;width:${width}px;height:${height}px;left:${Math.max(0, Math.min(position.x, element.clientWidth - width))}px;top:${Math.max(0, Math.min(position.y, element.clientHeight - height))}px;padding:6px;background:#10151d;color:#eee;border:1px solid #8bafff;font:12px system-ui;`

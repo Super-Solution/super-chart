@@ -1,6 +1,7 @@
 import type { EngineFrame } from '@supersolutions/super-chart-core'
 import type { EngineLayer } from './layer'
-import { CANVAS_PALETTE } from './tokens'
+import { derivePrecision } from '@supersolutions/super-chart-core'
+import { colors, CANVAS_FONT, CANVAS_LABEL_FONT } from './tokens'
 
 export type EngineAnnotationTone = 'bull' | 'bear' | 'neutral' | 'accent'
 export type EngineAnnotationKind = 'level' | 'zone' | 'marker'
@@ -43,6 +44,8 @@ export interface EngineAnnotationsOptions {
   symbol: string | null
   theme?: EngineAnnotationTheme
   font?: string
+  /** Decimals for the exact price tags on the axis (the symbol's precision). Default: derived from the bars. */
+  pricePrecision?: number
   /** Request a paint only: changed annotations reuse the latest frame geometry. */
   onChange?: () => void
 }
@@ -103,8 +106,16 @@ function sameSpec (a: EngineAnnotationSpec, b: EngineAnnotationSpec): boolean {
 }
 function resolveColor (spec: EngineAnnotationSpec, currentTheme: EngineAnnotationTheme): string {
   if (spec.color !== undefined) return spec.color
-  const palette = CANVAS_PALETTE[currentTheme]
-  return spec.tone === 'bull' ? palette.up : spec.tone === 'bear' ? palette.down : spec.tone === 'accent' ? palette.accent : palette.textSecond
+  const palette = colors(currentTheme)
+  return spec.tone === 'bull' ? palette.up : spec.tone === 'bear' ? palette.down : spec.tone === 'accent' ? palette.violet : palette.inkMuted
+}
+/** A zone's translucent band; candles stay readable through it. */
+function zoneFill (spec: EngineAnnotationSpec, currentTheme: EngineAnnotationTheme): string {
+  const palette = colors(currentTheme)
+  return spec.tone === 'bull' ? palette.upZone : spec.tone === 'bear' ? palette.downZone : spec.tone === 'accent' ? palette.violetZone : palette.inkWash
+}
+function diamond (context: CanvasRenderingContext2D, x: number, y: number, r: number): void {
+  context.beginPath(); context.moveTo(x, y - r); context.lineTo(x + r, y); context.lineTo(x, y + r); context.lineTo(x - r, y); context.closePath(); context.fill()
 }
 function result (applied: string[], rejected: EngineAnnotationRejection[]): EngineSetAnnotationsResult {
   return Object.freeze({ applied: Object.freeze(applied), rejected: Object.freeze(rejected.map(item => Object.freeze(item))) })
@@ -125,6 +136,7 @@ export class EngineAnnotations implements EngineLayer {
   private readonly scopes = new Map<string, Layers>()
   private readonly onChange: (() => void) | undefined
   private readonly font: string
+  private readonly pricePrecision: number | undefined
   private symbol: string | null
   private currentTheme: EngineAnnotationTheme
   private frame: EngineFrame | null = null
@@ -135,7 +147,9 @@ export class EngineAnnotations implements EngineLayer {
   constructor (options: EngineAnnotationsOptions) {
     this.symbol = scope(options.symbol)
     this.currentTheme = theme(options.theme ?? 'dark')
-    this.font = options.font === undefined ? '12px system-ui' : named(options.font, 256, 'font')
+    this.font = options.font === undefined ? CANVAS_LABEL_FONT : named(options.font, 256, 'font')
+    if (options.pricePrecision !== undefined && !(Number.isInteger(options.pricePrecision) && options.pricePrecision >= 0 && options.pricePrecision <= 20)) throw new RangeError('Annotation price precision must be an integer from 0 to 20')
+    this.pricePrecision = options.pricePrecision
     this.onChange = options.onChange
     this.snapshot = Object.freeze({ version: 0, symbol: this.symbol, bounds: null, annotations: Object.freeze([]) })
   }
@@ -223,6 +237,7 @@ export class EngineAnnotations implements EngineLayer {
     this.project()
   }
 
+  /** Shapes on the main canvas: bands, dashed lines and markers. Their words come later, above every line. */
   paint (context: CanvasRenderingContext2D): void {
     const { bounds, annotations } = this.snapshot
     if (this.disposed || bounds === null || !annotations.some(item => item.status === 'visible')) return
@@ -230,37 +245,135 @@ export class EngineAnnotations implements EngineLayer {
     try {
       context.globalCompositeOperation = 'source-over'; context.globalAlpha = 1
       context.beginPath(); context.rect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top); context.clip()
-      context.font = this.font; context.textAlign = 'left'; context.textBaseline = 'bottom'; context.lineWidth = 1
+      context.lineWidth = 1.5
       for (const annotation of annotations) {
         if (annotation.status !== 'visible') continue
-        // Canvas rejects unsupported CSS colors by keeping its previous value.
-        // Reset first so a malformed host color can never inherit another layer's tone.
-        const fallback = resolveColor({ ...annotation.spec, color: undefined }, this.currentTheme)
-        context.fillStyle = fallback; context.strokeStyle = fallback
-        context.fillStyle = annotation.color; context.strokeStyle = annotation.color
-        context.globalAlpha = 1; context.setLineDash([])
-        let labelX = bounds.left + 4, labelY = bounds.top + 16
+        this.applyTone(context, annotation)
+        // The assistant's marks are dashed, so they never pass for the person's own drawings.
+        context.setLineDash([4, 3])
         if (annotation.spec.kind === 'level' && annotation.point !== undefined) {
-          context.setLineDash([5, 4]); context.beginPath(); context.moveTo(bounds.left, annotation.point.y); context.lineTo(bounds.right, annotation.point.y); context.stroke()
-          labelY = Math.max(bounds.top + 16, annotation.point.y - 3)
+          const y = Math.round(annotation.point.y) + 0.5
+          context.beginPath(); context.moveTo(bounds.left, y); context.lineTo(bounds.right, y); context.stroke()
         } else if (annotation.spec.kind === 'zone' && annotation.rect !== undefined) {
           const rect = annotation.rect
-          context.globalAlpha = 0.14; context.fillRect(rect.x, rect.y, rect.width, rect.height)
-          context.globalAlpha = 0.8; context.strokeRect(rect.x, rect.y, rect.width, rect.height); context.globalAlpha = 1
-          labelX = rect.x + 4; labelY = Math.max(bounds.top + 16, rect.y + 16)
+          if (annotation.spec.color === undefined) context.fillStyle = zoneFill(annotation.spec, this.currentTheme)
+          else context.globalAlpha = 0.12
+          context.fillRect(rect.x, rect.y, rect.width, rect.height); context.globalAlpha = 1
+          context.lineWidth = 1; context.strokeRect(Math.round(rect.x) + 0.5, Math.round(rect.y) + 0.5, Math.round(rect.width), Math.round(rect.height)); context.lineWidth = 1.5
         } else if (annotation.point !== undefined) {
-          const p = annotation.point
-          context.beginPath(); context.moveTo(p.x, p.y - 4); context.lineTo(p.x + 4, p.y); context.lineTo(p.x, p.y + 4); context.lineTo(p.x - 4, p.y); context.closePath(); context.fill()
-          labelX = p.x + 7; labelY = Math.max(bounds.top + 16, p.y - 6)
-        }
-        if (annotation.spec.text !== undefined && annotation.spec.text !== '') {
-          const maxWidth = Math.max(1, bounds.right - bounds.left - 8)
-          const width = Math.min(maxWidth, context.measureText(annotation.spec.text).width)
-          labelX = Math.max(bounds.left + 4, Math.min(labelX, bounds.right - width - 4))
-          context.fillText(annotation.spec.text, labelX, Math.min(bounds.bottom - 2, labelY), maxWidth)
+          context.fillStyle = context.strokeStyle; diamond(context, annotation.point.x, annotation.point.y, 4.5)
         }
       }
     } finally { context.restore() }
+  }
+
+  /**
+   * Words on the drawing canvas, after the person's drawings, so no line ever crosses them:
+   * the label chips, and each level's and zone edge's exact price on the axis.
+   */
+  paintLabels (context: CanvasRenderingContext2D): void {
+    const { bounds, annotations } = this.snapshot
+    if (this.disposed || bounds === null || !annotations.some(item => item.status === 'visible')) return
+    const palette = colors(this.currentTheme)
+    const tags: Array<{ y: number, price: number, color: string }> = []
+    context.save()
+    try {
+      context.globalCompositeOperation = 'source-over'; context.globalAlpha = 1
+      context.beginPath(); context.rect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top); context.clip()
+      context.font = this.font; context.textAlign = 'left'; context.textBaseline = 'middle'; context.setLineDash([])
+      for (const annotation of annotations) {
+        if (annotation.status !== 'visible') continue
+        const tone = this.applyTone(context, annotation)
+        if (annotation.spec.kind !== 'marker') {
+          for (const point of annotation.spec.kind === 'zone' ? annotation.spec.anchors : annotation.spec.anchors.slice(0, 1)) {
+            const price = point.price
+            if (price === undefined) continue
+            const projected = this.frame?.project(point.time, price)
+            if (projected != null && Number.isFinite(projected.y)) tags.push({ y: projected.y, price, color: tone })
+          }
+        }
+        // A label never sits over a price other than the one it names: it is centred on its
+        // line, inside or centred on its band, or level with its marker.
+        let anchor: { x: number, y: number, side: 'left' | 'right' } | null = null
+        if (annotation.spec.kind === 'level' && annotation.point !== undefined) {
+          // Left end, so the newest bars on the right stay uncovered; the line runs into the chip.
+          anchor = { x: bounds.left + 8, y: Math.round(annotation.point.y) + 0.5, side: 'left' }
+        } else if (annotation.spec.kind === 'zone' && annotation.rect !== undefined) {
+          anchor = { x: annotation.rect.x + 6, y: annotation.rect.y + annotation.rect.height / 2, side: 'left' }
+        } else if (annotation.point !== undefined) {
+          anchor = { x: annotation.point.x - 10, y: annotation.point.y, side: 'right' }
+        }
+        const text = annotation.spec.text
+        if (anchor === null || text === undefined || text === '') continue
+        // Label chip: violet tint, the assistant's diamond, ink text.
+        const width = Math.min(Math.max(1, bounds.right - bounds.left - 8), context.measureText(text).width + 27)
+        let left = anchor.side === 'right' ? anchor.x - width : anchor.x
+        let top = anchor.y - 9
+        if (left < bounds.left + 4 && anchor.side === 'right' && annotation.spec.kind === 'marker') left = anchor.x + 20
+        const rect = annotation.spec.kind === 'zone' ? annotation.rect : undefined
+        if (rect !== undefined) {
+          // Inside the band's top-left when it fits. Otherwise beside the band, left first, centred
+          // on its height: at the band's own prices, and never covering the band it names.
+          if (width <= rect.width - 12 && rect.height >= 30) top = rect.y + 6
+          else left = rect.x - width - 6 >= bounds.left + 4 ? rect.x - width - 6 : rect.x + rect.width + 6
+        }
+        left = Math.max(bounds.left + 4, Math.min(left, bounds.right - width - 4))
+        top = Math.max(bounds.top + 2, Math.min(top, bounds.bottom - 20))
+        context.fillStyle = palette.violetTint; context.fillRect(left, top, width, 18)
+        context.fillStyle = palette.violet; diamond(context, left + 10, top + 9, 3)
+        context.fillStyle = palette.ink; context.fillText(text, left + 19, top + 9.5, width - 25)
+      }
+    } finally { context.restore() }
+    // Each level's price and each zone's top and bottom on the price axis. A tag sits at its
+    // exact y; when that spot is taken (the last-price tag, another mark) it moves the least
+    // distance needed and a connector runs from the tag to the exact price at the plot edge.
+    if (tags.length === 0 || bounds.left < 36) return
+    const bars = this.frame?.snapshot.bars ?? []
+    const digits = this.pricePrecision ?? derivePrecision(bars)
+    const taken: number[] = []
+    const lastBar = bars[bars.length - 1]
+    if (lastBar !== undefined && this.frame !== null) {
+      const lastY = Math.round(this.frame.model.y(lastBar.close))
+      if (Number.isFinite(lastY) && lastY >= bounds.top && lastY <= bounds.bottom) taken.push(lastY)
+    }
+    // Tags keep 25px apart, so each can clear the axis 15px either side of itself: a grid price
+    // label is then fully hidden rather than half covered, and the last-price tag is never touched.
+    const free = (y: number): boolean => taken.every(other => Math.abs(other - y) >= 25)
+    const placed: Array<{ tag: typeof tags[number], y: number, exact: number }> = []
+    for (const tag of [...tags].sort((a, b) => a.y - b.y)) {
+      if (tag.y < bounds.top || tag.y > bounds.bottom) continue
+      const exact = Math.round(tag.y)
+      let y = exact
+      for (let step = 1; !free(y) && step <= 400; step++) {
+        if (free(exact + step) && exact + step <= bounds.bottom) { y = exact + step; break }
+        if (free(exact - step) && exact - step >= bounds.top) { y = exact - step; break }
+      }
+      taken.push(y); placed.push({ tag, y, exact })
+    }
+    context.save()
+    try {
+      context.font = CANVAS_FONT; context.textAlign = 'right'; context.textBaseline = 'middle'; context.setLineDash([]); context.lineWidth = 1
+      context.fillStyle = palette.surface
+      for (const { y } of placed) context.fillRect(0, y - 15, bounds.left, 30)
+      for (const { tag, y, exact } of placed) {
+        context.fillStyle = palette.surface; context.fillRect(2, y - 9, bounds.left - 4, 18)
+        context.strokeStyle = tag.color; context.strokeRect(2.5, y - 8.5, bounds.left - 5, 17)
+        if (y !== exact) {
+          context.beginPath(); context.moveTo(bounds.left - 2, y); context.lineTo(bounds.left + 4, exact + 0.5); context.stroke()
+        }
+        context.fillStyle = tag.color; context.fillText(tag.price.toFixed(digits), bounds.left - 6, y, Math.max(1, bounds.left - 10))
+      }
+    } finally { context.restore() }
+  }
+
+  /** Sets the mark's tone on fill and stroke; a malformed host colour falls back to the tone, never another mark's. */
+  private applyTone (context: CanvasRenderingContext2D, annotation: EngineProjectedAnnotation): string {
+    // Canvas rejects unsupported CSS colors by keeping its previous value: reset to the tone first.
+    const fallback = resolveColor({ ...annotation.spec, color: undefined }, this.currentTheme)
+    context.fillStyle = fallback; context.strokeStyle = fallback
+    context.fillStyle = annotation.color; context.strokeStyle = annotation.color
+    context.globalAlpha = 1
+    return String(context.strokeStyle)
   }
 
   dispose (): void {

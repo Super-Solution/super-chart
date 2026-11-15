@@ -279,7 +279,7 @@ export class EngineChart {
     this.layers.add(layer); this.geometryDirty = true; this.schedule()
     return () => {
       if (!this.layers.delete(layer)) return
-      this.paintDirty = true; this.schedule(); layer.dispose?.()
+      this.paintDirty = true; this.drawingDirty = true; this.schedule(); layer.dispose?.()
     }
   }
 
@@ -354,7 +354,21 @@ export class EngineChart {
   }
 
   /** Repaint owned layers after their model changes without rebuilding candle geometry. */
-  requestPaint (): void { this.assertLive(); this.paintDirty = true; this.schedule() }
+  requestPaint (): void { this.assertLive(); this.paintDirty = true; this.drawingDirty = true; this.schedule() }
+
+  private hasLayerLabels (): boolean {
+    for (const layer of this.layers) if (layer.paintLabels !== undefined) return true
+    return false
+  }
+
+  private paintLayerLabels (context: CanvasRenderingContext2D): void {
+    for (const layer of this.layers) {
+      if (layer.paintLabels === undefined) continue
+      context.save()
+      try { layer.paintLabels(context) } finally { context.restore() }
+      if (this.disposed) return
+    }
+  }
 
   /** Decode local raster resources before an import commits retained drawings. */
   async prepareDrawingImages (drawings: readonly Drawing[]): Promise<void> {
@@ -403,7 +417,8 @@ export class EngineChart {
       ctx.drawImage(this.canvas, 0, 0)
       ctx.setTransform(this.canvas.width / this.width, 0, 0, this.canvas.height / this.height, 0, 0)
       const bounds = this.frame.model.geometry
-      paintDrawings(ctx, this.drawings.geometry(this.frame.project, bounds, this.frame.drawingContext), null, { bounds, imageRenderer: this.drawingImages })
+      paintDrawings(ctx, this.drawings.geometry(this.frame.project, bounds, this.frame.drawingContext), null, { theme: this.renderOptions.theme, bounds, imageRenderer: this.drawingImages })
+      this.paintLayerLabels(ctx)
       return await new Promise((resolve, reject) => copy.toBlob(blob => {
         if (blob === null) reject(new Error('PNG encoding failed')); else resolve(blob)
       }, 'image/png'))
@@ -538,7 +553,8 @@ export class EngineChart {
     }
     if (this.drawingDirty) {
       const drawingState = this.drawings.getSnapshot()
-      this.sizeDrawingCanvas(this.preview !== null || drawingState.drawings.length > 0)
+      // Layer labels (agent chips, axis price tags) paint here too, so a chart with marks but no drawings still needs it.
+      this.sizeDrawingCanvas(this.preview !== null || drawingState.drawings.length > 0 || this.hasLayerLabels())
       this.drawingContext.setTransform(this.canvas.width / this.width, 0, 0, this.canvas.height / this.height, 0, 0)
       this.drawingContext.clearRect(0, 0, this.width, this.height)
       const g = this.frame.model.geometry
@@ -548,7 +564,10 @@ export class EngineChart {
       this.frame.drawingContext = { bars: this.series.getDataList(), revision: this.series.version, visibleRange: [this.frame.snapshot.viewport.i0, this.frame.snapshot.viewport.i1] }
       const geometries = this.drawings.geometry(this.frame.project, g, this.frame.drawingContext).filter(item => item.id !== this.preview?.id)
       if (this.preview !== null) { const geometry = projectDrawing(this.preview, this.frame.project, g, this.frame.drawingContext); if (geometry !== null) geometries.push(geometry) }
-      paintDrawings(this.drawingContext, geometries, this.preview?.id ?? drawingState.selectedId, { bounds: g, imageRenderer: this.drawingImages, onInvalidate: this.invalidateDrawings })
+      paintDrawings(this.drawingContext, geometries, this.preview?.id ?? drawingState.selectedId, { theme: this.renderOptions.theme, bounds: g, imageRenderer: this.drawingImages, onInvalidate: this.invalidateDrawings })
+      // Labels above every line, the person's drawings included (layer.ts has the full order).
+      this.paintLayerLabels(this.drawingContext)
+      if (this.disposed) return
       this.drawingDirty = false; this.counters.drawingPaints++
     }
     if (this.cursorDirty) {
