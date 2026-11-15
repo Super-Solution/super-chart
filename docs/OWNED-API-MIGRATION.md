@@ -17,7 +17,8 @@ ones. The SupWallet monorepo is not changed by this package rewrite.
 | `/native` | Injected React Native AppState/reconnect lifecycle adapter; no bundled native renderer or gestures |
 | `/indicators` | Explicit optional technical/classic indicator definitions |
 | `/scripts` | Bounded SuperScript-to-owned-indicator bridge |
-| `/annotations` | Owned scoped level, zone and marker annotation layer |
+| `/annotations` | Owned scoped level, zone, marker and template (trend, ray, Fibonacci, plan, host-registered) annotation layer, with draggable-level intent events |
+| `@supersolutions/super-chart-react` | Optional React component over `ChartWorkspace` (new in 0.2.0) |
 | `/overlays` | Optional volume profile, fair-value gap and order-block layer |
 | `/superscript` | Pure language runtime, TA helpers and AI helpers; JavaScript requires deliberate language registration |
 
@@ -49,7 +50,14 @@ a DOM; constructing a Web chart still requires a live document and Canvas 2D.
 | Script indicator registry bridge | `createEngineScriptIndicator(...).attach(chart)` from `/scripts`; dispose the attachment to release its instance |
 | Arbitrary overlay plugin hooks | Explicit `EngineLayer` with `update/paint/dispose`, attached through `chart.addLayer(layer)` |
 | User drawings | `chart.drawings` (`DrawingStore`) and `chart.setDrawingTool(type)` |
-| Annotation API | `EngineAnnotations` from `/annotations`, attached as a layer; call `setScope` when market changes and `requestPaint` when the model changes |
+| Annotation API | `EngineAnnotations` from `/annotations`, attached as a layer; call `setScope` when market changes and `requestPaint` when the model changes. `ChartWorkspace` owns one as `workspace.annotations` and manages scope and theme itself |
+| `registerOverlay` (custom shapes) | `workspace.annotations.registerTemplate({ name, anchors, create })`: a pure function from projected anchors to figures; the layer validates, clips and paints. Not a hook into a canvas or a store |
+| Overlay drag callbacks | `draggable` level plus `workspace.onAnnotationIntent(listener)`: `start`, `move`, `commit`, `cancel`. The chart never edits the spec; the host validates and writes the new price |
+| Hold-to-draw / shape recognition | `chart: { drawByHolding: true }`; `recognizeStroke` (core) is the pure recognizer |
+| Command palette, context menu, object tree | Built in: `registerCommand`, `openCommandPalette`, `contextMenu.items`, the Objects panel |
+| i18n and theme registries | `registerLocale`, `registerWorkspaceTheme`, `locale` / `theme` options, `setLocale` / `setTheme` |
+| Header slots, headless, compact layout | `ui.slots` / `getSlot`, `ui.headless`, `ui.parts`, `ui.layout`, `ui.intervals` |
+| Intercept the built-in symbol search | `search.onRequest(request)` returns `true` when the host handled it |
 | Save/restore a workspace | `exportDocument()` and `await restoreDocument(json)` use a strict owned version-1 JSON schema; storage remains host-controlled |
 | Image export | `await chart.snapshot()` returns a PNG Blob after decoding retained image drawings, excluding the cursor, selection handles and edits in progress |
 | Teardown | `workspace.dispose()` stops the loader before disposing the chart; an independently constructed chart has its own `dispose()` |
@@ -192,13 +200,15 @@ not execution signals or evidence of profitability.
 ## Deliberately unsupported legacy behavior
 
 - Upstream `Chart`, `ChartStore`, pane/time/price store access, figure registries,
-  `registerOverlay`, callback-driven overlay steps and arbitrary upstream plugins.
+  `registerOverlay` as a canvas/store hook (annotation templates replace the common uses), callback-driven overlay steps and arbitrary upstream plugins.
 - Old raw overlay/figure serialization. Convert meaningful timestamps/prices to
   the new drawing or annotation schema in the host; invalid data is rejected.
-- Automatic freehand-to-shape recognition. Brush/highlighter retain the stroke;
-  choose an explicit geometric tool for a constrained shape.
-- The old command palette/command registry facade, i18n registries, theme presets,
-  injected header slots and complete Pro context-menu/object-tree/editor chrome.
+- Freehand-to-shape recognition of the Brush and Highlighter tools: they retain
+  the stroke. Recognition is opt-in through hold-to-draw (`drawByHolding`), which
+  produces ordinary drawings.
+- The old command-registry facade (the new `registerCommand` is a separate,
+  smaller API), the old Pro editor panels and any chrome not listed in
+  `WORKSPACE-UI.md`.
 - Automatic global layout storage and restoration of arbitrary old Pro JSON.
   The owned workspace document API is explicit and does not restore executable
   plugin/layer code or feed subscriptions from serialized data.

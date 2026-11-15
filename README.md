@@ -16,6 +16,7 @@ Dependencies only point down. Install the layers you need.
 | `@supersolutions/super-chart-core` | Market data contracts, loader/replay, series and TA, indicators, drawings, frame and workspace models, React Native lifecycle. No DOM. Subpaths `/native`, `/indicators` | none |
 | `@supersolutions/super-chart-superscript` | SuperScript compiler/runtime, host-supplied AI helpers, script-to-indicator bridge (`/scripts`). Runs in plain Node | core |
 | `@supersolutions/super-chart-web` | Canvas chart engine and workspace UI, annotations (`/annotations`), market overlays (`/overlays`) | core |
+| `@supersolutions/super-chart-react` | `SuperChart` React component and `useWorkspaceEvent`; React is a peer dependency | core, web |
 | `@supersolutions/super-chart-chat-plugin` | `super-chart.chart` card plus the agent tools, as a super-chat plugin | core, web, `@supersolutions/super-protocol` |
 
 Folders group packages by role, and a new framework or language is one more
@@ -25,7 +26,7 @@ folder per UI framework), `packages/integrations/chat-plugin`, and
 tested against `conformance/`). npm names do not depend on the
 folder.
 
-All four are GPL-3.0-or-later (commercial licence available). The plugin
+All five are GPL-3.0-or-later (commercial licence available). The plugin
 interface itself lives in the Apache-2.0
 [`@supersolutions/super-protocol`](https://github.com/Super-Solution/super-chat/tree/main/packages/protocol),
 so an Apache host such as super-chat can load this plugin without linking GPL
@@ -67,6 +68,35 @@ workspace.dispose()
 
 `SuperChart` is an alias of `ChartWorkspace`. Use `EngineChart(host, options)` when
 the application supplies its own controls and feed lifecycle.
+
+### React
+
+```tsx
+import { SuperChart } from '@supersolutions/super-chart-react'
+
+// Create the datafeed outside the component (or memoize it): a new one mounts a new chart.
+<SuperChart datafeed={datafeed} symbol={symbol} period="15m" theme="dark"
+  onMarketChange={event => save(event)} style={{ height: 600 }} />
+```
+
+Symbol, period, theme, locale and `ui` follow the props; the ref is the
+`ChartWorkspace`. Safe under Strict Mode and server rendering. Full example:
+[examples/react](examples/react/README.md).
+
+### Chrome, commands and interaction
+
+The workspace chrome adapts to its own width (`ui.layout`: `auto`, `regular`,
+`compact`, `narrow`), can be removed (`ui.headless`, `ui.parts`) or extended
+(`getSlot`), and has a command palette (Ctrl/Cmd+K, `registerCommand`), a
+right-click menu, an object tree, intervals as a bar or a dropdown, host
+interception of the symbol search (`search.onRequest`), registered locales
+(`registerLocale`) and themes (`registerWorkspaceTheme`). Hold the pointer still
+on the chart (`drawByHolding`) and draw a shape: it is recognized into a line,
+ray, rectangle, ellipse or triangle, and a scribble erases drawings. Host marks
+(levels, zones, markers, trend lines, Fibonacci, trade plans, custom templates)
+go through the annotation layer; a draggable level only emits an intent event, the
+host decides what the new price means. See [docs/WORKSPACE-UI.md](docs/WORKSPACE-UI.md)
+and [docs/API-LAYERS.md](docs/API-LAYERS.md).
 
 - Fourteen price series styles, plus Heikin Ashi display; indicators use raw OHLC.
 - Linear, logarithmic, percentage and reversed price scales; editable price range.
