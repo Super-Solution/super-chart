@@ -10,3 +10,6 @@ __pycache__/
 
 # local Claude Code state
 .claude/
+
+# Explicit local build of the unpublished sibling protocol package
+/.local-deps/

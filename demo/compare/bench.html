@@ -1,0 +1,9 @@
+<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Super Chart 手動量測</title>
+<style>body{max-width:900px;margin:40px auto;padding:0 20px;font:16px/1.6 system-ui;color:#dce5f0;background:#10151d}a{color:#9fc7fb}table{border-collapse:collapse;width:100%}td,th{text-align:left;border-bottom:1px solid #344150;padding:16px}small{color:#a5b4c6}</style>
+<h1>Super Chart 單實例量測</h1>
+<p>選一個版本，頁面載入後按「開始量測」。每次依序平移、縮放、以 50 Hz 為目標送入 4 秒即時更新；結果會直接顯示在圖表下方。</p>
+<table><thead><tr><th>歷史資料</th><th>舊版 0.0.53</th><th>自研改前 5b9b7d0</th><th>本輪修正版</th></tr></thead><tbody>
+<tr><td>10,000 根</td><td><a href="/frame.html?version=old&count=10000&multi=1&bench=1">量測舊版</a></td><td><a href="/frame.html?version=new&engine=before&count=10000&multi=1&bench=1">量測改前</a></td><td><a href="/frame.html?version=new&engine=after&count=10000&multi=1&bench=1">量測改後</a></td></tr>
+<tr><td>50,000 根</td><td><a href="/frame.html?version=old&count=50000&multi=1&bench=1">量測舊版</a></td><td><a href="/frame.html?version=new&engine=before&count=50000&multi=1&bench=1">量測改前</a></td><td><a href="/frame.html?version=new&engine=after&count=50000&multi=1&bench=1">量測改後</a></td></tr></tbody></table>
+<p>比較時保持相同視窗尺寸、裝置與可見狀態。這裡使用獨立頁面，避免 iframe 背景節流；請勿同時執行兩組量測。</p>
+<p><small>公開 API 驅動的 pan/zoom 是繪製負載，沒有模擬手指。rAF 間隔包含顯示器／瀏覽器排程，不是純 CPU 成本。loadMs 為 navigation 到 ready 後兩幀的代理值；舊版指標背景完成時點可能不同。heap 是未強制 GC 的瀏覽器估計值，不能當作單一圖表 retained heap。Canvas bytes 為 width×height×4 估算，不含瀏覽器／GPU 的額外配置。這是手動量測工具，不會執行 CI 或新增測試。</small></p><p><a href="/">回到新舊版體驗室</a></p></html>
