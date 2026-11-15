@@ -1,4 +1,5 @@
 import type { MarketBar } from '../types'
+import { kernelFor, windowFor, withIndicatorInputs, indicatorField } from './indicatorInputs'
 import type { RealtimeSeriesChange } from '../realtimeSeries'
 import { sma, ema, bollinger, macd, rsi, stochK, type Series } from '../ta'
 import { createBollingerState, cloneBollingerState, stepBollinger, type BollingerState } from './bollinger'
@@ -82,9 +83,7 @@ function finite (value: unknown): number | null {
 }
 
 function field (bars: readonly MarketBar[], key: 'close' | 'high' | 'low'): Series {
-  const result: Series = new Array(bars.length)
-  for (let i = 0; i < bars.length; i++) result[i] = finite(bars[i][key])
-  return result
+  return indicatorField(bars, key, 'finite')
 }
 
 function rowsOf (keys: readonly string[], series: readonly Series[]): IndicatorRow[] {
@@ -360,7 +359,7 @@ export class EngineIndicators {
     if (typeof id !== 'string' || id.trim() === '' || this.entries.has(id)) throw new Error('Indicator id must be nonempty and unique')
     this.validatePlacement(spec)
     const instance = Object.freeze({ id, name: spec.name, params, pane, paneId: spec.paneId, visible: spec.visible ?? true })
-    this.entries.set(id, { instance, definition, builtin, result: null })
+    this.entries.set(id, { instance, definition, builtin: builtin ?? kernelFor(definition.calculate)?.name, result: null })
     this.structureDirty = true
     return id
   }
@@ -372,7 +371,7 @@ export class EngineIndicators {
     this.validatePlacement(changes)
     const pane = changes.pane ?? entry.instance.pane
     if (pane !== 'price' && pane !== 'separate') throw new TypeError('Invalid indicator pane')
-    const params = changes.params === undefined ? entry.instance.params : checkedParams(changes.params, entry.builtin)
+    const params = changes.params === undefined ? entry.instance.params : checkedParams(changes.params, this.builtinNames.has(entry.instance.name) ? entry.builtin : undefined)
     entry.definition.validateParams?.(params)
     const instance = Object.freeze({ ...entry.instance, ...changes, pane, params, visible: changes.visible ?? entry.instance.visible })
     const changed = params.length !== entry.instance.params.length || params.some((value, index) => value !== entry.instance.params[index])
@@ -459,11 +458,26 @@ export class EngineIndicators {
     const from = canTail ? this.from : 0
     const next: EngineIndicatorResult[] = []
     try {
-      for (const entry of this.entries.values()) {
-        if (!entry.instance.visible) { entry.result = null; continue }
-        if (changed || entry.result === null) this.calculate(entry, bars, from, canTail && entry.result !== null)
-        next.push(entry.result!)
-      }
+      withIndicatorInputs(bars, () => {
+        const computed = new Map<string, Entry>()
+        for (const entry of this.entries.values()) {
+          if (!entry.instance.visible) { entry.result = null; continue }
+          const plan = kernelFor(entry.definition.calculate)
+          const params = plan?.parameters(entry.instance.params) ?? entry.instance.params
+          // Only owned kernels are pure/causal by identity. Custom calculations keep their semantics.
+          const key = entry.builtin === undefined ? undefined : JSON.stringify([entry.builtin, params, plan?.maKey ?? 'ma'])
+          const shared = key === undefined ? undefined : computed.get(key)
+          if (shared !== undefined) {
+            entry.result = { ...shared.result!, id: entry.instance.id, name: entry.instance.name, pane: entry.instance.pane, paneId: entry.instance.paneId, figures: entry.definition.figures }
+            entry.recursive = shared.recursive; entry.macd = shared.macd
+            entry.bollinger = shared.bollinger; entry.movingAverage = shared.movingAverage
+          } else {
+            if (changed || entry.result === null) this.calculate(entry, bars, from, canTail && entry.result !== null, params, plan?.maKey)
+            if (key !== undefined) computed.set(key, entry)
+          }
+          next.push(entry.result!)
+        }
+      })
     } catch (error) {
       // A custom calculation may throw after another entry advanced its tail.
       // Retrying must rebuild from data, not reuse partially advanced state.
@@ -476,7 +490,7 @@ export class EngineIndicators {
     return this.result
   }
 
-  private calculate (entry: Entry, bars: readonly MarketBar[], from: number, tail: boolean): void {
+  private calculate (entry: Entry, bars: readonly MarketBar[], from: number, tail: boolean, params: readonly number[], maKey = 'ma'): void {
     let rows: IndicatorRow[]
     const name = entry.builtin
     if (name === 'MA') {
@@ -488,7 +502,8 @@ export class EngineIndicators {
       let beforeLast = initialMovingAverageState()
       for (let i = start; i < bars.length; i++) {
         if (i === bars.length - 1) beforeLast = { ...state }
-        rows[i] = { ma: movingAverageStep(bars, i, entry.instance.params[0], state) }
+        const value = movingAverageStep(bars, i, params[0], state)
+        rows[i] = maKey === 'ma' ? { ma: value } : { [maKey]: value }
       }
       if (start === bars.length && cache !== undefined) beforeLast = cache.beforeLast
       entry.movingAverage = { beforeLast, afterLast: state }
@@ -499,10 +514,10 @@ export class EngineIndicators {
       const state = resume ? { ...(from === this.length ? cache.afterLast : cache.beforeLast) } : initialState()
       rows = resume ? entry.result!.rows as IndicatorRow[] : new Array(bars.length)
       let beforeLast = initialState()
-      const key = name === 'EMA' ? 'ema' : 'rsi'
       for (let i = start; i < bars.length; i++) {
         if (i === bars.length - 1) beforeLast = { ...state }
-        rows[i] = { [key]: recursiveStep(name, finite(bars[i].close), entry.instance.params[0], state) }
+        const value = recursiveStep(name, finite(bars[i].close), params[0], state)
+        rows[i] = name === 'EMA' ? { ema: value } : { rsi: value }
       }
       // A no-op tail notification must not discard the existing last-bar checkpoint.
       if (start === bars.length && cache !== undefined) beforeLast = cache.beforeLast
@@ -516,7 +531,7 @@ export class EngineIndicators {
       let beforeLast = createBollingerState()
       for (let i = start; i < bars.length; i++) {
         if (i === bars.length - 1) beforeLast = cloneBollingerState(state)
-        rows[i] = stepBollinger(bars, i, entry.instance.params[0], entry.instance.params[1], state)
+        rows[i] = stepBollinger(bars, i, params[0], params[1], state)
       }
       if (start === bars.length && cache !== undefined) beforeLast = cache.beforeLast
       entry.bollinger = { beforeLast, afterLast: state }
@@ -527,7 +542,7 @@ export class EngineIndicators {
       const state = resume ? cloneMacdState(from === this.length ? cache.afterLast : cache.beforeLast) : initialMacdState()
       rows = resume ? entry.result!.rows as IndicatorRow[] : new Array(bars.length)
       let beforeLast = initialMacdState()
-      const [fastPeriod, slowPeriod, signalPeriod] = entry.instance.params
+      const [fastPeriod, slowPeriod, signalPeriod] = params
       for (let i = start; i < bars.length; i++) {
         if (i === bars.length - 1) beforeLast = cloneMacdState(state)
         const close = finite(bars[i].close)
@@ -542,7 +557,7 @@ export class EngineIndicators {
     } else if (name === 'KDJ' && tail && this.length > 0 && from >= this.length - 1 && from > 0 &&
         entry.result!.rows[from - 1]?.k != null && entry.result!.rows[from - 1]?.d != null) {
       rows = entry.result!.rows as IndicatorRow[]
-      const [period, smoothK, smoothD] = entry.instance.params
+      const [period, smoothK, smoothD] = params
       let k = rows[from - 1].k as number, d = rows[from - 1].d as number
       for (let i = from; i < bars.length; i++) {
         let high = -Infinity, low = Infinity
@@ -562,16 +577,20 @@ export class EngineIndicators {
       rows = tail ? entry.result!.rows as IndicatorRow[] : new Array(bars.length)
       for (let i = tail ? from : 0; i < bars.length; i++) rows[i] = volumeRow(bars[i])
     } else {
-      const calculated = entry.definition.calculate(bars, entry.instance.params)
-      if (!Array.isArray(calculated) || calculated.length !== bars.length) throw new RangeError(`${entry.instance.name} must return one row per bar`)
+      const window = tail && from >= this.length - 1 ? windowFor(entry.definition.calculate) : undefined
+      const inputStart = window?.inputStart(params, from, bars.length) ?? 0
+      const calculated = entry.definition.calculate(inputStart > 0 ? bars.slice(inputStart) : bars, params)
+      if (!Array.isArray(calculated) || calculated.length !== bars.length - inputStart) throw new RangeError(`${entry.instance.name} must return one row per bar`)
       if (name !== undefined) rows = calculated as IndicatorRow[]
       else {
-        rows = new Array(bars.length)
-        for (let i = 0; i < bars.length; i++) {
+        const outputStart = inputStart > 0 ? window!.outputStart(params, from, bars.length) : 0
+        rows = inputStart > 0 ? entry.result!.rows as IndicatorRow[] : new Array(bars.length)
+        for (let i = outputStart; i < bars.length; i++) {
           const row: Record<string, number | null> = Object.create(null)
-          for (const figure of entry.definition.figures) row[figure.key] = finite(calculated[i]?.[figure.key])
+          for (const figure of entry.definition.figures) row[figure.key] = finite(calculated[i - inputStart]?.[figure.key])
           rows[i] = row
         }
+        rows.length = bars.length
       }
     }
     entry.result = { id: entry.instance.id, name: entry.instance.name, pane: entry.instance.pane, paneId: entry.instance.paneId, figures: entry.definition.figures, rows }

@@ -10,7 +10,7 @@ The packages are GPL-3.0-or-later (commercial licence available); LICENSE holds 
 
 This snapshot includes source, existing tests, examples and lockfiles. It excludes monorepo history, node_modules, build output and the inherited hosted CI/package-publish workflows. The owner subsequently authorized the manual npm Trusted Publishing workflow documented in docs/NPM-PUBLISHING.md; no push/PR test pipeline is installed.
 
-For local development: npm install, npm run build, npm test, npm run typecheck, npm run lint (the repository is an npm workspace of four packages; bun.lock was removed with the split and no lockfile exists until super-protocol is published). Run browser checks only when relevant; no package is published by these local commands.
+For local development before the protocol registry release: `npm run setup:local -- ../super-chat`, then `npm run build`, `npm test`, `npm run typecheck` and `npm run lint`. See [LOCAL-DEVELOPMENT.md](LOCAL-DEVELOPMENT.md) for the real protocol source, prerequisites and installation limitations. The repository is an npm workspace of four packages; a registry lockfile can be created once super-protocol is published. Run browser checks only when relevant; these commands publish nothing.
 
 Owner authorized public npm publication on 2026-11-03 as @super-solution/super-chart, followed by manual Trusted Publishing automation. publishConfig targets registry.npmjs.org with public access. The GitHub repository stays private; making it public or adding other automation requires separate authorization. Existing original-monorepo consumers are unchanged.
 

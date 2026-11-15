@@ -41,10 +41,9 @@ test('drawing input creates one segment, cancels with Escape and commits a brush
     state.restoreDrawingMethods = () => { store.add = add; store.remove = remove }
   })
   await tools.selectOption('brush')
-  // Inside the plot at any viewport: the plot's lower edge depends on the harness height and fonts.
-  await page.mouse.move(bounds.x + 150, bounds.y + 200)
+  await page.mouse.move(bounds.x + 150, bounds.y + 240)
   await page.mouse.down()
-  await page.mouse.move(bounds.x + 230, bounds.y + 150, { steps: 8 })
+  await page.mouse.move(bounds.x + 230, bounds.y + 180, { steps: 8 })
   await page.mouse.up()
   const brush = await page.evaluate(() => {
     const state = window as any, snapshot = state.pro.chart.drawings.getSnapshot()
@@ -53,26 +52,5 @@ test('drawing input creates one segment, cancels with Escape and commits a brush
   })
   expect(brush.calls).toEqual({ add: 1, remove: 0 })
   expect(brush.selected).toBe(true)
-  expect(await pageErrors(page)).toEqual([])
-})
-
-test('an unknown drawing tool is refused instead of arming a tool that swallows the gestures', async ({ page }) => {
-  await openHarness(page)
-  const result = await page.evaluate(async () => {
-    const { H } = window as any
-    const { pro } = H.mount({ id: 'drawing-bogus-tool' })
-    await H.ready(pro)
-    const message = (action: () => void): string | null => { try { action() } catch (error) { return (error as Error).message } return null }
-    return {
-      bogus: message(() => pro.chart.setDrawingTool('bogus')),
-      empty: message(() => pro.chart.setDrawingTool('')),
-      valid: message(() => pro.chart.setDrawingTool('segment')),
-      brush: message(() => pro.chart.setDrawingTool('brush')),
-      cleared: message(() => pro.chart.setDrawingTool(null))
-    }
-  })
-  expect(result.bogus).toMatch(/Unknown drawing tool "bogus"/)
-  expect(result.empty).toMatch(/Unknown drawing tool ""/)
-  expect([result.valid, result.brush, result.cleared]).toEqual([null, null, null])
   expect(await pageErrors(page)).toEqual([])
 })

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * Colours the annotation layer paints with (level, zone and marker tones), by card theme. The chart canvas takes its
- * colours from `EngineRenderOptions` and the workspace chrome from the `--super-chart-*` custom properties
+ * colours from `EngineRenderOptions` and the workspace chrome from the `--sc-*` custom properties
  * (see ./theme.ts); this file is only the annotation tones.
  */
 export type ThemeName = 'light' | 'dark'

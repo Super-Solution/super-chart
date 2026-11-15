@@ -125,3 +125,13 @@ export function volumeIntensities (bars: readonly Bar[]): number[] {
   if (max <= 0) return bars.map(() => 0)
   return bars.map(b => Math.max(0, Math.min(1, (b.volume ?? 0) / max)))
 }
+
+/** Candle and histogram bodies track their slot width at every zoom level. */
+export function halfBarWidth (model: { geometry: { plotWidth: number }, xPositions: readonly number[] }, slotWidth?: number): number {
+  let spacing = slotWidth !== undefined && Number.isFinite(slotWidth) && slotWidth > 0 ? slotWidth : model.geometry.plotWidth
+  for (let i = 1; i < model.xPositions.length; i++) {
+    const gap = model.xPositions[i] - model.xPositions[i - 1]
+    if (gap > 0) spacing = Math.min(spacing, gap)
+  }
+  return Math.max(0.25, spacing * 0.34)
+}

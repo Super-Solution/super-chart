@@ -149,12 +149,15 @@ and localized chrome are not emulated; agents drive the chart through the plugin
 instead. AVP is omitted until turnover/volume units are explicit. Volume profile
 estimates activity across candle ranges, not trade prints; order blocks are heuristics.
 
-The workspace chrome (toolbars) is dark by default. Pass `theme: 'light'` (or call
-`setTheme`) for the light preset, or restyle it with the `--super-chart-background`,
-`-text`, `-surface`, `-border`, `-divider` and `-danger` CSS custom properties on the
-host element; the canvas colours come from `chart.render`. The chat plugin passes its
-card theme through. Initial calculations over very large histories can still block a
-frame.
+The workspace chrome is dark by default. Pass `theme: 'light'` or call
+`workspace.setTheme('light')` for matching light controls and canvas colours. Presets
+use the same `--sc-*` variables as the default UI; `WORKSPACE_CHROME_VARS` lists their
+names. Customize through host CSS or `ui.variables` (for example `--sc-background`,
+`--sc-text`, `--sc-control-background`), and use `chart.render` for canvas colours.
+Constructor `ui.variables` and `chart.render` values override the chosen preset;
+calling `setTheme` later replaces its chrome and canvas colours. The chat plugin
+passes its card theme through. Initial calculations over very large histories can
+still block a frame.
 
 ## Development
 

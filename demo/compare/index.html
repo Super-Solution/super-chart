@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Super Chart — 新舊版體驗室</title>
+<style>
+:root{color-scheme:dark;--bg:#0b0e13;--panel:#10161f;--line:#27323e;--muted:#93a3b5;--text:#e8eef5;--green:#83e9bd}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}header,main,footer{max-width:2100px;margin:auto;padding:0 28px}header{padding-top:24px}.brand{display:flex;align-items:center;gap:12px;font-size:13px;font-weight:700;letter-spacing:.04em}.brand svg{width:28px;height:28px}.pill{font:11px ui-monospace,monospace;color:var(--green);border:1px solid #345b4c;padding:4px 8px;border-radius:5px;margin-left:auto}.heading{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:20px 0}h1{font-size:30px;line-height:1.2;font-weight:600;margin:0 0 8px;letter-spacing:-.04em}p{margin:0;color:var(--muted)}.tabs{display:flex;background:#161d26;border:1px solid var(--line);border-radius:8px;padding:3px;flex-shrink:0}button,select{font:inherit;cursor:pointer;color:var(--text);background:#18212c;border:1px solid #344150;border-radius:6px;min-height:35px;padding:6px 12px}button:hover,select:hover{border-color:#73889f}button:focus-visible,select:focus-visible{outline:2px solid var(--green);outline-offset:3px}button:disabled{opacity:.45;cursor:wait}.tabs button{background:transparent;border:0;font-size:13px}.tabs button[aria-pressed=true]{color:#0b2118;background:var(--green)}.controls{display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:10px}.controls label{display:grid;gap:5px;font-size:11px;color:var(--muted)}.controls select{font-size:13px;width:100%;min-width:0;max-width:100%}.divider{align-self:stretch;width:1px;background:var(--line);margin:2px 2px}.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}#live{background:var(--green);border-color:var(--green);color:#0b2419;font-weight:650;min-width:119px}.small{font-size:12px}.notice{display:flex;justify-content:space-between;gap:12px;color:var(--muted);font-size:12px;padding:12px 2px}.notice strong{font-weight:500;color:var(--green)}.charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}.card{min-width:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#10141d}.card-top{display:flex;gap:10px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}.tag{font-size:11px;border:1px solid #345b4c;border-radius:4px;color:var(--green);padding:3px 6px}.old .tag{border-color:#3e4858;color:#b4c1d0}.card h2{margin:0;font-size:16px;font-weight:600}.card-top small{display:block;color:var(--muted);font-size:11px;margin-top:3px}.price{margin-left:auto;text-align:right;font-family:ui-monospace,monospace;font-size:18px}.price small{font:11px system-ui}.card iframe{display:block;width:100%;height:max(620px,calc(100dvh - 340px));border:0}.card-bottom{display:flex;justify-content:space-between;gap:8px;padding:9px 14px;color:var(--muted);font-size:11px;border-top:1px solid var(--line);min-height:37px}.status{color:var(--green)}.status.error{color:#ff9c9c}.charts[data-mode=new],.charts[data-mode=old]{grid-template-columns:1fr}.charts[data-mode=new] .old,.charts[data-mode=old] .new{display:none}.guide{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin:24px 0}.guide article{border-top:1px solid var(--line);padding-top:14px}.guide b{display:block;font-size:13px;margin-bottom:5px;font-weight:600}.guide p{font-size:12px;line-height:1.7}.guide em{font-style:normal;color:var(--green);margin-right:8px}details{margin:20px 0;border-top:1px solid var(--line);padding-top:15px;color:var(--muted);font-size:12px}summary{cursor:pointer;color:#c3d0dc}details p{margin:10px 0;max-width:1150px}footer{color:#6f8093;font-size:11px;padding-bottom:24px}.error-box{color:#ffb2b2;border:1px solid #784747;border-radius:6px;padding:12px;margin-bottom:12px;white-space:pre-wrap} .error-box[hidden]{display:none}
+@media(max-width:1200px){header,main,footer{padding-left:16px;padding-right:16px}.heading{align-items:flex-start}.charts{grid-template-columns:1fr}.guide{grid-template-columns:1fr 1fr}.card iframe{height:680px}.notice{flex-wrap:wrap}.divider{display:none}}
+@media(max-width:600px){h1{font-size:24px}.heading{display:block}.tabs{margin-top:16px;width:max-content}.controls{gap:9px}.controls label{flex:1 1 calc(50% - 9px);min-width:0}.guide{grid-template-columns:1fr}.card-top{padding:10px}.price{font-size:15px}.pill{font-size:10px}}
+</style></head><body>
+<header>
+<div class="brand"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M4 22 11 15 17 19 28 7" stroke="#83e9bd" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 28h24" stroke="#3b5263" stroke-width="2"/></svg>SUPER CHART<span class="pill">LOCAL · SYNTHETIC DATA</span></div>
+<div class="heading"><div><h1>同一行情，兩代引擎。</h1><p>直接拖曳、縮放、畫線。把新舊版放在一起，自己感受操作差異。</p></div><nav class="tabs" aria-label="比較方式"><button data-mode="both" aria-pressed="true">並排比較</button><button data-mode="new" aria-pressed="false">只看新版</button><button data-mode="old" aria-pressed="false">只看舊版</button></nav></div>
+</header>
+<main>
+<section class="controls" aria-label="假行情設定">
+<label>商品<select id="symbol"><option value="SUI">SUI / USD（假資料）</option><option value="BTC">BTC / USD（假資料）</option></select></label>
+<label>週期<select id="period"><option value="1">1 分鐘</option><option value="15">15 分鐘</option></select></label>
+<label>歷史資料<select id="count"><option value="1000">1,000 根 K 線</option><option value="10000" selected>10,000 根 K 線</option><option value="50000">50,000 根 K 線</option></select></label>
+<label>指標組合<select id="multi"><option value="0">基礎 · MA + VOL</option><option value="1">多指標 · MA / EMA / BOLL / VOL / RSI</option></select></label>
+<div class="divider"></div>
+<label>模擬更新頻率<select id="rate"><option value="1">1 次 / 秒</option><option value="10" selected>10 次 / 秒</option><option value="50">50 次 / 秒</option></select></label>
+<div class="actions"><button id="live" disabled>開始即時更新</button><button id="replay" disabled>兩版回放</button><button id="latest" disabled title="回到最新行情位置">回到最新</button><button id="reset">重置比較</button></div>
+</section>
+<div class="notice"><span id="sync" aria-live="polite">正在載入真實的新舊版…</span><span>假行情每 20 次更新形成一根 K 線 · 改設定會重置畫線與視角</span></div>
+<div id="error" class="error-box" role="alert" hidden></div>
+<section class="charts" data-mode="both" aria-label="互動圖表">
+<article class="card new"><div class="card-top"><span class="tag">NEW</span><div><h2>自研版本 <span class="small">0.1.0</span></h2><small>Owned Canvas · 本輪修正版</small></div><div class="price" id="price-new">—<small>SYNTHETIC USD</small></div></div><iframe id="new" title="新版 Super Chart 0.1.0 互動假行情"></iframe><div class="card-bottom"><span id="state-new" class="status">準備中</span><span id="market-new">—</span></div></article>
+<article class="card old"><div class="card-top"><span class="tag">PREVIOUS</span><div><h2>先前發布版 <span class="small">0.0.53</span></h2><small>KLineCharts 9.8.12 · 原版 Pro 介面</small></div><div class="price" id="price-old">—<small>SYNTHETIC USD</small></div></div><iframe id="old" title="舊版 Super Chart 0.0.53 互動假行情"></iframe><div class="card-bottom"><span id="state-old" class="status">準備中</span><span id="market-old">—</span></div></article>
+</section>
+<section class="guide" aria-label="建議體驗順序">
+<article><b><em>01</em>拖動與縮放</b><p>在 K 線區左右拖曳、滾輪縮放，再移動十字線。先用基礎指標，感受圖表跟手程度。</p></article>
+<article><b><em>02</em>加大更新量</b><p>選 50,000 根與多指標，再開每秒 50 次更新。拖曳舊資料後按「回到最新」，觀察更新與互動是否順暢。</p></article>
+<article><b><em>03</em>畫線與編輯</b><p>新版選「trend line」後按住拖曳放置；舊版用左側工具列。再試選取、移動和復原，兩版畫線各自獨立。</p></article>
+<article><b><em>04</em>回放與完整介面</b><p>按「兩版回放」從末端前 180 根開始。回放後可用各版原生按鈕操作；切成單版看完整工具列。兩版原本都支援回放。</p></article>
+</section>
+<details><summary>這次比較的是什麼？有哪些限制？</summary>
+<p>新版使用本輪優化後的本機 0.1.0 原始碼（改前基準 commit 5b9b7d0）；舊版使用已發布的 @super-solution/super-chart 0.0.53 與 KLineCharts 9.8.12。這是真正的兩代引擎，不是用同一張圖換皮。新版已把 Pro 封裝與底層繪圖換成自研實作，並使用新版公開 API；這個頁面沒有修改兩版套件。</p>
+<p>兩邊使用同一固定公式、時間、資料筆數與更新序號。初始皆為約 160 根可見 K 線、MA(20) 與 VOL；多指標加入 EMA(21)、BOLL(20,2)、RSI(14)。指標初始化與計算慣例可能不同，不能把名稱與參數相同當作結果完全一致。圖內商品／週期可各自操作；上方會提示是否仍為同一行情。</p>
+<p>並排會共享瀏覽器的 CPU/GPU 資源，適合操作體驗，不能據此宣稱正式的加速倍數。更新頻率是目標排程頻率，不是 FPS。回放由兩版自己的時鐘驅動，進度可能略有不同；另有<a href="/bench.html">單實例手動量測頁</a>；本頁不會執行自動化測試。所有價格均為合成資料，不連交易所、錢包或帳戶。這是 Web 體驗，不是 React Native 原生渲染預覽。</p>
+<p>舊版程式只從既有本機快取讀入記憶體，未複製新備份或安裝整套依賴。既有 GPL-3.0-or-later 授權與第三方 notices 保持在 repository。此 demo 僅供本機使用，未推送或發布。</p>
+</details>
+</main><footer>Super Chart experience lab · No real orders. No account connection.</footer>
+<script>
+const $ = id => document.getElementById(id);
+let generation = '', seq = 0, timer = null, replaying = false, running = false;
+let ready = {new:false,old:false}, states = {}, lastUpdate = 0;
+const send = (type, extra={}) => { for (const v of ['new','old']) $(v).contentWindow?.postMessage({channel:'super-chart-compare',generation,type,...extra},location.origin); };
+function stopLive(){clearInterval(timer);timer=null;running=false;$('live').textContent='開始即時更新';}
+function renderSync(){
+ const a=states.new,b=states.old;
+ if(!ready.new||!ready.old) { $('sync').textContent='正在載入真實的新舊版…';return; }
+ if(replaying){$('sync').textContent='歷史回放中 · 兩版使用各自原生回放時鐘';return;}
+ if(a?.market!==b?.market){$('sync').textContent='圖內商品／週期已不同；按「重置比較」回到相同設定。';return;}
+ if(a?.seq!==b?.seq){$('sync').textContent='正在套用相同更新序號…';return;}
+ const equal = a?.close === b?.close;
+ $('sync').textContent=(equal?'✓ 相同輸入行情':'正在載入行情')+' · '+(a?.market??'')+' · 更新 #'+(a?.seq??0).toLocaleString()+(running?' · 模擬進行中':' · 已暫停');
+}
+function boot(){
+ stopLive();replaying=false;$('replay').textContent='兩版回放';
+ seq=0;generation=String(Date.now());ready={new:false,old:false};states={};
+ $('error').hidden=true;$('error').textContent='';
+ for(const id of ['live','replay','latest'])$(id).disabled=true;
+ for(const v of ['new','old']){
+  $('state-'+v).textContent='正在載入…';$('state-'+v).classList.remove('error');
+  const p=new URLSearchParams({version:v,generation,symbol:$('symbol').value,period:$('period').value,count:$('count').value,multi:$('multi').value});
+  $(v).src='/frame.html?'+p;
+ }
+ renderSync();
+}
+window.addEventListener('message', event=>{
+ if(event.origin!==location.origin||event.data?.channel!=='super-chart-compare'||event.data.generation!==generation)return;
+ const m=event.data,v=m.version;
+ if(!['new','old'].includes(v)||event.source!==$(v).contentWindow)return;
+ if(m.type==='error'){
+  stopLive();ready[v]=false;for(const id of ['live','replay','latest'])$(id).disabled=true;$('state-'+v).textContent='載入／操作錯誤';$('state-'+v).classList.add('error');
+  $('error').hidden=false;$('error').textContent+=(v==='new'?'新版':'舊版')+'：'+m.message+'\n';return;
+ }
+ states[v]={...states[v],...m};
+ if(m.type==='ready'){
+  ready[v]=true;$('state-'+v).textContent=m.count.toLocaleString()+' 根已載入';
+  if(ready.new&&ready.old)for(const id of ['live','replay','latest'])$(id).disabled=false;
+ }
+ if(m.market)$('market-'+v).textContent=m.market;
+ if(typeof m.close==='number'){
+  $('price-'+v).firstChild.textContent=m.close.toLocaleString('en-US',{minimumFractionDigits:m.market?.startsWith('BTC')?2:4,maximumFractionDigits:m.market?.startsWith('BTC')?2:4});
+ }
+ if(!running||m.type!=='tick'||(states.new?.seq===states.old?.seq&&performance.now()-lastUpdate>200)){renderSync();lastUpdate=performance.now();}
+});
+$('live').onclick=()=>{
+ if(running){stopLive();renderSync();return;}
+ send('exitReplay');replaying=false;$('replay').textContent='兩版回放';
+ running=true;$('live').textContent='暫停即時更新';
+ timer=setInterval(()=>{seq++;send('tick',{seq});},1000/Number($('rate').value));renderSync();
+};
+$('rate').onchange=()=>{if(running){stopLive();$('live').click();}};
+$('replay').onclick=()=>{stopLive();replaying=!replaying;send(replaying?'replay':'exitReplay');$('replay').textContent=replaying?'結束回放':'兩版回放';renderSync();};
+$('latest').onclick=()=>send('latest');
+$('reset').onclick=boot;
+for(const id of ['symbol','period','count','multi'])$(id).onchange=boot;
+document.querySelectorAll('[data-mode]').forEach(button=>{if(button.tagName!=='BUTTON')return;button.onclick=()=>{document.querySelector('.charts').dataset.mode=button.dataset.mode;document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));};});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){stopLive();renderSync();}});
+window.addEventListener('pagehide',stopLive);
+boot();
+</script></body></html>

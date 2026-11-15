@@ -94,6 +94,4 @@ The catalog is written out three times: `backends/go/server/catalog.go`, `backen
 and the private Rust backend. When a kernel is added or a default changes, change all of them, then compare the
 two public servers: `GET /v1/indicators` must return the same document, and every case in
 `conformance/indicators.v1.json` must give the same series through `POST /v1/indicators` (inputs mapped to
-bar fields, params passed through). Both servers' test suites now do that replay, and also run every refusal in
-`conformance/indicators-server.v1.json` (request, HTTP status, error code), so a new error case is added to that
-one file and both servers must satisfy it.
+bar fields, params passed through).

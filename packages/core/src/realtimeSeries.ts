@@ -5,7 +5,7 @@ import { toHeikinAshi } from './heikinAshi'
 export type CandleMode = 'raw' | 'heikin-ashi'
 
 export interface RealtimeSeriesChange {
-  kind: 'reset' | 'prepend' | 'tail' | 'availability'
+  kind: 'reset' | 'prepend' | 'tail' | 'truncate' | 'availability'
   /** First potentially changed index, inclusive. */
   from: number
   length: number
@@ -75,11 +75,22 @@ export class RealtimeSeries implements ChartDataPort {
   }
 
   applyNewData (bars: MarketBar[], more = false): void {
-    this._validate(bars)
-    this._bars = bars.map(bar => ({ ...bar }))
+    this._bars = this._copyValidated(bars)
     this._more = more
     this._rebuild()
     this._emit('reset', 0)
+  }
+
+  /** Drop a replay suffix without cloning the prefix or retaining future prices. */
+  truncateData (length: number, expectedLength: number, expectedLastTimestamp: number): boolean {
+    if (!Number.isSafeInteger(length) || length < 1 || length > this._bars.length ||
+        this._bars.length !== expectedLength || this.getLastTimestamp() !== expectedLastTimestamp) return false
+    if (length === this._bars.length) return true
+    this._bars.length = length
+    if (this._referenceIndicators) this._rebuild()
+    else if (this._ha !== null) this._ha.length = length
+    this._emit('truncate', length)
+    return true
   }
 
   applyMoreData (bars: MarketBar[], more = false): void {
@@ -161,14 +172,30 @@ export class RealtimeSeries implements ChartDataPort {
     }
   }
 
+  /** Validate the owned copy before publishing it; caller mutation cannot change the series. */
+  private _copyValidated (bars: readonly MarketBar[]): MarketBar[] {
+    const owned: MarketBar[] = []
+    let previous = -Infinity
+    for (const input of bars) {
+      const bar = { ...input }
+      this._validateBar(bar, previous, false)
+      owned.push(bar); previous = bar.timestamp
+    }
+    return owned
+  }
+
+  private _validateBar (bar: MarketBar, previous: number, equal: boolean): void {
+    if (!Number.isFinite(bar.timestamp) || !Number.isFinite(bar.open) ||
+        !Number.isFinite(bar.high) || !Number.isFinite(bar.low) || !Number.isFinite(bar.close) ||
+        (equal ? bar.timestamp < previous : bar.timestamp <= previous)) {
+      throw new RangeError('RealtimeSeries requires finite OHLC and ascending normalized timestamps')
+    }
+  }
+
   private _validate (bars: MarketBar[], equal = false): void {
     let previous = -Infinity
     for (const bar of bars) {
-      if (!Number.isFinite(bar.timestamp) || !Number.isFinite(bar.open) ||
-          !Number.isFinite(bar.high) || !Number.isFinite(bar.low) || !Number.isFinite(bar.close) ||
-          (equal ? bar.timestamp < previous : bar.timestamp <= previous)) {
-        throw new RangeError('RealtimeSeries requires finite OHLC and ascending normalized timestamps')
-      }
+      this._validateBar(bar, previous, equal)
       previous = bar.timestamp
     }
   }

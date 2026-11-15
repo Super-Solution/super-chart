@@ -5,278 +5,32 @@ repository's own rules apply (see [`../MAINTAINING.md`](../MAINTAINING.md) and `
 added and no test case, fixture or snapshot baseline is added without the owner's permission, so validation
 below is the existing suites plus bounded manual observation.
 
-## Scorecard after round 15 (directive section 24)
+## PR #22 integration (2026-11-15)
 
-The directive asks for evidence, not invented numbers. The repository had no scorecard before this series, so there
-is no earlier score to compare with and none is made up. Each row gives the assessment now and what it rests on;
-the scores are a reviewer's judgement of that evidence, on the directive's weights (the repository has UI, so no
-weight is moved).
+Integrated the older branch with main after PR #23, retaining its runtime fixes
+without introducing tests, fixtures, pipelines, dependencies or extra build gates.
 
-| Dimension (weight) | Now | Evidence |
-| --- | ---: | --- |
-| Correctness and reliability (20%) | 8.5 | Five rounds of fuzzing and probing (viewport, SuperScript structure, loader, drawings import, annotations, TA kernels, price scales) found and fixed the defects listed in rounds 1, 2, 3, 7, 12 to 15, with none left open that the probes could reach. A 20,000-case drawing import fuzz and a 25 x 40 loader stress run clean. Not covered: long-running soak, real-network feeds. |
-| Architecture and modularity (15%) | 8.5 | Layering is enforced at build time and in `dist`; the declarations are now also compiled by a TypeScript consumer of every entry under two resolution modes. No change to the layering was needed. |
-| API design and developer experience (15%) | 8.0 | Misuse of the constructor, drawing tool, render options, loader options, `volumeProfile` now fails with a named error; `buildChartContext` takes the shipped workspace; doc samples type-check against the shipped names; examples are compiled in the build. Remaining: `timespan` typos only warn, by design; several error strings are not machine-readable codes. |
-| Performance and efficiency (15%) | 8.0 | TA kernels at 300,000 bars take 1 to 70 ms each; extreme SuperScript parameters never run long; the example feed no longer leaks timers. No new benchmark was needed or added; no performance claim is made beyond these measurements. |
-| Extensibility and customisation (10%) | 8.0 | The workspace chrome is themable by CSS custom properties with a light preset (R4); `ChartWorkspaceLike` lets any host object feed the AI helper. |
-| Component design and visual quality (10%) | 7.5 | Light and dark chrome verified by screenshot and an e2e case; accessibility attributes of the workspace were read and left as they were (labelled dialog, toolbar, status and alert regions). No full screen-reader pass was done. |
-| Testing and maintainability (10%) | 8.5 | Vitest 467 to 489 cases (23 to 27 files); 3 new declared e2e cases (73 pass); the Go and Python indicator servers replay 341 shared conformance cases and a 22-row refusal table; the package check now type-checks consumers and examples. |
-| Documentation and integration (5%) | 8.0 | Stale package names fixed in five pages, a historical page marked, README and example README updated, this log kept per round. |
+- Retained SuperScript nesting diagnostics, loader request/timer bounds, finite
+  viewport fallback, volume-profile invalid-bar handling, HTTP polling cleanup,
+  chat-card ownership and indicator rollback, and workspace support in the AI helper.
+- Integrated light/dark presets through the existing `--sc-*` variables. Kept
+  PR #23's lazy controls, render/input optimizations, viewport limits and data paths.
+- Removed PR #22's added unit/browser/backend cases and fixture, four additional
+  TypeScript consumer/example build passes, obsolete Node-types workaround, and
+  cosmetic colour/unknown-option checks. Existing main validation is unchanged.
+- Independent review found a nonfinite bar-count recursion in viewport fallback;
+  fixed it before merging. Tick throttling uses the same timer limit as other delays.
 
-Weighted: 8.2 of 10. The number is a summary of the table above, not a target; every point in it maps to a change or a
-probe listed in the rounds.
+Validation on the integrated source: 188 existing cases across six affected suites
+passed; full typecheck and all four ESM/DTS package builds with existing package
+checks passed; lint passed with 0 errors and the existing 146 warnings; diff check
+passed. The final viewport change was reviewed separately after the suite run.
+No new cases or assertions were written. Browser cases were not rerun this round.
 
-### What remains (not done in this series)
-
-* `@supersolutions/super-protocol` is unpublished, so a clean `npm install` returns 404; a lockfile and the first
-  publish wait for the owner (outside this series' mandate).
-* The packages declare `engines.node >= 22` although the web and core packages target browsers and React Native;
-  consumers on older Node see an engine warning only. Worth a decision by the owner.
-* Several error messages would be better as stable codes for programmatic handling.
-* No visual regression baseline exists (adding a snapshot baseline needs the owner's permission under `AGENTS.md`).
-* Retained legacy e2e specs (`bundle`, `chrome`, `theme`, ...) describe removed interfaces and stay out of the run.
-
-## Directive rounds (2026-11-08, second series of 15)
-
-Run under the owner's "library excellence" directive. Constraints held throughout: public API stays compatible,
-no publish, no licence change, no history rewrite, no new runtime dependency, no CI. The directive's "add tests"
-authorisation is what allows the tests below. Newest round first within this section.
-
-### Round 15: loader options that size requests and timers are checked
-
-* Probe of the loader's numeric options (`count`, `loadTimeoutMs`, `syncMinIntervalMs`, `syncTimeoutMs`,
-  `moreRetryMs`, `tickThrottleMs`), which `ChartWorkspace` passes through unchecked. Read against `requestRange` and
-  the timer calls: `count: NaN` makes the range start `NaN`, which `requestRange` turns into `0`, so the datafeed is
-  asked for its entire history; `count: 0` or a negative count asks for the empty range and the chart stays blank
-  with no message; any timer above 2,147,483,647 ms (including `Infinity`, which someone might use to mean "no
-  timeout") fires at once, so every initial load ends as a timeout error.
-* Changed: the `DataLoader` constructor checks them and names the option in a `RangeError`:
-  `Loader option count must be an integer from 1 to 1000000, got NaN`. Timer options must be finite and in range
-  (a fraction of a millisecond is still accepted); `tickThrottleMs` must be finite (negative is still clamped to 0).
-  Every value that worked before, including defaults, `1`, `1000000`, `2 ** 31 - 1`, `0` for the sync interval and
-  fractional timeouts, still works.
-* Tests: two cases in `dataLoader.test.ts` (the refusals, and the values that must keep working). Full gate and the
-  73 e2e cases pass.
-
-### Round 14: `volumeProfile` can no longer be poisoned or made to exhaust memory
-
-* Probes first. `EngineAnnotations.setAnnotations` under 20,000 junk documents: only `TypeError`/`RangeError` with a
-  message, every result shaped `{ applied, rejected }`, 0.1 s. `detectFairValueGaps` and `detectOrderBlocks` with a
-  non-finite value in any one field of a 300-bar series: results stay finite and unchanged, except an impossible
-  `low: Infinity` in the gap detector (not a bar the chart pipeline lets through), left alone.
-* Found in the exported `volumeProfile` (a public core function; the chart's own overlay sanitises its input first,
-  so only direct callers were exposed):
-  * one bar with a `NaN` or infinite `volume` turned every row's volume into `NaN` and moved the point of control
-    to the wrong row (50 good bars plus one bad bar gave `total: null`);
-  * `rows` was unchecked: `-3`, `1.5` and `NaN` threw an unhelpful `Invalid array length`, and `rows: 1e9` or `5e7`
-    ran the process out of heap (`FATAL ERROR: ... heap out of memory`), which an agent- or user-supplied profile
-    setting could trigger.
-* Changed: a bar without a finite `high`/`low` is skipped, a non-finite or non-positive volume counts as none, and
-  `rows` must be an integer from 1 to 10,000 and `valueArea` above 0 and at most 1, otherwise a `RangeError` says
-  so. The in-repo callers (24 rows, 70 % value area, overlay rows capped at 200 and a 0-1 value area) are
-  unaffected, and the profile of clean data is unchanged to the last digit.
-* Tests: two cases in `analysis/volumeProfile.test.ts` (five kinds of bad bar leave the 24 rows, POC, value area
-  and the 500 total intact; seven bad row counts and five bad value areas are refused while 1 and 10,000 rows work).
-
-### Round 13: render options that do nothing now say so
-
-* Follow-up to the R12 probe: `setRenderOptions({ upColor: 'not-a-color' })` returned normally. The real keys are
-  `up`/`down`/`background`/`grid`/`text`/`line`, so the call was doubly wrong, and the canvas silently kept its
-  previous colour. A renamed or misspelt colour option was indistinguishable from a working one.
-* Changed (in `EngineChart.validateRender`, which the constructor, `setRenderOptions` and layout changes share):
-  * a colour option that is not a string the browser parses as a CSS colour (`CSS.supports('color', value)`) throws
-    `RangeError: Render option up is not a CSS colour: "not-a-colour"`, matching how `chartType`, `timeZone` and
-    `baseline` already behave;
-  * an unknown option key is warned about once per chart with the list of known keys, not thrown, so a host that
-    passes extra keys today keeps working.
-  The theme presets and every colour the e2e suite uses (hex, `rgb()`, `rgba()`, `transparent`, named) pass.
-* Test: one e2e case in `lifecycle.spec.ts` (refusal, unchanged state after a refusal, five accepted forms, the
-  warning appears exactly once for a repeated typo). Full e2e set: 73 passed.
-
-### Round 12: an unknown drawing tool is refused
-
-* Probed 37 misuse calls on a live workspace (symbols, periods, bar limits, document restore, indicator
-  parameters, render and layout options, drawings, replay, every call after `dispose`). Almost all already fail
-  with a specific `TypeError`/`RangeError` (and after `dispose` with "Chart workspace is disposed"); the page
-  error log stayed empty.
-* Found: `chart.setDrawingTool('bogus')` returned normally. The input controller then treated `'bogus'` as an armed
-  tool, so every pointer gesture was consumed (no panning) and nothing was ever drawn, with no message anywhere.
-  A typo in a host or an agent-supplied tool name looked like a frozen chart.
-* Changed: `setDrawingTool` accepts `null` or a member of `DRAWING_TYPES` and throws
-  `RangeError: Unknown drawing tool "bogus"` otherwise. Every tool the workspace UI offers is in that list.
-* Test: an e2e case in `drawing-input.spec.ts` (refused: `'bogus'`, `''`; accepted: `'segment'`, `'brush'`, `null`).
-  The full e2e set passes (72).
-* Left alone: `setRenderOptions({ upColor: 'not-a-color' })` is accepted and the canvas keeps the previous colour
-  (a CSS colour cannot be validated without a DOM in the core); an indicator period larger than the series is
-  accepted and yields an empty line, which is the correct result.
-
-### Round 11: `new ChartWorkspace(...)` names its misuse
-
-* Probe first, no defect: 20,000 single- and double-field mutations of a 63-drawing document through
-  `DrawingStore.importJson` (1,937 accepted, 18,063 refused, every refusal a `TypeError`): no other exception type,
-  every accepted document re-exports to byte-identical JSON after a second import, every anchor finite, 7.7 s total.
-* Probed 17 kinds of constructor misuse in a browser. Four failed with an engine-internal message:
-  `null` host: "Cannot read properties of null (reading 'ownerDocument')"; a non-element host: "... reading
-  'defaultView'"; no options: "... reading 'loader'"; and a missing `datafeed` (or one without
-  `getHistoryKLineData`) was accepted and only failed later, away from the cause.
-* Changed: the constructor checks its three required inputs first and says what is wrong: "ChartWorkspace needs a
-  host HTMLElement to mount into", "ChartWorkspace needs options: { datafeed, symbol, period }", "options.datafeed
-  must implement getHistoryKLineData(symbol, period, from, to)". Only the one method without which nothing can load
-  is required, so a datafeed that omits `searchSymbols`/`subscribe` keeps working as before. Valid input is
-  unaffected. Left as is on purpose: an unknown `timespan` (warns once and degrades, by design) and a negative
-  `pricePrecision`.
-* Tests: `web/src/workspaceArguments.test.ts` (4 cases, node, no DOM). The R4 theme e2e case passed a bare `{}` as
-  datafeed to reach its theme check; it now passes a minimal one.
-
-### Round 10: the examples are type-checked against the built packages
-
-* Probe first, no defect: price-scale extremes in a browser (flat, 1e-9, 1e12, 1e300, negative, zero, a single
-  1e6 spike, 1e-6/1e9 alternating) in linear, log and percentage modes: every tick and range finite, no page
-  error. Log and percentage scales with data they cannot represent (non-positive prices, a zero reference price)
-  are refused on purpose by `validateBars` with a `RangeError` the workspace shows as a notice, so the odd
-  default axis of an empty log scale never sits over data.
-* Gap: `examples/vanilla` and `examples/datafeed-http` are what a new user copies, and nothing built them, so an
-  API rename would break the examples silently. They already type-check today; the check now keeps it so.
-* Added to `scripts/check-package.mjs` (runs inside `npm run build`): `tsc -p` on each example against the built
-  `dist` declarations. Verified it fails: renaming `getBars` to `getBarz` in the vanilla example reports the file,
-  line and a "did you mean `getBars`" hint.
-
-### Round 9: the package check type-checks a consumer of every entry
-
-* Probes first, no defect: TA kernels at 300,000 bars run in 1-70 ms each; SuperScript with every length-taking
-  builtin at 1e9, 2147483647, 1e15, 0, -5 and 1.5 either answers instantly or fails with a clear "must be a whole
-  number >= 1" diagnostic (no slow case, no hang); the loader's older-page path drops pages that do not move
-  backwards and stops on an empty one, so a feed that ignores the range cannot loop it.
-* Gap: `scripts/check-package.mjs` proved each entry imports in plain Node, but nothing proved the shipped `.d.ts`
-  files are usable by a TypeScript consumer. A bundled declaration that leaks a source path (`../../core/src/...`)
-  or a broken `exports`/`typesVersions` entry would only surface in a user's project.
-* Added to the check: a scratch consumer (under `node_modules/.cache`, removed afterwards) importing every
-  `exports` entry of the four packages, compiled with `skipLibCheck: false` under classic (`Node`) and `NodeNext`
-  resolution. Verified it fails: appending a declaration that imports `../../core/src/nope` to `web/dist/index.d.ts`
-  fails both passes with the file and line. It runs as part of `npm run build` (no new CI, no new dependency; it is
-  skipped when `typescript` is not installed).
-
-### Round 8: documentation samples use the package names that exist
-
-* Method: extracted every `ts` block from the README, `docs/` and package READMEs and type-checked it against the
-  workspace sources (host variables declared as ambient); also checked every relative Markdown link (0 broken).
-* Found: four how-to pages (`REALTIME-SERIES`, `REALTIME-VIEW`, `REALTIME-INSPECTION`, `NATIVE-LIFECYCLE`) imported
-  from `@zzyzxlabs/super-chart/core` and `/native`, packages that no longer exist, so a copied sample failed at the
-  first line. `SHARED-CORE` said the same and still described a KLineChart peer that the owned engine removed.
-* Changed: imports now read `@supersolutions/super-chart-core` and `@supersolutions/super-chart-core/native`;
-  `SHARED-CORE` is marked as a historical phase-1 page with its stale sentence corrected. After the change every
-  sample type-checks except for context the sample leaves out on purpose (`react-native`, the host's own `symbol`).
-* Left alone on purpose: `OWNED-API-MIGRATION` (already carries a banner pointing at the mapping in `PACKAGES.md`)
-  and `e2e/tests/bundle.spec.ts` (a retained legacy spec outside the Playwright match list, documented as such).
-
-### Round 7: the example datafeed adapter stops leaking pollers and waiting on hung servers
-
-* Audited `examples/datafeed-http/httpDatafeed.ts`, the adapter people copy first. Two defects, both reproduced
-  with a scratch Node harness against a local server before the fix:
-  * Requests had no timeout, so a server that accepts the connection and never answers stalled history and the
-    live poll for good (the poll loop never reached its next tick). Now every request has an abort deadline
-    (`timeoutMs`, default 15 s) and the caller's own abort still wins.
-  * `subscribe` keyed subscriptions by ticker only: subscribing the same ticker twice (a reconnect, a
-    period change) left the first timer running with no handle to stop it, and `unsubscribe` for one period
-    cancelled the other. Subscriptions are now keyed by market and period, a repeat `subscribe` replaces the
-    earlier timer, and an in-flight poll answer that lands after `unsubscribe` is dropped instead of delivered.
-* Observed after the fix: one timer per market however often it is re-subscribed, 0 bars delivered after
-  `unsubscribe`, a hung server polled on every interval instead of once, and unsubscribing one market leaves the
-  other polling.
-* Docs: the example README lists `timeoutMs`. The public contract in `DATAFEED-HTTP.md` is unchanged.
-
-### Round 6: `buildChartContext` takes the workspace the package actually ships
-
-* Audited the AI helpers (`createHttpAIClient`, `nlToSuperScript[Checked]`, `buildChartContext`): timeouts, abort
-  wiring, error bodies, repair loop bounds and the model-reply path all hold (a model reply is only ever compiled by
-  the SuperScript compiler, never evaluated as JavaScript).
-* Found: `buildChartContext` accepted `ChartProLike` (needs `getChart()` and `getTimezone()`), an interface the
-  owned engine retired, so `analyzeChart` on a `ChartWorkspace` needed a hand-written adapter (the e2e case writes
-  one). Added `ChartWorkspaceLike`; `buildChartContext(workspace)` now reads the viewport (fractional bar edges
-  widened to whole bars) and the render time zone itself. `ChartProLike` and the parts form stay, so nothing
-  breaks. A real `ChartWorkspace` type-checks against the new interface (checked with a scratch compile; the
-  superscript package cannot import web, so the repo cannot hold that assertion).
-* Tests: one case in `ai/ai.test.ts` (workspace input equals the equivalent parts input).
-
-### Round 5: the indicator servers get a shared contract test
-
-* Probe first: a randomised stress of the browser workspace (25 runs of 40 random operations: market changes
-  racing history loads that fail 8% of the time, scroll-back, in-order, repeated and stale live ticks, replay start
-  and exit, dispose) found nothing: bars always ordered, unique and finite, the shown market always the last one
-  requested, every subscription released on dispose, no page errors. The loader's generation scheme holds up.
-* Found: the two indicator servers (Go, Python) had a documented contract and no test of it in the repository (the
-  log's earlier "remaining" item), and `go test ./...` reported "no test files" for the server. The only parity
-  evidence was a manual run.
-* Added: `conformance/indicators-server.v1.json`, 22 refusals with status and error code. Go
-  (`server/server_test.go`) and Python (`tests/test_server_contract.py`, through the ASGI app) both replay all 341
-  conformance cases through `POST /v1/indicators` and check the whole refusal table; Go also covers chaining
-  (`m.hist`), columnar-versus-row equality, overflow-to-null and bearer authorisation. Mutating the Go catalog
-  (sma wired to ema) fails the replay.
-* No server code changed: both already satisfied the contract. Left open: the catalog is still written out by hand in
-  Go and Python (and the private Rust backend); a shared catalog document would remove that.
-* Validation: `go vet`, `go test ./...`, `ruff check`, `ruff format --check`, `mypy src` and `pytest` (32 tests + 341
-  subtests) pass. `mypy tests` reports 8 pre-existing annotation errors in `test_conformance.py`, untouched.
-
-### Round 4: a workspace chrome a host can restyle (and a light one)
-
-* Found: every colour of the workspace chrome (toolbars, selects, search panel, notices) was a hard-coded hex in
-  inline styles, so a host could not restyle it without forking, and the chat plugin's light cards sat on a dark
-  toolbar (the README listed it as a known limit). `tokens.ts` was ~190 lines of retired klinecharts-pro tokens
-  (`--klinecharts-pro-*`, `base.less`, tests that no longer exist); only four annotation tones were used.
-* Changed: chrome colours read `--super-chart-{background,text,surface,border,divider,danger}` with the original
-  dark values as the fallback (default look verified pixel-for-pixel by computed style). New `theme: 'dark' | 'light'`
-  option and `setTheme()` apply a preset to the chrome and the canvas colours (`chart.render` still wins at
-  construction); `WORKSPACE_THEMES` and `WORKSPACE_CHROME_VARS` are exported with their types. The chat plugin passes
-  its card theme through. `tokens.ts` shrank to the annotation tones. Additive only: no existing option or default
-  changed.
-* Decision: presets are two (dark, light), not five. The directive's style templates (terminal, editorial,
-  enterprise, ...) are only worth shipping once the chrome has a real component layer; custom properties already let
-  a host build them.
-* Checked in a real browser: default, `light`, host-set properties and `setTheme` computed colours; light screenshot.
-* Tests: `e2e/tests/workspace-theme.spec.ts` (added to the config's match list). Also made the brush stroke in
-  `drawing-input.spec.ts` start inside the plot at any harness height (it used y = 240 while the plot ends near 238
-  here, so the stroke never started: a failure on an unchanged tree). All 71 browser cases pass locally with the
-  installed Chromium.
-
-### Round 3: chat plugin card registry and indicator tool
-
-* The plugin (the only code an agent drives directly) had no tests at all. Audited `createChartChatPlugin`.
-* Found: cards register under `spec.id` and `teardown()` deleted by id. Two cards with one id (an agent that reuses
-  `id: "btc"` every turn, with the older message unmounted by a virtualised chat list afterwards) made the older
-  card's unmount drop the newer card's registration, so every tool then answered "No chart is on screen" while the
-  chart was visible. Fixed: only the entry a card still owns is released.
-* Found: `chart_indicators` removed first, then added one by one, so a refused indicator (bad parameters) left the
-  earlier ones of the same call behind and a retry stacked duplicates. Now adds run first and are rolled back on a
-  failure; removals only touch indicators that existed before the call and happen after every add succeeded.
-* Not changed (design, noted): a theme switch rebuilds a feed-backed card from its original spec, which discards a
-  market the agent set through `chart_set_market`.
-* Tests: `chat-plugin/src/index.test.ts` against a stand-in `ChartWorkspace` (no DOM): registry ownership, tool
-  argument validation, all-or-nothing indicators. Two of four fail without the fixes.
-
-### Round 2: non-finite viewport input, reproducible type-checking
-
-* Found: `zoomViewport(v, n, factor, NaN)` and `clampViewport({i0: NaN, ...})` returned a `{NaN, NaN}` window
-  (every `Math.min/max` propagates NaN). A gesture over a zero-width plot yields exactly that fraction.
-  `RealtimeView` and the continuous variants already guard, so the chart itself was safe; the exported
-  `/native` helpers were not.
-* Found: with no lockfile, a fresh `npm install` resolves `@types/node` to a release whose `.d.ts` files TypeScript
-  4.9 cannot parse, so `npm run typecheck` fails on a clean checkout (`skipLibCheck` is off). A direct
-  devDependency `@types/node@^20.19.0` keeps it green (lint is back to its recorded 128 warnings too).
-* Changed: `viewport.ts` (NaN anchor ignored, NaN edge falls back to the default window), root `package.json`.
-* Tests: `core/src/viewport.test.ts` (fails without the fix).
-
-### Round 1: hostile SuperScript structure
-
-* Probe: 18 hostile scripts through `runScript`. Names such as `constructor`/`__proto__` are inert, absurd periods
-  are bounded, 5,000 plots and 40,000 lines scale linearly. But 20,000 nested brackets, prefix operators, calls or
-  ternaries, and a 100,000-term `a + a + ...` chain, escaped as a raw `RangeError: Maximum call stack size exceeded`
-  from `compile()`/`run()` (and as an "internal error" string from `checkSuperScript`). Scripts come from models, so
-  the AI repair loop, which reads `SuperScriptError.diagnostics`, got nothing to act on.
-* Fix: the parser caps nesting at 200 levels with an `UNSUPPORTED` diagnostic that has a position and a hint; any
-  remaining stack overflow (long operator chains build a deep left-leaning tree) is converted to a
-  `SuperScriptError` in `compile`, `run` and `checkSuperScript`. No new diagnostic code, so exhaustive switches in
-  consumers keep compiling. Real scripts nest in single digits.
-* Tests: `superscript/src/runtime/limits.test.ts` (5 of 6 fail without the fix).
+The prior branch's validation used a protocol stub and is not release evidence.
+This integration uses the real locally built `@supersolutions/super-protocol`
+source described in LOCAL-DEVELOPMENT.md. Registry-only installation still needs
+that package published. No npm publication or workflow was triggered here.
 
 ## Iteration 1 (2026-11-08)
 

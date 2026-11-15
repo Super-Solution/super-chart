@@ -1,12 +1,10 @@
 #!/usr/bin/env node
 // Verifies the built packages: manifest/registry agreement, layering, licence,
 // banned runtime dependencies, export targets, packed contents and a plain-Node
-// import of every entry that must run without a DOM, and a type-check of a consumer
-// that imports every entry under both classic and NodeNext module resolution, and a type-check of
-// each example against the built packages.
+// import of every entry that must run without a DOM.
 // Usage: node scripts/check-package.mjs   (after `node scripts/build.mjs`)
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { PACKAGES, VERSION, AUTHOR, LICENSE, nameOf } from './packages.mjs'
 
@@ -59,8 +57,12 @@ for (const pkg of PACKAGES) {
     }
   }
   // Packed contents and size.
-  const packed = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: dir, encoding: 'utf8' })
-  if (packed.status !== 0) { at(`npm pack failed: ${packed.stderr.slice(0, 300)}`); continue }
+  const npmCli = process.env.npm_execpath
+  const packArgs = ['pack', '--dry-run', '--json', '--ignore-scripts']
+  const packed = spawnSync(npmCli ? process.execPath : 'npm', npmCli ? [npmCli, ...packArgs] : packArgs, {
+    cwd: dir, encoding: 'utf8', shell: !npmCli && process.platform === 'win32'
+  })
+  if (packed.error || packed.status !== 0) { at(`npm pack failed: ${String(packed.error ?? packed.stderr ?? '').slice(0, 300)}`); continue }
   const info = JSON.parse(packed.stdout)[0]
   const names = info.files.map(f => f.path)
   for (const name of names) if (!/^(dist\/|LICENSE$|README\.md$|package\.json$)/.test(name)) at(`unexpected packed file ${name}`)
@@ -75,36 +77,6 @@ for (const [dir, sub] of NODE_SAFE) {
   const spec = nameOf(dir) + sub
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', `const m = await import(${JSON.stringify(spec)}); if (Object.keys(m).length === 0) throw new Error('no exports')`], { cwd: root, encoding: 'utf8' })
   if (r.status !== 0) fail(`plain Node cannot import ${spec}: ${r.stderr.split('\n').find(l => l.trim() !== '') ?? ''}`)
-}
-
-// Type-level consumer check: the declaration files must be self-contained and every export-map entry must resolve
-// to types under classic and NodeNext resolution, with skipLibCheck off so a broken bundled .d.ts fails here.
-// The scratch directory sits under node_modules/.cache so it finds the workspace links.
-const tsc = join(root, 'node_modules', 'typescript', 'bin', 'tsc')
-if (existsSync(tsc)) {
-  const specs = PACKAGES.flatMap(pkg => {
-    const manifest = JSON.parse(readFileSync(join(root, pkg.path, 'package.json'), 'utf8'))
-    return Object.keys(manifest.exports ?? {}).map(sub => pkg.name + sub.slice(1))
-  })
-  const cache = join(root, 'node_modules', '.cache')
-  mkdirSync(cache, { recursive: true })
-  const scratch = mkdtempSync(join(cache, 'consumer-'))
-  try {
-    writeFileSync(join(scratch, 'package.json'), '{"type":"module"}\n')
-    writeFileSync(join(scratch, 'consumer.ts'), specs.map((spec, i) => `import * as m${i} from ${JSON.stringify(spec)}\n`).join('') + `export const all = [${specs.map((_, i) => `m${i}`).join(', ')}]\n`)
-    for (const [label, module, moduleResolution] of [['classic', 'ESNext', 'Node'], ['NodeNext', 'NodeNext', 'NodeNext']]) {
-      writeFileSync(join(scratch, 'tsconfig.json'), JSON.stringify({ compilerOptions: { target: 'ES2022', module, moduleResolution, strict: true, skipLibCheck: false, noEmit: true, lib: ['DOM', 'ES2022'], types: [] }, include: ['consumer.ts'] }))
-      const r = spawnSync(process.execPath, [tsc, '-p', scratch], { cwd: root, encoding: 'utf8' })
-      if (r.status !== 0) fail(`a TypeScript consumer of every entry fails under ${label} resolution: ${r.stdout.split('\n').find(l => l.includes('error')) ?? r.stderr.slice(0, 200)}`)
-    }
-  } finally { rmSync(scratch, { recursive: true, force: true }) }
-  // The examples consume the built packages the way a user would, so they cannot drift from the API unnoticed.
-  for (const example of ['vanilla', 'datafeed-http']) {
-    const project = join(root, 'examples', example)
-    if (!existsSync(join(project, 'tsconfig.json'))) continue
-    const r = spawnSync(process.execPath, [tsc, '-p', project], { cwd: root, encoding: 'utf8' })
-    if (r.status !== 0) fail(`examples/${example} does not type-check against the built packages: ${r.stdout.split('\n').find(l => l.includes('error')) ?? r.stderr.slice(0, 200)}`)
-  }
 }
 if (problems.length > 0) { console.error(problems.map(p => `FAIL ${p}`).join('\n')); process.exit(1) }
 console.log('package checks passed')

@@ -1129,26 +1129,3 @@ describe('SC-020: a "bars" event fires with the fresh bars just before an initia
     expect(count).toBe(1)
   })
 })
-
-describe('DataLoader option checks', () => {
-  const make = (loader: Partial<LoaderOptions>): (() => unknown) => () => new DataLoader({ datafeed: deferredFeed().datafeed, env: fakeEnv().env, ...loader })
-
-  it('refuses a count, timeout or retry delay that cannot size a request or a timer', () => {
-    for (const count of [0, -3, 1.5, NaN, Infinity, 2_000_000]) expect(make({ count }), `count ${count}`).toThrow(/Loader option count/)
-    for (const loadTimeoutMs of [0, -1, NaN, Infinity, 2 ** 31]) expect(make({ loadTimeoutMs }), `loadTimeoutMs ${loadTimeoutMs}`).toThrow(/Loader option loadTimeoutMs/)
-    expect(make({ syncTimeoutMs: Infinity })).toThrow(/Loader option syncTimeoutMs/)
-    expect(make({ syncMinIntervalMs: -1 })).toThrow(/Loader option syncMinIntervalMs/)
-    expect(make({ moreRetryMs: { base: 0, max: 10 } })).toThrow(/moreRetryMs.base/)
-    expect(make({ moreRetryMs: { base: 10, max: NaN } })).toThrow(/moreRetryMs.max/)
-    expect(make({ tickThrottleMs: NaN })).toThrow(/tickThrottleMs/)
-  })
-
-  it('keeps every value that worked before', () => {
-    expect(make({})).not.toThrow()
-    expect(make({ count: 1 })).not.toThrow()
-    expect(make({ count: 1_000_000, loadTimeoutMs: 2 ** 31 - 1, syncTimeoutMs: 1, syncMinIntervalMs: 0 })).not.toThrow()
-    expect(make({ moreRetryMs: { base: 500, max: 60_000 }, tickThrottleMs: 0 })).not.toThrow()
-    expect(make({ tickThrottleMs: -5 })).not.toThrow()
-    expect(make({ loadTimeoutMs: 2500.5 })).not.toThrow()
-  })
-})

@@ -25,10 +25,10 @@
     "test:watch": "vitest",
     "lint": "node scripts/lint.mjs",
     "check:package": "node scripts/check-package.mjs",
-    "dev": "vite"
+    "dev": "vite",
+    "setup:local": "node scripts/setup-local.mjs"
   },
   "devDependencies": {
-    "@types/node": "^20.19.0",
     "@typescript-eslint/eslint-plugin": "^5.54.0",
     "dts-bundle-generator": "^7.2.0",
     "esbuild": "^0.17.18",
