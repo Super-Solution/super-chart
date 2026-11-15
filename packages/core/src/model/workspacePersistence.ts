@@ -32,7 +32,7 @@ export const WORKSPACE_DOCUMENT_LIMITS = Object.freeze({
 
 const BUILTINS = new Set(['MA', 'EMA', 'BOLL', 'VOL', 'MACD', 'RSI', 'KDJ'])
 const SYMBOL_KEYS = ['ticker', 'name', 'shortName', 'exchange', 'market', 'pricePrecision', 'volumePrecision', 'priceCurrency', 'type', 'logo', 'timezone']
-const RENDER_KEYS = ['chartType', 'candleDensity', 'baseline', 'background', 'grid', 'text', 'up', 'down', 'line', 'font', 'pricePrecision', 'timeZone']
+const RENDER_KEYS = ['chartType', 'candleDensity', 'baseline', 'background', 'grid', 'text', 'up', 'down', 'line', 'font', 'pricePrecision', 'timeZone', 'theme']
 const DANGEROUS_KEYS = new Set(['__proto__', 'prototype', 'constructor'])
 
 function object (value: unknown, allowed: readonly string[], required: readonly string[], label: string): Record<string, unknown> {
@@ -138,6 +138,8 @@ function renderOf (value: unknown): WorkspaceSavedRender {
   if (input.baseline !== undefined) finite(input.baseline, 'baseline')
   if (input.pricePrecision !== undefined) integer(input.pricePrecision, 'render price precision', 0, 20)
   if (input.timeZone !== undefined) timezone(input.timeZone, 'display timezone')
+  // The base colour set a preset or `render.theme` picked. A workspace that set a theme must be able to save itself.
+  if (input.theme !== undefined && input.theme !== 'dark' && input.theme !== 'light') throw new RangeError('Unknown render theme')
   for (const key of ['background', 'grid', 'text', 'up', 'down', 'line', 'font']) {
     if (input[key] !== undefined) text(input[key], `render ${key}`, 256)
   }
