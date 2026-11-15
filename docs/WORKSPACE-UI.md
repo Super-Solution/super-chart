@@ -157,3 +157,124 @@ Without storage, nonempty documents retain the existing in-memory lifetime;
 empty market documents no longer accumulate. `getDrawingCacheStats()` reports
 approximate UTF-16 string bytes, symbol count and unacknowledged documents.
 This is not a whole-browser memory measurement.
+
+## Layout, headless mode and slots
+
+```ts
+new ChartWorkspace(host, {
+  datafeed, symbol, period,
+  ui: {
+    layout: 'auto',        // 'auto' | 'regular' | 'compact' | 'narrow'
+    intervals: 'auto',     // 'auto' | 'bar' | 'select'
+    headless: false,       // canvas only
+    parts: { symbol: false }, // switch single parts off
+    slots: { 'header-end': myElement }
+  }
+})
+```
+
+- `layout` is a size class for the chrome. `regular` has labelled tools, `compact`
+  shows icons and moves secondary actions into a More menu, `narrow` also folds
+  the drawing tools behind a Tools button and shows the intervals as one
+  dropdown. `auto` follows the workspace's own width (`LAYOUT_BREAKPOINTS`:
+  narrow below 560px, compact below 780px), not the window's. `getLayout()`
+  returns the class in effect. The drawing toolbar keeps a usable height at every
+  class; it no longer collapses on narrow screens.
+- `intervals: 'select'` renders the period list as a dropdown at any width;
+  `'bar'` keeps buttons; `'auto'` picks the bar unless the layout is `narrow`.
+- `headless: true` removes the market bar, drawing bar, footer, status, notice and
+  replay controls. Loading, replay, drawings, the command palette (keyboard) and
+  the API keep working. `parts` switches off one piece at a time
+  (`WORKSPACE_PARTS`: `symbol`, `intervals`, `presentation`, `indicators`,
+  `objects`, `drawingBar`, `footer`, `scaleBar`, `commands`); `headless` is all of
+  them.
+- `getSlot(name)` returns a host-owned element in one of six named places
+  (`WORKSPACE_SLOTS`: `header-start`, `header-end`, `drawing-start`, `drawing-end`,
+  `footer-start`, `footer-end`). The workspace never styles or reads its content
+  and removes it on `dispose()`. `ui.slots` mounts nodes at construction.
+- `ui` can change after construction with `setUi({ headless, layout, intervals,
+  parts })`; `className`, `density` and `variables` stay construction-time.
+
+## Symbol search interception
+
+`search.onRequest(request)` is called whenever the search would open: the symbol
+button, a letter typed on the chart, the command palette, or `openSymbolSearch()`.
+Return `true` to say the host handled it (for example it opened its own picker and
+will call `setSymbol` later); the built-in panel then stays closed. Any other
+return lets the built-in panel open. A throwing handler is reported in the notice
+line and the built-in panel opens, so a bug never leaves the person without
+search. `request.trigger` says which entry point asked and `request.query` carries
+the typed text. `ui.parts.symbol = false` hides the button when the host has its
+own picker.
+
+## Command palette, context menu and object tree
+
+- Ctrl/Cmd+K (or `openCommandPalette(query?)`) opens a searchable list of built-in
+  commands (symbol search, reload, themes, intervals, chart types, scale modes, view,
+  drawing tools, undo/redo, indicators, replay, PNG) and the host's. `registerCommand(command)` returns a
+  remover; registering the same `id` replaces. A command's `when()` can hide it,
+  `run` may be async. `listCommands()` returns what is currently available.
+  `commands: { enabled: false }` removes the palette and its shortcut;
+  `shortcut: false` keeps the palette but drops Ctrl/Cmd+K.
+- Right-click on the chart opens a menu. Over a drawing it offers lock/unlock and
+  delete (a locked drawing cannot be deleted); everywhere it offers fit the price
+  scale, reset the view, jump to the latest bar, remove all drawings (when there
+  are some), open the command palette and open symbol search. `contextMenu: { items }`
+  appends host entries after a divider; `contextMenu: false` leaves the browser's
+  own menu alone. The `target` passed to `items` carries the drawing id and the
+  price/time under the pointer.
+- The object tree (Objects) lists indicators, drawings and host annotations with
+  show/hide, lock and remove. Host annotations are listed read-only: the host owns
+  them.
+
+## Scale bar
+
+Beside the chart-settings panel's percent, log and reverse options, the scale bar
+has **Auto** (return to the automatic price range after a manual range) and
+**UTC** (toggle between UTC and the browser's time zone for axis and crosshair
+labels). Both are also palette commands.
+
+## Locales and themes
+
+```ts
+import { registerLocale, registerWorkspaceTheme } from '@supersolutions/super-chart-web'
+
+registerLocale('ja', { 'tool.trend-line': 'トレンドライン' /* any subset */ })
+registerWorkspaceTheme('midnight', { base: 'dark', /* chrome and canvas overrides */ })
+new ChartWorkspace(host, { datafeed, symbol, period, locale: 'ja', theme: 'midnight' })
+```
+
+`en` and `zh-TW` ship. A registered locale may be partial: missing keys fall back
+to English, and an unknown key never throws. `setLocale` and `setTheme` change a
+live workspace; the saved workspace document records the theme (`dark` or
+`light`), never a host-defined theme's colours. Registries are module-global:
+register before constructing, and use distinct names.
+
+## Hold to draw
+
+`chart: { drawByHolding: true }` (or `{ holdMs, erase }`) turns on a pen gesture
+on the chart. Press and keep the pointer still for `holdMs` (default 333ms,
+within an 8px slop): the cursor changes and a status line says it is armed.
+Then draw. On release the stroke is recognized into the most likely shape: trend
+line, horizontal or vertical segment, ray, arrow, rectangle, ellipse, circle or
+triangle. The best guess is added as an ordinary drawing (undoable); **Tab** cycles
+through the other candidates and **Esc** removes it. A zig-zag scribble erases the
+unlocked drawings it crosses (`erase: false` disables that). A stroke too small
+or too ambiguous reports `unrecognized` and draws nothing. A press that moves
+before the hold elapses stays a normal pan. Events arrive through
+`onHoldDraw` / `setHoldDrawListener` for hosts that want to react. The recognizer
+itself is pure (`recognizeStroke` in core) and runs without a DOM.
+
+## Host annotations
+
+`workspace.annotations` is the scoped annotation layer. Besides the built-in
+`level`, `zone` and `marker` there are templates: `trend`, `ray`, `fibonacci`
+(`params.levels`, `params.extend`, `params.prices`) and `plan` (entry, target,
+stop; shows reward:risk and refuses an inconsistent plan). `registerTemplate`
+adds your own: a pure function from projected anchors to a bounded list of
+figures; the layer validates, clips, themes and paints, so a faulty template
+loses only its own annotation. A `level` with `draggable: true` can be grabbed
+by the person; the chart emits `start`, `move`, `commit` or `cancel` through
+`onAnnotationIntent`, and never edits the annotation itself. The host validates
+the price and writes it back with `setAnnotations`. See
+[API-LAYERS.md](API-LAYERS.md) and [TRADE-HEADS.md](TRADE-HEADS.md).

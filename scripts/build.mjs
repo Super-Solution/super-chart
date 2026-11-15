@@ -23,7 +23,7 @@ for (const pkg of PACKAGES) {
   const entryPoints = Object.fromEntries(Object.values(pkg.entries).map(([src, out]) => [out, join(dir, src)]))
   await build({
     entryPoints, outdir: join(dir, 'dist'), bundle: true, splitting: true, format: 'esm', platform: 'neutral',
-    target: 'es2022', mainFields: ['module', 'main'], external: [`${pkg.name.split('/')[0]}/*`, ...(pkg.external ?? [])], logLevel: 'warning', sourcemap: false
+    target: 'es2022', mainFields: ['module', 'main'], external: [`${pkg.name.split('/')[0]}/*`, ...(pkg.external ?? []), ...Object.keys(pkg.peers ?? {})], logLevel: 'warning', sourcemap: false
   })
   console.log(`js   ${pkg.name}: ${Object.keys(entryPoints).join(', ')}`)
   for (const global of [...(pkg.global === undefined ? [] : [pkg.global]), ...(pkg.additionalGlobals ?? [])]) {

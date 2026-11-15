@@ -12,7 +12,7 @@ const root = resolve(import.meta.dirname, '..')
 const problems = []
 const fail = message => problems.push(message)
 const BANNED = ['klinecharts', 'solid-js', 'react', 'vue']
-const SIZE_BUDGET = { core: 1_000_000, superscript: 400_000, web: 600_000, 'chat-plugin': 200_000 }
+const SIZE_BUDGET = { core: 1_000_000, superscript: 400_000, web: 600_000, react: 60_000, 'chat-plugin': 200_000 }
 const walk = dir => readdirSync(dir).flatMap(f => { const p = join(dir, f); return statSync(p).isDirectory() ? walk(p) : [p] })
 const importsOf = text => [...text.matchAll(/(?:from|import)\s*\(?\s*["']([^"'.][^"']*)["']/g)].map(m => m[1])
 
@@ -31,7 +31,10 @@ for (const pkg of PACKAGES) {
   const expectedDeps = [...pkg.deps.map(nameOf), ...(pkg.external ?? [])].sort()
   const actualDeps = Object.keys(manifest.dependencies ?? {}).sort()
   if (JSON.stringify(expectedDeps) !== JSON.stringify(actualDeps)) at(`dependencies ${JSON.stringify(actualDeps)} != ${JSON.stringify(expectedDeps)}`)
-  for (const name of [...actualDeps, ...Object.keys(manifest.peerDependencies ?? {})]) if (BANNED.some(b => name === b || name.startsWith(`${b}/`))) at(`banned dependency ${name}`)
+  const peers = pkg.peers ?? {}
+  if (JSON.stringify(manifest.peerDependencies ?? {}) !== JSON.stringify(peers)) at(`peerDependencies ${JSON.stringify(manifest.peerDependencies ?? {})} != ${JSON.stringify(peers)}`)
+  // A UI framework is allowed only where the registry declares it as a peer, never as a bundled dependency.
+  for (const name of [...actualDeps, ...Object.keys(manifest.peerDependencies ?? {})]) if (!(name in peers) && BANNED.some(b => name === b || name.startsWith(`${b}/`))) at(`banned dependency ${name}`)
   for (const [sub, [, out]] of Object.entries(pkg.entries)) {
     const entry = manifest.exports?.[sub]
     if (entry === undefined) { at(`exports["${sub}"] missing`); continue }
@@ -42,7 +45,7 @@ for (const pkg of PACKAGES) {
     if (entry.import !== `./dist/${out}.js`) at(`exports["${sub}"].import should be ./dist/${out}.js`)
   }
   // Layering: only declared dependencies may be imported, in source and in the build.
-  const allowed = new Set([...expectedDeps, ...(pkg.external ?? [])])
+  const allowed = new Set([...expectedDeps, ...(pkg.external ?? []), ...Object.keys(peers)])
   const sources = existsSync(join(dir, 'src')) ? walk(join(dir, 'src')).filter(f => /\.tsx?$/.test(f)) : []
   const built = existsSync(join(dir, 'dist')) ? walk(join(dir, 'dist')).filter(f => /\.(js|d\.ts)$/.test(f)) : []
   for (const file of [...sources, ...built]) {
@@ -53,7 +56,7 @@ for (const pkg of PACKAGES) {
       if (base.startsWith('node:')) continue
       if (base === pkg.name) continue
       if (!allowed.has(base)) at(`${rel} imports "${spec}", which is not a declared dependency`)
-      if (BANNED.includes(base)) at(`${rel} imports banned "${spec}"`)
+      if (BANNED.includes(base) && !(base in peers)) at(`${rel} imports banned "${spec}"`)
     }
   }
   // Packed contents and size.

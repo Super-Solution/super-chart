@@ -2,18 +2,37 @@ import type { EngineFrame } from '@supersolutions/super-chart-core'
 import type { EngineLayer } from './layer'
 import { derivePrecision } from '@supersolutions/super-chart-core'
 import { colors, CANVAS_FONT, CANVAS_LABEL_FONT } from './tokens'
+import {
+  ANNOTATION_TEMPLATE_LIMITS, ANNOTATION_TEMPLATE_NAME, BUILT_IN_ANNOTATION_TEMPLATES,
+  type AnnotationFigure, type AnnotationParams, type AnnotationTemplate
+} from './annotationTemplates'
+export type {
+  AnnotationFigure, AnnotationLineFigure, AnnotationMarkerFigure, AnnotationParams, AnnotationPoint, AnnotationPolylineFigure,
+  AnnotationRectFigure, AnnotationTemplate, AnnotationTemplateInput, AnnotationTextFigure, ProjectedAnchor
+} from './annotationTemplates'
+export { ANNOTATION_TEMPLATE_LIMITS, BUILT_IN_ANNOTATION_TEMPLATES, DEFAULT_FIBONACCI_LEVELS } from './annotationTemplates'
+export { attachAnnotationIntents, ANNOTATION_INTENT_REACH } from './annotationIntents'
+export type { AnnotationIntentEvent } from './annotationIntents'
 
 export type EngineAnnotationTone = 'bull' | 'bear' | 'neutral' | 'accent'
+/** The kinds the layer paints itself. Any other `kind` names a template: the built-in `trend`, `ray`, `fibonacci`, `plan`, or one the host registers. */
 export type EngineAnnotationKind = 'level' | 'zone' | 'marker'
 export type EngineAnnotationTheme = 'light' | 'dark'
 export interface EngineAnnotationAnchor { readonly time: number, readonly price?: number }
 export interface EngineAnnotationSpec {
   readonly key: string
-  readonly kind: EngineAnnotationKind
+  readonly kind: EngineAnnotationKind | (string & Record<never, never>)
   readonly anchors: readonly EngineAnnotationAnchor[]
   readonly text?: string
   readonly tone?: EngineAnnotationTone
   readonly color?: string
+  /** Options for a template (for example `{ extend: 'right' }` on a `trend`). Scalar values only. */
+  readonly params?: AnnotationParams
+  /**
+   * A `level` the person may drag up or down. The chart never moves it: dragging only reports intent through
+   * `attachAnnotationIntents`, and the host decides (validates, sends an order, then calls `setAnnotations`).
+   */
+  readonly draggable?: boolean
 }
 export type EngineAnnotationRejectCode = 'bad_anchor' | 'out_of_range' | 'unknown_kind' | 'duplicate_key' | 'bad_key' | 'bad_style' | 'symbol_mismatch'
 export interface EngineAnnotationRejection { readonly key: string, readonly code: EngineAnnotationRejectCode }
@@ -32,6 +51,8 @@ export interface EngineProjectedAnnotation {
   readonly status: 'visible' | 'offscreen' | 'unprojectable' | 'no-data'
   readonly point?: EngineAnnotationPoint
   readonly rect?: EngineAnnotationRectangle
+  /** For a template kind: the figures its template produced for this frame, in pixel space. */
+  readonly figures?: readonly AnnotationFigure[]
 }
 export interface EngineAnnotationSnapshot {
   readonly version: number
@@ -53,7 +74,7 @@ export interface EngineAnnotationsOptions {
 /** Explicit host-resource bounds. Exceeding a document bound leaves its previous contents intact. */
 export const ENGINE_ANNOTATION_LIMITS = Object.freeze({ scopes: 16, layersPerScope: 32, entriesPerLayer: 1024, entriesPerScope: 2048, keyLength: 128, symbolLength: 256, textLength: 2048, colorLength: 128 })
 const EMPTY_SPECS: readonly EngineAnnotationSpec[] = Object.freeze([])
-const KINDS: readonly EngineAnnotationKind[] = ['level', 'zone', 'marker']
+const KINDS: readonly string[] = ['level', 'zone', 'marker']
 const TONES: readonly EngineAnnotationTone[] = ['bull', 'bear', 'neutral', 'accent']
 type Layers = Map<string, readonly EngineAnnotationSpec[]>
 
@@ -72,11 +93,30 @@ function annotationId (layer: string, key: string): string {
   // Escape each part separately; a colon in a host key cannot collide with another layer.
   return `sc:ann:${encodeURIComponent(layer)}:${encodeURIComponent(key)}`
 }
-function copiedSpec (value: EngineAnnotationSpec): { spec: EngineAnnotationSpec } | { code: EngineAnnotationRejectCode } {
+function copiedParams (value: unknown): AnnotationParams | null | undefined {
+  if (value === undefined) return undefined
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
+  const entries = Object.entries(value as Record<string, unknown>)
+  if (entries.length > ANNOTATION_TEMPLATE_LIMITS.params) return null
+  const copy: Record<string, number | string | boolean> = {}
+  for (const [key, item] of entries) {
+    if (key.length === 0 || key.length > ANNOTATION_TEMPLATE_LIMITS.paramKeyLength || key === '__proto__') return null
+    if (typeof item === 'number' ? !Number.isFinite(item) : typeof item === 'string' ? item.length > ANNOTATION_TEMPLATE_LIMITS.paramStringLength : typeof item !== 'boolean') return null
+    copy[key] = item as number | string | boolean
+  }
+  return Object.freeze(copy)
+}
+function sameParams (a: AnnotationParams | undefined, b: AnnotationParams | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b
+  const keys = Object.keys(a)
+  return keys.length === Object.keys(b).length && keys.every(key => a[key] === b[key])
+}
+function copiedSpec (value: EngineAnnotationSpec, templates: ReadonlyMap<string, AnnotationTemplate>): { spec: EngineAnnotationSpec } | { code: EngineAnnotationRejectCode } {
   if (value === null || typeof value !== 'object') return { code: 'bad_anchor' }
   if (typeof value.key !== 'string' || value.key.trim().length === 0 || value.key.length > ENGINE_ANNOTATION_LIMITS.keyLength) return { code: 'bad_key' }
-  if (!KINDS.includes(value.kind)) return { code: 'unknown_kind' }
-  const count = value.kind === 'zone' ? 2 : 1
+  const template = KINDS.includes(value.kind) ? undefined : templates.get(value.kind)
+  if (template === undefined && !KINDS.includes(value.kind)) return { code: 'unknown_kind' }
+  const count = template !== undefined ? template.anchors : value.kind === 'zone' ? 2 : 1
   if (!Array.isArray(value.anchors) || value.anchors.length < count) return { code: 'bad_anchor' }
   const anchors: EngineAnnotationAnchor[] = []
   for (let i = 0; i < count; i++) {
@@ -86,6 +126,9 @@ function copiedSpec (value: EngineAnnotationSpec): { spec: EngineAnnotationSpec 
     anchors.push(Object.freeze({ time: anchor.time, price: anchor.price }))
   }
   if (count === 2 && anchors[0].time === anchors[1].time && anchors[0].price === anchors[1].price) return { code: 'out_of_range' }
+  const params = copiedParams(value.params)
+  if (params === null) return { code: 'bad_style' }
+  if (value.draggable !== undefined && (typeof value.draggable !== 'boolean' || (value.draggable && value.kind !== 'level'))) return { code: 'bad_style' }
   if ((value.text !== undefined && (typeof value.text !== 'string' || value.text.length > ENGINE_ANNOTATION_LIMITS.textLength)) ||
       (value.tone !== undefined && !TONES.includes(value.tone)) ||
       (value.color !== undefined && (typeof value.color !== 'string' || value.color.trim().length === 0 || value.color.length > ENGINE_ANNOTATION_LIMITS.colorLength))) return { code: 'bad_style' }
@@ -96,12 +139,14 @@ function copiedSpec (value: EngineAnnotationSpec): { spec: EngineAnnotationSpec 
       anchors: Object.freeze(anchors),
       ...(value.text !== undefined ? { text: value.text } : {}),
       ...(value.tone !== undefined ? { tone: value.tone } : {}),
-      ...(value.color !== undefined ? { color: value.color } : {})
+      ...(value.color !== undefined ? { color: value.color } : {}),
+      ...(params !== undefined ? { params } : {}),
+      ...(value.draggable === true ? { draggable: true } : {})
     })
   }
 }
 function sameSpec (a: EngineAnnotationSpec, b: EngineAnnotationSpec): boolean {
-  return a.key === b.key && a.kind === b.kind && a.text === b.text && a.tone === b.tone && a.color === b.color &&
+  return a.key === b.key && a.kind === b.kind && a.text === b.text && a.tone === b.tone && a.color === b.color && sameParams(a.params, b.params) && a.draggable === b.draggable &&
     a.anchors.length === b.anchors.length && a.anchors.every((anchor, i) => anchor.time === b.anchors[i].time && anchor.price === b.anchors[i].price)
 }
 function resolveColor (spec: EngineAnnotationSpec, currentTheme: EngineAnnotationTheme): string {
@@ -116,6 +161,53 @@ function zoneFill (spec: EngineAnnotationSpec, currentTheme: EngineAnnotationThe
 }
 function diamond (context: CanvasRenderingContext2D, x: number, y: number, r: number): void {
   context.beginPath(); context.moveTo(x, y - r); context.lineTo(x + r, y); context.lineTo(x, y + r); context.lineTo(x - r, y); context.closePath(); context.fill()
+}
+const EMPTY_PARAMS: AnnotationParams = Object.freeze({})
+const finiteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && Math.abs(value) < 1e7
+const pointOk = (point: unknown): boolean => point !== null && typeof point === 'object' && finiteNumber((point as { x?: unknown }).x) && finiteNumber((point as { y?: unknown }).y)
+/** Copies what a template returned and drops what cannot be painted. Null when the whole return is unusable. */
+function sanitizeFigures (raw: unknown): readonly AnnotationFigure[] | null {
+  if (!Array.isArray(raw) || raw.length > ANNOTATION_TEMPLATE_LIMITS.figures) return null
+  const out: AnnotationFigure[] = []
+  const tones: readonly unknown[] = TONES
+  for (const item of raw as unknown[]) {
+    if (item === null || typeof item !== 'object') continue
+    const figure = item as Record<string, unknown>
+    const style = {
+      ...(typeof figure.color === 'string' && figure.color.length > 0 && figure.color.length <= ENGINE_ANNOTATION_LIMITS.colorLength ? { color: figure.color } : {}),
+      ...(tones.includes(figure.tone) ? { tone: figure.tone as EngineAnnotationTone } : {}),
+      ...(typeof figure.width === 'number' && figure.width >= 0.5 && figure.width <= 8 ? { width: figure.width } : {}),
+      ...(figure.dash === 'solid' ? { dash: 'solid' as const } : Array.isArray(figure.dash) && figure.dash.length <= 4 && figure.dash.every(part => typeof part === 'number' && part >= 0 && part <= 64) ? { dash: Object.freeze([...figure.dash] as number[]) } : {})
+    }
+    const fill = typeof figure.fillOpacity === 'number' && figure.fillOpacity >= 0 && figure.fillOpacity <= 1 ? { fillOpacity: figure.fillOpacity } : {}
+    const stroke = figure.stroke === false ? { stroke: false } : {}
+    if (figure.type === 'line' && pointOk(figure.from) && pointOk(figure.to)) {
+      const from = figure.from as { x: number, y: number }, to = figure.to as { x: number, y: number }
+      out.push(Object.freeze({ type: 'line', from: Object.freeze({ x: from.x, y: from.y }), to: Object.freeze({ x: to.x, y: to.y }), ...(figure.extend === 'right' || figure.extend === 'both' ? { extend: figure.extend } : {}), ...style }))
+    } else if (figure.type === 'rect' && [figure.x, figure.y, figure.width, figure.height].every(finiteNumber) && (figure.width as number) >= 0 && (figure.height as number) >= 0) {
+      out.push(Object.freeze({ type: 'rect', x: figure.x as number, y: figure.y as number, width: figure.width as number, height: figure.height as number, ...fill, ...stroke, ...style }))
+    } else if (figure.type === 'polyline' && Array.isArray(figure.points) && figure.points.length >= 2 && figure.points.length <= ANNOTATION_TEMPLATE_LIMITS.polylinePoints && figure.points.every(pointOk)) {
+      out.push(Object.freeze({ type: 'polyline', points: Object.freeze((figure.points as Array<{ x: number, y: number }>).map(point => Object.freeze({ x: point.x, y: point.y }))), ...(figure.closed === true ? { closed: true } : {}), ...fill, ...stroke, ...style }))
+    } else if (figure.type === 'marker' && finiteNumber(figure.x) && finiteNumber(figure.y)) {
+      const shapes: readonly unknown[] = ['diamond', 'circle', 'triangle-up', 'triangle-down']
+      out.push(Object.freeze({ type: 'marker', x: figure.x, y: figure.y, ...(shapes.includes(figure.shape) ? { shape: figure.shape as 'diamond' } : {}), ...(typeof figure.size === 'number' && figure.size >= 2 && figure.size <= 16 ? { size: figure.size } : {}), ...style }))
+    } else if (figure.type === 'text' && finiteNumber(figure.x) && finiteNumber(figure.y) && typeof figure.text === 'string' && figure.text.length > 0) {
+      out.push(Object.freeze({ type: 'text', x: figure.x, y: figure.y, text: figure.text.slice(0, ANNOTATION_TEMPLATE_LIMITS.textLength), ...(figure.align === 'right' || figure.align === 'center' ? { align: figure.align } : {}), ...(typeof figure.color === 'string' && figure.color.length > 0 && figure.color.length <= ENGINE_ANNOTATION_LIMITS.colorLength ? { color: figure.color } : {}) }))
+    }
+  }
+  return Object.freeze(out)
+}
+function figureTouches (figure: AnnotationFigure, bounds: EngineAnnotationBounds): boolean {
+  if (figure.type === 'line') {
+    if (figure.extend !== undefined) return true
+    return Math.max(figure.from.x, figure.to.x) >= bounds.left && Math.min(figure.from.x, figure.to.x) <= bounds.right && Math.max(figure.from.y, figure.to.y) >= bounds.top && Math.min(figure.from.y, figure.to.y) <= bounds.bottom
+  }
+  if (figure.type === 'rect') return figure.x + figure.width >= bounds.left && figure.x <= bounds.right && figure.y + figure.height >= bounds.top && figure.y <= bounds.bottom
+  if (figure.type === 'polyline') {
+    const xs = figure.points.map(point => point.x), ys = figure.points.map(point => point.y)
+    return Math.max(...xs) >= bounds.left && Math.min(...xs) <= bounds.right && Math.max(...ys) >= bounds.top && Math.min(...ys) <= bounds.bottom
+  }
+  return figure.x >= bounds.left && figure.x <= bounds.right && figure.y >= bounds.top && figure.y <= bounds.bottom
 }
 function result (applied: string[], rejected: EngineAnnotationRejection[]): EngineSetAnnotationsResult {
   return Object.freeze({ applied: Object.freeze(applied), rejected: Object.freeze(rejected.map(item => Object.freeze(item))) })
@@ -134,12 +226,14 @@ function result (applied: string[], rejected: EngineAnnotationRejection[]): Engi
  */
 export class EngineAnnotations implements EngineLayer {
   private readonly scopes = new Map<string, Layers>()
+  private readonly templates = new Map<string, AnnotationTemplate>(BUILT_IN_ANNOTATION_TEMPLATES.map(template => [template.name, template]))
   private readonly onChange: (() => void) | undefined
   private readonly font: string
-  private readonly pricePrecision: number | undefined
+  private pricePrecision: number | undefined
   private symbol: string | null
   private currentTheme: EngineAnnotationTheme
   private frame: EngineFrame | null = null
+  private ghost: { id: string, price: number } | null = null
   private version = 0
   private disposed = false
   private snapshot: EngineAnnotationSnapshot
@@ -162,12 +256,45 @@ export class EngineAnnotations implements EngineLayer {
     this.symbol = next; this.frame = null; this.changed()
   }
 
+  /** Decimals for the exact price tags; undefined derives them from the loaded bars again. */
+  setPricePrecision (value: number | undefined): void {
+    this.assertLive()
+    if (value !== undefined && !(Number.isInteger(value) && value >= 0 && value <= 20)) throw new RangeError('Annotation price precision must be an integer from 0 to 20')
+    if (value === this.pricePrecision) return
+    this.pricePrecision = value; this.changed()
+  }
+
   setTheme (value: EngineAnnotationTheme): void {
     this.assertLive()
     const next = theme(value)
     if (next === this.currentTheme) return
     this.currentTheme = next; this.changed()
   }
+
+  /**
+   * Adds a template kind to this layer, the owned equivalent of registering an upstream overlay.
+   * Returns a function that removes it again: specs already stored under that kind stay, project as
+   * `unprojectable` and paint nothing until the kind is registered again. Names are per layer, may not
+   * reuse `level`, `zone`, `marker` or a template already registered, and never reach another layer.
+   * Anything that can call `setAnnotations` on this layer (including a chat plugin's agent) can select it.
+   */
+  registerTemplate (template: AnnotationTemplate): () => void {
+    this.assertLive()
+    if (template === null || typeof template !== 'object') throw new TypeError('Annotation template must be an object')
+    const { name, anchors, create, axisTags } = template
+    if (typeof name !== 'string' || name.length > ANNOTATION_TEMPLATE_LIMITS.nameLength || !ANNOTATION_TEMPLATE_NAME.test(name)) throw new TypeError('Annotation template name must be lowercase letters, digits and "-" starting with a letter, up to 48 characters')
+    if (KINDS.includes(name)) throw new RangeError(`Annotation kind "${name}" is built in`)
+    if (this.templates.has(name)) throw new RangeError(`Annotation template "${name}" is already registered`)
+    if (!Number.isInteger(anchors) || anchors < 1 || anchors > ANNOTATION_TEMPLATE_LIMITS.anchors) throw new RangeError('Annotation template anchors must be an integer from 1 to 8')
+    if (typeof create !== 'function') throw new TypeError('Annotation template needs a create function')
+    if (axisTags !== undefined && (!Array.isArray(axisTags) || axisTags.some(index => !Number.isInteger(index) || index < 0 || index >= anchors))) throw new RangeError('Annotation template axisTags must be anchor indices')
+    const stored = Object.freeze({ name, anchors, create, ...(axisTags !== undefined ? { axisTags: Object.freeze([...axisTags]) } : {}) })
+    this.templates.set(name, stored); this.changed()
+    return () => { if (this.templates.get(name) === stored) { this.templates.delete(name); if (!this.disposed) this.changed() } }
+  }
+
+  /** Every kind this layer accepts: the three it paints itself, then each template by name. */
+  listKinds (): readonly string[] { return Object.freeze([...KINDS, ...this.templates.keys()]) }
 
   setAnnotations (layer: string, specs: readonly EngineAnnotationSpec[], options: { symbol?: string } = {}): EngineSetAnnotationsResult {
     this.assertLive()
@@ -184,7 +311,7 @@ export class EngineAnnotations implements EngineLayer {
       const key = keyOf(value)
       if (seen.has(key)) { rejected.push({ key, code: 'duplicate_key' }); continue }
       seen.add(key)
-      const copied = copiedSpec(value)
+      const copied = copiedSpec(value, this.templates)
       if ('code' in copied) { rejected.push({ key, code: copied.code }); continue }
       const previous = priorByKey.get(key)
       next.push(previous !== undefined && sameSpec(previous, copied.spec) ? previous : copied.spec)
@@ -251,7 +378,9 @@ export class EngineAnnotations implements EngineLayer {
         this.applyTone(context, annotation)
         // The assistant's marks are dashed, so they never pass for the person's own drawings.
         context.setLineDash([4, 3])
-        if (annotation.spec.kind === 'level' && annotation.point !== undefined) {
+        if (annotation.figures !== undefined) {
+          this.paintFigures(context, annotation, bounds)
+        } else if (annotation.spec.kind === 'level' && annotation.point !== undefined) {
           const y = Math.round(annotation.point.y) + 0.5
           context.beginPath(); context.moveTo(bounds.left, y); context.lineTo(bounds.right, y); context.stroke()
         } else if (annotation.spec.kind === 'zone' && annotation.rect !== undefined) {
@@ -262,6 +391,15 @@ export class EngineAnnotations implements EngineLayer {
           context.lineWidth = 1; context.strokeRect(Math.round(rect.x) + 0.5, Math.round(rect.y) + 0.5, Math.round(rect.width), Math.round(rect.height)); context.lineWidth = 1.5
         } else if (annotation.point !== undefined) {
           context.fillStyle = context.strokeStyle; diamond(context, annotation.point.x, annotation.point.y, 4.5)
+        }
+      }
+      const ghost = this.ghost, source = ghost === null ? undefined : annotations.find(item => item.id === ghost.id)
+      if (ghost !== null && source !== undefined) {
+        const projected = this.frame?.project(source.spec.anchors[0].time, ghost.price)
+        if (projected != null && Number.isFinite(projected.y)) {
+          this.applyTone(context, source); context.globalAlpha = 0.9; context.setLineDash([2, 3]); context.lineWidth = 1.5
+          const y = Math.round(projected.y) + 0.5
+          context.beginPath(); context.moveTo(bounds.left, y); context.lineTo(bounds.right, y); context.stroke()
         }
       }
     } finally { context.restore() }
@@ -284,6 +422,14 @@ export class EngineAnnotations implements EngineLayer {
       for (const annotation of annotations) {
         if (annotation.status !== 'visible') continue
         const tone = this.applyTone(context, annotation)
+        if (annotation.figures !== undefined) {
+          this.paintFigureText(context, annotation, bounds, palette)
+          for (const index of this.templates.get(annotation.spec.kind)?.axisTags ?? []) {
+            const point = annotation.spec.anchors[index], projected = point === undefined ? null : this.frame?.project(point.time, point.price!)
+            if (point !== undefined && projected != null && Number.isFinite(projected.y)) tags.push({ y: projected.y, price: point.price!, color: tone })
+          }
+          continue
+        }
         if (annotation.spec.kind !== 'marker') {
           for (const point of annotation.spec.kind === 'zone' ? annotation.spec.anchors : annotation.spec.anchors.slice(0, 1)) {
             const price = point.price
@@ -382,6 +528,122 @@ export class EngineAnnotations implements EngineLayer {
     this.project()
   }
 
+  /** The nearest visible draggable level within `tolerance` px of `y`, for pointer code that turns a drag into intent. */
+  hitTestDraggable (y: number, tolerance = 6): { readonly id: string, readonly layer: string, readonly key: string, readonly price: number, readonly time: number } | null {
+    if (this.disposed || !Number.isFinite(y)) return null
+    let best: { id: string, layer: string, key: string, price: number, time: number } | null = null, distance = tolerance
+    for (const item of this.snapshot.annotations) {
+      if (item.status !== 'visible' || item.spec.draggable !== true || item.point === undefined) continue
+      const gap = Math.abs(item.point.y - y)
+      if (gap <= distance) { distance = gap; best = { id: item.id, layer: item.layer, key: item.spec.key, price: item.spec.anchors[0].price!, time: item.spec.anchors[0].time } }
+    }
+    return best === null ? null : Object.freeze(best)
+  }
+
+  /** The price at a pane y position under the current scale, or null before a frame exists. */
+  priceAt (y: number): number | null {
+    const frame = this.frame, bounds = this.snapshot.bounds
+    if (this.disposed || frame === null || bounds === null || !Number.isFinite(y)) return null
+    const anchor = frame.unproject(bounds.left, Math.max(bounds.top, Math.min(bounds.bottom, y)))
+    return anchor !== null && Number.isFinite(anchor.price) ? anchor.price : null
+  }
+
+  /** Paints a ghost of a draggable level at `price` while the host decides; pass null to remove it. Never changes the spec. */
+  setGhost (id: string | null, price?: number): void {
+    this.assertLive()
+    const next = id === null || price === undefined || !Number.isFinite(price) ? null : { id, price }
+    if (this.ghost?.id === next?.id && this.ghost?.price === next?.price) return
+    this.ghost = next; this.onChange?.()
+  }
+
+  private projectTemplate (frame: EngineFrame, bounds: EngineAnnotationBounds, base: Omit<EngineProjectedAnnotation, 'status'>, spec: EngineAnnotationSpec): EngineProjectedAnnotation {
+    const template = this.templates.get(spec.kind)
+    const fail = (): EngineProjectedAnnotation => Object.freeze({ ...base, status: 'unprojectable' })
+    if (template === undefined) return fail()
+    const finite = (point: { x: number, y: number } | null | undefined): point is { x: number, y: number } => point != null && Number.isFinite(point.x) && Number.isFinite(point.y)
+    const anchors = []
+    for (let i = 0; i < template.anchors; i++) {
+      const anchor = spec.anchors[i], projected = frame.project(anchor.time, anchor.price!)
+      if (!finite(projected)) return fail()
+      anchors.push(Object.freeze({ time: anchor.time, price: anchor.price!, x: projected.x, y: projected.y }))
+    }
+    const digits = this.pricePrecision ?? derivePrecision(frame.snapshot.bars)
+    let figures: readonly AnnotationFigure[] | null
+    try {
+      figures = sanitizeFigures(template.create({
+        anchors: Object.freeze(anchors),
+        bounds,
+        params: spec.params ?? EMPTY_PARAMS,
+        text: spec.text,
+        tone: spec.tone ?? 'neutral',
+        color: base.color,
+        project: (time, price) => { const point = frame.project(time, price); return finite(point) ? { x: point.x, y: point.y } : null },
+        formatPrice: price => price.toFixed(digits)
+      }))
+    } catch { return fail() }
+    if (figures === null) return fail()
+    const visible = figures.some(figure => figureTouches(figure, bounds))
+    return Object.freeze({ ...base, status: visible ? 'visible' : 'offscreen', ...(visible ? { figures } : {}) })
+  }
+
+  private paintFigures (context: CanvasRenderingContext2D, annotation: EngineProjectedAnnotation, bounds: EngineAnnotationBounds): void {
+    for (const figure of annotation.figures ?? []) {
+      if (figure.type === 'text') continue
+      this.figureColor(context, figure.color, figure.tone, annotation)
+      context.setLineDash(figure.dash === undefined ? [4, 3] : figure.dash === 'solid' ? [] : [...figure.dash]); context.lineWidth = figure.width ?? 1.5
+      if (figure.type === 'line') {
+        let { from, to } = figure
+        const dx = to.x - from.x, dy = to.y - from.y, length = Math.hypot(dx, dy)
+        if (length === 0) continue
+        const reach = 2 * Math.hypot(bounds.right - bounds.left, bounds.bottom - bounds.top) / length
+        if (figure.extend === 'right' || figure.extend === 'both') to = { x: to.x + dx * reach, y: to.y + dy * reach }
+        if (figure.extend === 'both') from = { x: from.x - dx * reach, y: from.y - dy * reach }
+        context.beginPath(); context.moveTo(from.x, from.y); context.lineTo(to.x, to.y); context.stroke()
+      } else if (figure.type === 'marker') {
+        const size = figure.size ?? 4.5
+        context.beginPath()
+        if (figure.shape === 'circle') context.arc(figure.x, figure.y, size, 0, Math.PI * 2)
+        else if (figure.shape === 'triangle-up') { context.moveTo(figure.x, figure.y - size); context.lineTo(figure.x + size, figure.y + size); context.lineTo(figure.x - size, figure.y + size); context.closePath() }
+        else if (figure.shape === 'triangle-down') { context.moveTo(figure.x, figure.y + size); context.lineTo(figure.x + size, figure.y - size); context.lineTo(figure.x - size, figure.y - size); context.closePath() }
+        else { context.moveTo(figure.x, figure.y - size); context.lineTo(figure.x + size, figure.y); context.lineTo(figure.x, figure.y + size); context.lineTo(figure.x - size, figure.y); context.closePath() }
+        context.setLineDash([]); context.fill()
+      } else {
+        context.beginPath()
+        if (figure.type === 'rect') context.rect(figure.x, figure.y, figure.width, figure.height)
+        else {
+          figure.points.forEach((point, index) => { if (index === 0) context.moveTo(point.x, point.y); else context.lineTo(point.x, point.y) })
+          if (figure.closed === true || (figure.fillOpacity ?? 0) > 0) context.closePath()
+        }
+        if ((figure.fillOpacity ?? 0) > 0) { context.globalAlpha = figure.fillOpacity!; context.fill(); context.globalAlpha = 1 }
+        if (figure.stroke !== false) context.stroke()
+      }
+    }
+  }
+
+  private paintFigureText (context: CanvasRenderingContext2D, annotation: EngineProjectedAnnotation, bounds: EngineAnnotationBounds, palette: ReturnType<typeof colors>): void {
+    for (const figure of annotation.figures ?? []) {
+      if (figure.type !== 'text') continue
+      const tone = this.figureColor(context, figure.color, undefined, annotation)
+      const width = Math.min(Math.max(1, bounds.right - bounds.left - 8), context.measureText(figure.text).width + 12)
+      let left = figure.align === 'right' ? figure.x - width : figure.align === 'center' ? figure.x - width / 2 : figure.x
+      left = Math.max(bounds.left + 4, Math.min(left, bounds.right - width - 4))
+      const top = Math.max(bounds.top + 2, Math.min(figure.y - 8, bounds.bottom - 18))
+      context.globalAlpha = 0.88; context.fillStyle = palette.surface; context.fillRect(left, top, width, 16); context.globalAlpha = 1
+      context.lineWidth = 1; context.strokeStyle = tone; context.strokeRect(left + 0.5, top + 0.5, width - 1, 15)
+      context.fillStyle = palette.ink; context.fillText(figure.text, left + 6, top + 8.5, width - 10)
+    }
+  }
+
+  /** A figure's own colour or tone, else the annotation's; a malformed value keeps the annotation's colour. */
+  private figureColor (context: CanvasRenderingContext2D, color: string | undefined, tone: EngineAnnotationTone | undefined, annotation: EngineProjectedAnnotation): string {
+    const base = annotation.color
+    context.fillStyle = base; context.strokeStyle = base
+    const wanted = color ?? (tone !== undefined ? resolveColor({ ...annotation.spec, tone, color: undefined }, this.currentTheme) : undefined)
+    if (wanted !== undefined) { context.fillStyle = wanted; context.strokeStyle = wanted }
+    context.globalAlpha = 1
+    return String(context.strokeStyle)
+  }
+
   private assertLive (): void { if (this.disposed) throw new Error('Annotations have been disposed') }
   private changed (): void { this.project(); this.onChange?.() }
   private project (): void {
@@ -393,6 +655,7 @@ export class EngineAnnotations implements EngineLayer {
     for (const [layer, specs] of layers ?? []) { for (const spec of specs) {
       const base = { id: annotationId(layer, spec.key), layer, spec, color: resolveColor(spec, this.currentTheme) }
       if (frame === null || bounds === null || frame.snapshot.bars.length === 0) { annotations.push(Object.freeze({ ...base, status: 'no-data' })); continue }
+      if (!KINDS.includes(spec.kind)) { annotations.push(this.projectTemplate(frame, bounds, base, spec)); continue }
       const a = frame.project(spec.anchors[0].time, spec.anchors[0].price!)
       const b = spec.kind === 'zone' ? frame.project(spec.anchors[1].time, spec.anchors[1].price!) : a
       if (a === null || b === null || ![a.x, a.y, b.x, b.y].every(Number.isFinite)) { annotations.push(Object.freeze({ ...base, status: 'unprojectable' })); continue }

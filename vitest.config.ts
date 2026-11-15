@@ -15,13 +15,15 @@ export default defineConfig({
       { find: /^@supersolutions\/super-chart-superscript$/, replacement: src('./packages/superscript/src/index.ts') },
       { find: /^@supersolutions\/super-chart-web\/annotations$/, replacement: src('./packages/bindings/web/src/annotations.ts') },
       { find: /^@supersolutions\/super-chart-web\/overlays$/, replacement: src('./packages/bindings/web/src/overlayEntry.ts') },
+      { find: /^@supersolutions\/super-chart-react$/, replacement: src('./packages/bindings/react/src/index.ts') },
       { find: /^@supersolutions\/super-chart-web$/, replacement: src('./packages/bindings/web/src/index.ts') }
     ]
   },
   test: {
     environment: 'node',
     include: [
-      'packages/**/src/**/*.test.ts'
+      'packages/**/src/**/*.test.ts',
+      'examples/*/*.test.ts'
     ]
   }
 })

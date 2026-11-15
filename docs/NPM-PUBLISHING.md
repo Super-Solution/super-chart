@@ -1,6 +1,12 @@
 # Public npm publishing
 
-> **Package split (draft, nothing published).** The single package `@super-solution/super-chart` (latest 0.0.53) is replaced by four packages under `@supersolutions`: `super-chart-core`, `-superscript`, `-web`, `-chat-plugin`, all at 0.1.0. Each needs its own trusted publisher entry on npm with the same fields below, and `@supersolutions/super-protocol` must be published first (the plugin depends on it). The workflow publishes in dependency order. The old package would then be deprecated pointing at the new names. None of this has been done; it waits for the owner. `@supersolutions/super-protocol@0.1.0` is on the registry and `package-lock.json` is committed, so the workflow installs with `npm ci`.
+> **Package split (draft, nothing published).** The single package `@super-solution/super-chart` (latest 0.0.53) is replaced by five packages under `@supersolutions`: `super-chart-core`, `-superscript`, `-web`, `-react`, `-chat-plugin`. 0.1.0 shipped the first four; 0.2.0 adds `-react` and moves every package to 0.2.0 (`super-protocol` keeps its own version). Each needs its own trusted publisher entry on npm with the same fields below, and `@supersolutions/super-protocol` must be published first (the plugin depends on it). The workflow publishes in dependency order. The old package would then be deprecated pointing at the new names. None of this has been done; it waits for the owner. `@supersolutions/super-protocol@0.1.0` is on the registry and `package-lock.json` is committed, so the workflow installs with `npm ci`.
+
+**New package, new trust.** `@supersolutions/super-chart-react` has never been on
+npm. Before the first release the owner reserves the name (a placeholder version)
+and adds the trusted publisher entry in the table below for it, exactly as for the
+other packages; otherwise the workflow's publish step fails for that package. The
+workflow publishes in dependency order: core, superscript, web, react, chat-plugin.
 
 The original text below describes the old single package.
 

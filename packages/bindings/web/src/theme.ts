@@ -1,7 +1,8 @@
 import type { EngineRenderOptions } from '@supersolutions/super-chart-core'
 import { SUPER_CHART_COLORS, withAlpha } from './tokens'
 
-export type WorkspaceThemeName = 'dark' | 'light'
+/** The built-in presets are `dark` and `light`; hosts add more with `registerWorkspaceTheme`. */
+export type WorkspaceThemeName = 'dark' | 'light' | (string & Record<never, never>)
 export type WorkspaceChromeKey = 'background' | 'text' | 'surface' | 'border' | 'divider' | 'danger' | 'toolbar' | 'muted' | 'hover' | 'hoverBorder' | 'focus' | 'accent' | 'active' | 'panelBorder' | 'panel' | 'panelShadow' | 'error' | 'colorScheme'
 
 /** The existing scoped workspace variables; host styles and `ui.variables` use these same names. */
@@ -37,7 +38,7 @@ export interface WorkspaceTheme {
 }
 
 /** Both presets are the Super Chart design tokens (./tokens.ts), so the chrome and the canvas share one source. */
-function workspaceTheme (name: WorkspaceThemeName, panelShadow: string): WorkspaceTheme {
+function workspaceTheme (name: 'dark' | 'light', panelShadow: string): WorkspaceTheme {
   const c = SUPER_CHART_COLORS[name]
   return Object.freeze({
     chrome: Object.freeze({
@@ -64,7 +65,53 @@ function workspaceTheme (name: WorkspaceThemeName, panelShadow: string): Workspa
   })
 }
 
-export const WORKSPACE_THEMES: Readonly<Record<WorkspaceThemeName, WorkspaceTheme>> = Object.freeze({
+/** The two built-in presets. Use `getWorkspaceTheme` to also reach presets a host registered. */
+export const WORKSPACE_THEMES: Readonly<Record<'dark' | 'light', WorkspaceTheme>> = Object.freeze({
   dark: workspaceTheme('dark', '0 10px 30px rgba(0, 0, 0, 0.45)'),
   light: workspaceTheme('light', '0 10px 30px rgba(17, 17, 19, 0.12)')
 })
+
+const registry = new Map<string, WorkspaceTheme>([['dark', WORKSPACE_THEMES.dark], ['light', WORKSPACE_THEMES.light]])
+const THEME_NAME = /^[a-z][a-z0-9-]{0,63}$/
+
+export interface WorkspaceThemeInput {
+  /** Start from this preset (`dark` or `light` unless the host registered others). Default `dark`. */
+  readonly extends?: WorkspaceThemeName
+  /** Chrome variable values to override, by `WORKSPACE_CHROME_VARS` key. */
+  readonly chrome?: Readonly<Partial<Record<WorkspaceChromeKey, string>>>
+  /** Canvas colours to override. `theme` picks the base token set for everything not listed (`dark` or `light`). */
+  readonly render?: Readonly<Partial<WorkspaceTheme['render']>>
+}
+
+/**
+ * Register a named preset that `theme`, `setTheme` and the command palette can use. A preset is derived from an
+ * existing one, so a brand theme is a few colours, not a full copy:
+ * `registerWorkspaceTheme('gold', { extends: 'dark', chrome: { accent: '#d4af37' }, render: { up: '#c9a227' } })`.
+ * The built-in names `dark` and `light` cannot be replaced. Registering an existing custom name replaces it.
+ */
+export function registerWorkspaceTheme (name: string, input: WorkspaceThemeInput): WorkspaceTheme {
+  if (typeof name !== 'string' || !THEME_NAME.test(name)) throw new TypeError('A theme name is lowercase letters, digits and hyphens, starting with a letter')
+  if (name === 'dark' || name === 'light') throw new RangeError('The built-in themes dark and light cannot be replaced')
+  if (input === null || typeof input !== 'object') throw new TypeError('Theme input must be an object')
+  const base = registry.get(input.extends ?? 'dark')
+  if (base === undefined) throw new RangeError(`Unknown base theme ${JSON.stringify(input.extends)}`)
+  for (const [group, values] of [['chrome', input.chrome], ['render', input.render]] as const) {
+    for (const [key, value] of Object.entries(values ?? {})) {
+      if (typeof value !== 'string' || value.trim() === '') throw new TypeError(`Theme ${group}.${key} must be a nonempty string`)
+    }
+  }
+  for (const key of Object.keys(input.chrome ?? {})) if (!(key in WORKSPACE_CHROME_VARS)) throw new RangeError(`Unknown chrome key ${JSON.stringify(key)}`)
+  if (input.render?.theme !== undefined && input.render.theme !== 'dark' && input.render.theme !== 'light') throw new RangeError('render.theme must be "dark" or "light"')
+  const theme: WorkspaceTheme = Object.freeze({
+    chrome: Object.freeze({ ...base.chrome, ...input.chrome }),
+    render: Object.freeze({ ...base.render, ...input.render })
+  })
+  registry.set(name, theme)
+  return theme
+}
+
+/** Preset by name, or undefined when none was registered under it. */
+export function getWorkspaceTheme (name: string): WorkspaceTheme | undefined { return registry.get(name) }
+
+/** Names of the presets that can be selected now: the two built-ins, then registered ones. */
+export function listWorkspaceThemes (): string[] { return [...registry.keys()] }

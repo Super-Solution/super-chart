@@ -4,8 +4,9 @@ Dependencies only point down. `scripts/check-package.mjs` enforces it on every
 build: a package may import only the packages it declares, in source and in `dist`.
 
 ```
-super-chart-chat-plugin ─┬─> super-chart-web ──────┐
-        │                │                         ├─> super-chart-core
+super-chart-react ───────┐
+super-chart-chat-plugin ─┴─> super-chart-web ──────┐
+        │                                          ├─> super-chart-core
         └─> super-protocol (Apache-2.0, super-chat)│
                          super-chart-superscript ──┘
 ```
@@ -15,6 +16,7 @@ super-chart-chat-plugin ─┬─> super-chart-web ──────┐
 | `super-chart-core` | `src/*` market data, loader, series, TA, viewport; `src/model/*` frame, indicators, drawings, price scale, workspace state and persistence, replay, countdown, overlays model; `src/analysis/*` detectors; `src/platform/native` lifecycle | Node, browser, React Native, workers |
 | `super-chart-superscript` | `runtime/*` language, builtins, diagnostics; `ai/*` host-supplied AI helpers; `scripts` bridge from a compiled script to an engine indicator | Node, browser |
 | `super-chart-web` | Canvas renderer, gestures, drawing input, image decode, workspace UI, annotation and overlay layers | browser |
+| `super-chart-react` | `SuperChart` component and `useWorkspaceEvent`; a thin binding over the web workspace (React is a peer dependency, `react >= 18`) | browser, server render safe |
 | `super-chart-chat-plugin` | the `super-chart.chart` card and seven agent tools | browser (chat host) |
 
 Split rule: a new package only for a different runtime, licence, language, heavy
@@ -32,6 +34,7 @@ dependency or release cadence; otherwise a subpath export.
 | `/scripts` | `super-chart-superscript/scripts` |
 | `/annotations` | `super-chart-web/annotations` |
 | `/overlays` | `super-chart-web/overlays` |
+| a React wrapper written by the host | `super-chart-react` (`SuperChart`) |
 | `DefaultDatafeed` | removed; implement `Datafeed` |
 
 `super-chart-core` root now includes the renderer-free engine model that used to
@@ -39,12 +42,18 @@ sit behind `/native` only, so one import covers a worker or an agent.
 
 ## Licences
 
-All four packages are GPL-3.0-or-later (commercial licence available). The plugin
+All five packages are GPL-3.0-or-later (commercial licence available). The plugin
 interface is Apache-2.0 in `@supersolutions/super-protocol`, which the plugin
 imports; nothing in an Apache layer imports these packages. The `Datafeed`,
 `MarketBar`, `SymbolInfo` and `Period` types in `super-protocol/chart` are
 structurally identical to core's, and the plugin carries a compile-time check
 that they stay assignable.
+
+`super-chart-react` is the only package allowed a UI-framework dependency, and only
+as a declared `peerDependency`; `scripts/check-package.mjs` still rejects any
+other import of React, Solid, Vue or KLineChart. Adding another framework means
+another folder under `packages/bindings/`, not an option on this package. For
+what belongs to which layer see [API-LAYERS.md](API-LAYERS.md).
 
 ## Open items
 

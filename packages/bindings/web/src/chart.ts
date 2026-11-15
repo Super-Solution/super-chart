@@ -2,6 +2,7 @@ import { RealtimeSeries, RealtimeView, normalizeBars, normalizeBar, ENGINE_CHART
 import { paintEngineFrame, paintEngineCursor } from './canvasRenderer'
 import { attachEngineGestures } from './gestures'
 import { attachDrawingInteraction } from './drawingInteraction'
+import { resolveHoldDraw, type DrawByHoldingOptions, type HoldDrawEvent, type ResolvedHoldDraw } from './holdDraw'
 import { paintDrawings } from './drawingRenderer'
 import type { EngineLayer } from './layer'
 import { attachPaneInteraction } from './paneInteraction'
@@ -20,6 +21,16 @@ export interface EngineChartOptions {
   inertia?: boolean
   onInspect?: (inspection: EngineInspection | null) => void
   onToolComplete?: () => void
+  /** Accessible description of the chart region. Default is the English text; the workspace passes its locale's. */
+  ariaLabel?: string
+  /**
+   * Hold a pointer still for about a third of a second, then draw: the stroke becomes the line, rectangle, ellipse,
+   * circle or triangle it resembles (Tab tries the next best, Escape takes it back) and a scribble erases the person's
+   * own drawings. A pointer that moves first still pans. Off by default; enable it on editable charts only.
+   */
+  drawByHolding?: boolean | DrawByHoldingOptions
+  /** Progress of a hold-to-draw stroke, for a status line or guide. */
+  onHoldDraw?: (event: HoldDrawEvent) => void
 }
 
 export interface EngineConfiguration {
@@ -77,11 +88,15 @@ export class EngineChart {
   private readonly unsubscribers: Array<() => void> = []
   private readonly stopGestures: ReturnType<typeof attachEngineGestures>
   private readonly drawingInput: ReturnType<typeof attachDrawingInteraction>
+  private holdDraw: ResolvedHoldDraw | null
+  private holdListener: ((event: HoldDrawEvent) => void) | undefined
   private readonly onInspect?: EngineChartOptions['onInspect']
   private readonly inputs = new Map<number, (time: number) => void>()
   private readonly layers = new Set<EngineLayer>()
   private readonly indicatorListeners = new Set<() => void>()
+  private readonly layoutListeners = new Set<() => void>()
   private indicatorNoticeQueued = false
+  private layoutNoticeQueued = false
   private inputId = 0
   private draining = false
   private preview: Drawing | null = null
@@ -128,7 +143,7 @@ export class EngineChart {
     this.root.style.cssText = 'position:relative;width:100%;height:100%;min-height:0;overflow:hidden;touch-action:none;'
     this.root.tabIndex = 0
     this.root.setAttribute('role', 'group')
-    this.root.setAttribute('aria-label', 'Chart. Drag to pan, pinch or wheel to zoom; Home follows the latest candle.')
+    this.root.setAttribute('aria-label', options.ariaLabel ?? 'Chart. Drag to pan, pinch or wheel to zoom; Home follows the latest candle.')
     this.canvas = this.doc.createElement('canvas')
     this.drawingCanvas = this.doc.createElement('canvas')
     this.drawingCanvas.width = this.drawingCanvas.height = 1
@@ -160,6 +175,7 @@ export class EngineChart {
       this.schedule()
     }))
     this.unsubscribers.push(this.drawings.subscribe(() => { this.retainDrawingImages(); this.drawingDirty = true; this.schedule() }))
+    this.holdDraw = resolveHoldDraw(options.drawByHolding); this.holdListener = options.onHoldDraw
     const frameScheduler = {
       request: (callback: (time: number) => void): number => { const id = ++this.inputId; this.inputs.set(id, callback); this.schedule(); return id },
       cancel: (id: number): void => { this.inputs.delete(id) }
@@ -167,7 +183,10 @@ export class EngineChart {
     this.unsubscribers.push(attachPaneInteraction(this.root, () => this.frame, () => this.layout, options => this.setLayout(options), () => this.stopGestures.cancelInput(), this.view, frameScheduler))
     this.drawingInput = attachDrawingInteraction(this.root, this.drawings, () => this.frame, preview => {
       this.preview = preview; this.drawingDirty = true; this.schedule()
-    }, options.onToolComplete, () => this.stopGestures.cancelInput(), this.drawingImages)
+    }, options.onToolComplete, () => this.stopGestures.cancelInput(), this.drawingImages, {
+      options: () => this.holdDraw,
+      onEvent: event => { try { this.holdListener?.(event) } catch (error) { this.win.console.warn('Hold-to-draw listener failed', error) } }
+    })
     this.stopGestures = attachEngineGestures(this.root, this.view, () => this.frame?.model.geometry ?? null, x => {
       if (this.cursorX !== x) { this.cursorX = x; this.cursorDirty = true; this.schedule() }
     }, {
@@ -203,6 +222,16 @@ export class EngineChart {
     const normalized = normalizeBars(bars, 1).bars, first = this.series.getDataList()[0]
     const base = first === undefined || (normalized[0] !== undefined && normalized[0].timestamp < first.timestamp) ? normalized[0]?.close : first.close
     this.validateBars(normalized, this.layout, base); this.series.applyMoreData(normalized, more)
+    // The loader releases a failed older page as "nothing new, more still exists" after its backoff (a successful
+    // page that ends history says more=false). Edge-triggered scrolling would leave the chart parked at the left
+    // edge until the next gesture, so ask again while the viewport is still there. The loader's own backoff paces it.
+    if (more && normalized.length === 0) this.win.queueMicrotask(() => this.retryOlderAtEdge())
+  }
+
+  private retryOlderAtEdge (): void {
+    if (this.disposed) return
+    const snapshot = this.view.getSnapshot()
+    if (snapshot.viewport.i0 <= 0 && snapshot.hasMore) this.view.requestMore()
   }
 
   updateBatch (bars: unknown, more?: boolean): void {
@@ -265,6 +294,20 @@ export class EngineChart {
     })
   }
 
+  /** Turn hold-to-draw on, off or retime it. Takes effect for the next press. */
+  setDrawByHolding (value: boolean | DrawByHoldingOptions): void {
+    this.assertLive()
+    this.holdDraw = resolveHoldDraw(value)
+  }
+
+  getDrawByHolding (): ResolvedHoldDraw | null { return this.holdDraw }
+
+  /** Replace the hold-to-draw progress listener; pass undefined to remove it. */
+  setHoldDrawListener (listener: ((event: HoldDrawEvent) => void) | undefined): void {
+    this.assertLive()
+    this.holdListener = listener
+  }
+
   setDrawingTool (tool: DrawingType | null): void {
     this.assertLive()
     // An unknown name would arm a tool that swallows every pointer gesture and draws nothing.
@@ -299,7 +342,59 @@ export class EngineChart {
     // introduces new raw-price requirements; resizing panes need not rescan history.
     if ((next.priceScale?.mode ?? 'linear') !== (this.layout.priceScale?.mode ?? 'linear')) this.validateBars(this.series.getDataList(), next)
     this.layout = next
-    this.geometryDirty = true; this.schedule()
+    this.geometryDirty = true; this.schedule(); this.notifyLayout()
+  }
+
+  /**
+   * Notified (once per microtask) after the layout changed, whether by `setLayout`, by dragging the price axis or a
+   * pane divider, or by double-clicking the axis to fit it. Read `getLayoutOptions()` for the new state.
+   */
+  onLayoutChanged (listener: () => void): () => void {
+    this.assertLive(); this.layoutListeners.add(listener)
+    return () => { this.layoutListeners.delete(listener) }
+  }
+
+  private notifyLayout (): void {
+    if (this.layoutNoticeQueued || this.disposed) return
+    this.layoutNoticeQueued = true
+    this.win.queueMicrotask(() => {
+      this.layoutNoticeQueued = false
+      if (this.disposed) return
+      for (const listener of [...this.layoutListeners]) {
+        if (!this.layoutListeners.has(listener)) continue
+        try { listener() } catch (error) { this.win.console.warn('Layout change listener failed', error) }
+      }
+    })
+  }
+
+  /** Replace the accessible description of the chart region (the workspace does this when its locale changes). */
+  setAriaLabel (label: string): void {
+    this.assertLive()
+    if (typeof label !== 'string' || label.trim() === '') throw new TypeError('The chart label must be a nonempty string')
+    this.root.setAttribute('aria-label', label)
+  }
+
+  /** Time and price under a client position, or null outside the plot area or without data. */
+  pointAt (clientX: number, clientY: number): { timestamp: number, price: number } | null {
+    this.assertLive()
+    const frame = this.frame
+    if (frame === null || frame.snapshot.length === 0) return null
+    const rect = this.root.getBoundingClientRect(), x = clientX - rect.left, y = clientY - rect.top, g = frame.model.geometry
+    if (x < g.left || x > g.right || y < g.top || y > g.bottom) return null
+    const point = frame.unproject(x, y)
+    return point !== null && Number.isFinite(point.timestamp) && Number.isFinite(point.price) ? { timestamp: point.timestamp, price: point.price } : null
+  }
+
+  /** The retained drawing under a client position (the same tolerance as selection), or null. */
+  drawingAt (clientX: number, clientY: number, tolerance = 6): { id: string, anchorIndex: number | null } | null {
+    this.assertLive()
+    const frame = this.frame
+    if (frame === null) return null
+    const rect = this.root.getBoundingClientRect(), g = frame.model.geometry
+    const point = { x: clientX - rect.left, y: clientY - rect.top }
+    if (point.x < g.left || point.x > g.right || point.y < g.top || point.y > g.bottom) return null
+    const hit = this.drawings.hitTest(point, frame.project, g, tolerance, frame.drawingContext)
+    return hit === null ? null : { id: hit.id, anchorIndex: hit.anchorIndex }
   }
 
   getMetrics (): Readonly<typeof this.counters> { return { ...this.counters } }
@@ -342,7 +437,7 @@ export class EngineChart {
     // Registered custom parameter validators may reject; this is still before
     // render, scale, drawing or viewport mutation.
     this.indicators.replace(configuration.indicators)
-    this.renderOptions = render; this.layout = layout
+    this.renderOptions = render; this.layout = layout; this.notifyLayout()
     this.drawings.importJson(normalizedDrawings, { recordHistory: false })
     try {
       this.view.setMode(configuration.mode)
@@ -434,7 +529,7 @@ export class EngineChart {
     if (this.frameId !== 0) this.win.cancelAnimationFrame(this.frameId)
     this.frameId = 0; this.inputs.clear(); this.frame = null; this.preview = null
     this.series.loadMore(() => {}); this.series.applyNewData([]); this.indicators.dispose()
-    this.indicatorListeners.clear()
+    this.indicatorListeners.clear(); this.layoutListeners.clear()
     this.root.remove()
     this.canvas.width = this.canvas.height = this.drawingCanvas.width = this.drawingCanvas.height = this.cursorCanvas.width = this.cursorCanvas.height = 0
     const layers = [...this.layers]; this.layers.clear()

@@ -1,9 +1,10 @@
 // Single source of truth for the package set: build order, entries, licences.
-// Dependencies only point down: core <- superscript, core <- web <- chat-plugin.
+// Dependencies only point down: core <- superscript, core <- web <- chat-plugin, web <- react.
+// `peers` are runtime libraries the host app supplies (only the react binding has one); everyone else may not import a UI framework.
 // `dir` is the short id used by the build; `path` is where the package lives (grouped by role:
 // packages/bindings/<framework>, packages/integrations/<host>).
 export const SCOPE = '@supersolutions'
-export const VERSION = '0.1.0'
+export const VERSION = '0.2.0'
 export const AUTHOR = 'SUPER SOLUTION LABS INC'
 export const LICENSE = 'GPL-3.0-or-later'
 export const REPO = 'Super-Solution/super-chart'
@@ -29,6 +30,13 @@ export const PACKAGES = [
     global: { entry: 'src/index.ts', file: 'super-chart.global', name: 'SuperChart' },
     additionalGlobals: [{ entry: 'src/engine.ts', file: 'super-chart.engine.global', name: 'SuperChartEngine' }],
     entries: { '.': ['src/index.ts', 'index'], './engine': ['src/engine.ts', 'engine'], './annotations': ['src/annotations.ts', 'annotations'], './overlays': ['src/overlayEntry.ts', 'overlays'] }
+  },
+  {
+    dir: 'react', path: 'packages/bindings/react', name: `${SCOPE}/super-chart-react`,
+    description: 'React component and hooks for the Super Chart workspace: lifecycle-safe mount, Strict Mode, market and theme props, events.',
+    deps: ['core', 'web'],
+    peers: { react: '>=18' },
+    entries: { '.': ['src/index.ts', 'index'] }
   },
   {
     dir: 'chat-plugin', path: 'packages/integrations/chat-plugin', name: `${SCOPE}/super-chart-chat-plugin`,

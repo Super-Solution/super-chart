@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url'
 // scripts/build.mjs; here the demos import the package sources directly.
 const src = (path: string): string => fileURLToPath(new URL(path, import.meta.url))
 export default defineConfig({
+  // Only the React example has .tsx files.
+  esbuild: { jsx: 'automatic' },
   resolve: {
     alias: [
       { find: /^@supersolutions\/super-chart-core\/native$/, replacement: src('./packages/core/src/native.ts') },
@@ -15,6 +17,7 @@ export default defineConfig({
       { find: /^@supersolutions\/super-chart-superscript$/, replacement: src('./packages/superscript/src/index.ts') },
       { find: /^@supersolutions\/super-chart-web\/annotations$/, replacement: src('./packages/bindings/web/src/annotations.ts') },
       { find: /^@supersolutions\/super-chart-web\/overlays$/, replacement: src('./packages/bindings/web/src/overlayEntry.ts') },
+      { find: /^@supersolutions\/super-chart-react$/, replacement: src('./packages/bindings/react/src/index.ts') },
       { find: /^@supersolutions\/super-chart-web$/, replacement: src('./packages/bindings/web/src/index.ts') }
     ]
   }
