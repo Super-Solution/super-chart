@@ -23,13 +23,13 @@ for (const pkg of PACKAGES) {
     target: 'es2022', mainFields: ['module', 'main'], external: [`${pkg.name.split('/')[0]}/*`, ...(pkg.external ?? [])], logLevel: 'warning', sourcemap: false
   })
   console.log(`js   ${pkg.name}: ${Object.keys(entryPoints).join(', ')}`)
-  if (pkg.global !== undefined) {
+  for (const global of [...(pkg.global === undefined ? [] : [pkg.global]), ...(pkg.additionalGlobals ?? [])]) {
     // One self-contained script for pages without a bundler: window.<globalName>, core included.
     await build({
-      entryPoints: { [pkg.global.file]: join(dir, pkg.global.entry) }, outdir: join(dir, 'dist'), bundle: true, format: 'iife', globalName: pkg.global.name,
+      entryPoints: { [global.file]: join(dir, global.entry) }, outdir: join(dir, 'dist'), bundle: true, format: 'iife', globalName: global.name,
       platform: 'browser', target: 'es2022', mainFields: ['module', 'main'], minify: true, logLevel: 'warning'
     })
-    console.log(`js   ${pkg.name}: ${pkg.global.file}.js (window.${pkg.global.name})`)
+    console.log(`js   ${pkg.name}: ${global.file}.js (window.${global.name})`)
   }
   if (!withDts) continue
   const config = {

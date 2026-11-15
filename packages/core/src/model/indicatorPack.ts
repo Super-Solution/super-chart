@@ -1,5 +1,5 @@
 import type { MarketBar } from '../types'
-import { priceSeries } from '../series'
+import { indicatorField as priceSeries, ownedKernel, ownedWindow } from './indicatorInputs'
 import {
   atr, atrBands, keltner, donchian, anchoredVwap, sma, rsi, macd, stochK,
   stochRsi, mfi, bbPercent, supertrend, ichimoku, type Series
@@ -72,12 +72,28 @@ function define (
   figures: readonly IndicatorFigure[],
   calculate: IndicatorDefinition['calculate']
 ): IndicatorDefinition {
+  const normalized = (supplied: readonly number[]): readonly number[] => parameters(name, supplied, defaults, kinds)
+  const compute = (bars: readonly MarketBar[], supplied: readonly number[]): readonly IndicatorRow[] => calculate(bars, normalized(supplied))
+  if (name === 'SC_SMA' || name === 'SC_RSI' || name === 'SC_MACD') ownedKernel(compute, {
+    name: name === 'SC_SMA' ? 'MA' : name === 'SC_RSI' ? 'RSI' : 'MACD', parameters: normalized,
+    ...(name === 'SC_SMA' ? { maKey: 'sma' } : {})
+  })
+  if (name === 'SC_DONCHIAN') ownedWindow(compute, {
+    inputStart: (supplied, from) => Math.max(0, from - normalized(supplied)[0] + 1), outputStart: (_p, from) => from
+  })
+  if (name === 'SC_ICHIMOKU') ownedWindow(compute, {
+    inputStart: (supplied, from, length) => {
+      const p = normalized(supplied), shift = Math.min(p[3] - 1, length)
+      return Math.max(0, from - 2 * shift - Math.max(p[0], p[1], p[2]) + 1)
+    },
+    outputStart: (supplied, from, length) => Math.max(0, from - Math.min(normalized(supplied)[3] - 1, length))
+  })
   return Object.freeze({
     name,
     params: Object.freeze([...defaults]),
     pane,
     figures,
-    calculate: (bars: readonly MarketBar[], supplied: readonly number[]) => calculate(bars, parameters(name, supplied, defaults, kinds))
+    calculate: compute
   })
 }
 
@@ -107,7 +123,10 @@ function vwapPeriod (timestamp: number, anchor: number, offset: number): number 
  * These definitions deliberately use the same owned core functions and seeds.
  * All calculations return full-series rows with explicit null gaps. The generic
  * registry reuses results for viewport-only changes, but these optional kernels
- * currently recalculate fully when data changes.
+ * share owned OHLC input arrays within one compute call. Stateful SC_SMA,
+ * SC_RSI and SC_MACD reuse the matching incremental owned kernels. Donchian
+ * and Ichimoku tail edits recompute their finite dependency windows, including
+ * Ichimoku's lagging rows before the edited bar. Corrections/prepends rebuild.
  *
  * VWAP preserves the fixed-offset session buckets and skips the first loaded
  * bucket because it may be partial. Missing volume follows the existing core's
@@ -122,8 +141,9 @@ function vwapPeriod (timestamp: number, anchor: number, offset: number): number 
  *
  * SC_RSI/SC_MACD/SC_SMA preserve their owned formulas and defaults. SC_SMA
  * uses the compensated core sum; the former template's naive tail-only sum
- * can differ in final floating-point bits. These optional names currently
- * recalculate on data changes; the default MA/RSI/MACD kernels are incremental.
+ * can differ in final floating-point bits. These optional names now share the
+ * incremental MA/RSI/MACD kernels by calculation identity, with their original
+ * defaults and row keys. History corrections/prepends still rebuild.
  * Oscillator reference levels and MACD's four-color histogram require renderer
  * metadata, and are not represented by these line/bar figures.
  *

@@ -1,4 +1,4 @@
-import { buildFinancialChartModel, nearestChartIndex, type FinancialChartModel, type FinancialSeries } from '../financialModel'
+import { buildFinancialChartModel, financialGeometry, nearestChartIndex, type FinancialChartModel, type FinancialSeries } from '../financialModel'
 import type { RealtimeViewSnapshot } from '../realtimeView'
 import type { MarketBar } from '../types'
 import { nearestBarIndex } from '../series'
@@ -6,6 +6,7 @@ import { createPriceScale, type PriceScale, type PriceScaleOptions } from './pri
 import type { IndicatorFigure } from './indicators'
 import { applyRealtimeViewport } from '../realtimeModel'
 import type { DrawingContext } from './drawings'
+import { derivePrecision } from '../precision'
 
 export interface FrameIndicator {
   id: string
@@ -49,11 +50,15 @@ export interface EngineRenderFrame {
   snapshot: RealtimeViewSnapshot
   model: FinancialChartModel
   inspect: (chartX: number) => EngineInspection | null
+  /** Lightweight renderer lookup; does not materialize all indicator rows. */
+  inspectBar?: (chartX: number) => Omit<EngineInspection, 'indicators' | 'indicatorBasis'> | null
   previousClose?: number
   /** Indicator-only panes share time coordinates but never label an OHLC price. */
   indicatorPane?: boolean
   title?: string
   figureStyles?: ReadonlyMap<string, IndicatorFigure>
+  /** Derived once from this immutable snapshot, shared by panes and cursor paints. */
+  pricePrecision?: number
 }
 export interface EngineFrame extends EngineRenderFrame {
   /** Borrowed revealed raw bars and data revision for data-derived drawings. */
@@ -77,6 +82,55 @@ function rescale (model: FinancialChartModel, values: readonly number[], options
     series.points = series.points.map(point => ({ ...point, y: scale.y(point.value) })).filter(point => Number.isFinite(point.y))
   }
   return scale
+}
+
+/** Owned snapshots have one ordered category slot per normalized candle. Avoid
+ * generic series key discovery and intermediate projections for this common path. */
+function alignedModel (
+  snapshot: RealtimeViewSnapshot, series: FinancialSeries[], indexByTime: ReadonlyMap<number, number>,
+  width: number, height: number, gutter: number | undefined, scaleOptions: PriceScaleOptions,
+  values: readonly number[], base: number, primary: boolean
+): { model: FinancialChartModel, scale: PriceScale } {
+  const geometry = financialGeometry(width, height, gutter, 12), count = snapshot.bars.length
+  const scale = createPriceScale(values, geometry.top, geometry.bottom, scaleOptions, base)
+  const span = snapshot.viewport.i1 - snapshot.viewport.i0
+  const fractional = snapshot.dataStart !== undefined && span > 0 && count > 0
+  const x = (_key: string | number, index: number): number => geometry.left + (fractional
+    ? ((snapshot.dataStart as number) + index - snapshot.viewport.i0) / span * geometry.plotWidth
+    : count < 2 ? geometry.plotWidth / 2 : index / (count - 1) * geometry.plotWidth)
+  const xKeys = snapshot.bars.map(bar => bar.timestamp), xPositions = xKeys.map(x)
+  let xTickIndices = count < 3 ? xKeys.map((_, i) => i) : [0, Math.floor((count - 1) / 2), count - 1]
+  if (fractional) {
+    const start = Math.max(0, Math.ceil(snapshot.viewport.i0) - (snapshot.dataStart as number))
+    const end = Math.min(count - 1, Math.floor(snapshot.viewport.i1) - (snapshot.dataStart as number))
+    xTickIndices = end < start ? [] : [...new Set([start, Math.floor((start + end) / 2), end])]
+  }
+  const model: FinancialChartModel = {
+    geometry, min: scale.min, max: scale.max, yTicks: scale.ticks,
+    rightMin: 0, rightMax: 1, rightTicks: [], hasRightAxis: false,
+    xKeys, allKeys: [...xKeys], start: 0, end: Math.max(1, count), xPositions, xTickIndices,
+    plottedCandles: [], plottedSeries: [], x, y: scale.y
+  }
+  if (primary) {
+    for (let index = 0; index < count; index++) {
+      const bar = snapshot.bars[index]
+      const open = scale.y(bar.open), close = scale.y(bar.close), high = scale.y(bar.high), low = scale.y(bar.low)
+      if (!Number.isFinite(high) || !Number.isFinite(low)) continue
+      model.plottedCandles.push({ t: bar.timestamp, o: bar.open, h: bar.high, l: bar.low, c: bar.close, v: bar.volume,
+        x: xPositions[index], index, bodyTop: Math.min(open, close), bodyBottom: Math.max(open, close),
+        wickTop: Math.min(high, low), wickBottom: Math.max(high, low) })
+    }
+  }
+  for (const source of series) {
+    const points: FinancialChartModel['plottedSeries'][number]['points'] = []
+    for (const [key, value] of source.points) {
+      const index = indexByTime.get(key as number), y = scale.y(value)
+      if (index === undefined || !Number.isFinite(xPositions[index]) || !Number.isFinite(y)) continue
+      points.push({ x: xPositions[index], y, value, key, index })
+    }
+    model.plottedSeries.push({ source, points })
+  }
+  return { model, scale }
 }
 
 /** Visible-only geometry. Indicator computation and market history stay outside the renderer. */
@@ -111,17 +165,36 @@ export function buildEngineFrame (
     for (const index of small) { heights[index] = minimum; available -= minimum; totalWeight -= normalized[index]; pending.delete(index) }
   }
   const panes: EnginePane[] = []
+  // A malformed external snapshot keeps the generic model's filtering semantics.
+  const aligned = snapshot.bars.every((bar, index, bars) => Number.isFinite(bar.timestamp) &&
+    (index === 0 || bar.timestamp > bars[index - 1].timestamp) &&
+    Number.isFinite(bar.open) && Number.isFinite(bar.high) && Number.isFinite(bar.low) && Number.isFinite(bar.close) &&
+    bar.high >= Math.max(bar.open, bar.close) && bar.low <= Math.min(bar.open, bar.close))
+  const indexByTime = new Map<number, number>()
+  if (aligned) for (let i = 0; i < snapshot.bars.length; i++) indexByTime.set(snapshot.bars[i].timestamp, i)
+  const candles = aligned ? [] : snapshot.bars.map(bar => ({ t: bar.timestamp, o: bar.open, h: bar.high, l: bar.low, c: bar.close, v: bar.volume }))
+  const pricePrecision = derivePrecision(snapshot.bars)
   const dataStart = snapshot.dataStart ?? snapshot.viewport.i0
-  const inspect = (model: FinancialChartModel, chartX: number): EngineInspection | null => {
+  const inspectBar = (model: FinancialChartModel, chartX: number): Omit<EngineInspection, 'indicators' | 'indicatorBasis'> | null => {
     if (!Number.isFinite(chartX)) return null
+    const span = snapshot.viewport.i1 - snapshot.viewport.i0
+    // Padding is empty time, not a repeated copy of the final real candle.
+    if (snapshot.dataStart !== undefined && span > 0 && model.xPositions.length > 0) {
+      const halfSlot = model.geometry.plotWidth / span / 2
+      if (chartX > model.xPositions[model.xPositions.length - 1] + halfSlot || chartX < model.xPositions[0] - halfSlot) return null
+    }
     const slot = nearestChartIndex(model, chartX), timestamp = slot === null ? undefined : model.xKeys[slot]
-    const index = typeof timestamp === 'number' ? nearestBarIndex(snapshot.bars, timestamp) : null
+    const index = aligned ? slot : typeof timestamp === 'number' ? nearestBarIndex(snapshot.bars, timestamp) : null
     const bar = index === null ? undefined : snapshot.bars[index]
     if (index === null || bar === undefined || bar.timestamp !== timestamp) return null
-    const globalIndex = dataStart + index
+    return { index: dataStart + index, timestamp: bar.timestamp, mode: snapshot.mode, displayBar: bar }
+  }
+  const inspect = (model: FinancialChartModel, chartX: number): EngineInspection | null => {
+    const hit = inspectBar(model, chartX)
+    if (hit === null) return null
     const values: Record<string, Readonly<Record<string, number | null>>> = Object.create(null)
-    for (const indicator of indicators) values[indicator.id] = { ...indicator.rows[globalIndex] }
-    return { index: globalIndex, timestamp: bar.timestamp, mode: snapshot.mode, displayBar: bar, indicatorBasis: 'raw', indicators: values }
+    for (const indicator of indicators) values[indicator.id] = { ...indicator.rows[hit.index] }
+    return { ...hit, indicatorBasis: 'raw', indicators: values }
   }
   let paneTop = 0
   for (const [position, id] of ids.entries()) {
@@ -143,15 +216,20 @@ export function buildEngineFrame (
         series.push({ id: seriesId, name: figure.title, type: figure.type === 'circle' ? 'scatter' : figure.type, color: figure.color, points })
       }
     }
-    // Candles establish the same category slots across every pane, including indicator warmup gaps.
-    const model = buildFinancialChartModel({ xType: 'category', series, candles: snapshot.bars.map(bar => ({ t: bar.timestamp, o: bar.open, h: bar.high, l: bar.low, c: bar.close, v: bar.volume })) }, width, paneHeight, layout.axisGutter)
-    // Include the bordering candles for continuous lines, but project the exact
-    // fractional window. Drawing anchors and cursor hit testing use these pixels.
-    applyRealtimeViewport(model, snapshot, 'category')
-    const values: number[] = primary ? snapshot.bars.flatMap(bar => [bar.high, bar.low]) : []
+    const values: number[] = []
+    if (primary) for (const bar of snapshot.bars) values.push(bar.high, bar.low)
     for (const item of series) { for (const point of item.points) values.push(point[1]); if (item.type === 'bar') values.push(figureStyles.get(item.id)?.base ?? 0) }
-    if (!primary) model.plottedCandles = []
-    const scale = rescale(model, values, primary ? layout.priceScale ?? {} : {}, rawBars[0]?.close ?? 1)
+    const scaleOptions = primary ? layout.priceScale ?? {} : {}, base = rawBars[0]?.close ?? 1
+    let model: FinancialChartModel, scale: PriceScale
+    if (aligned) {
+      ({ model, scale } = alignedModel(snapshot, series, indexByTime, width, paneHeight, layout.axisGutter, scaleOptions, values, base, primary))
+    } else {
+      // Preserve generic handling of malformed/duplicate external categories.
+      model = buildFinancialChartModel({ xType: 'category', series, candles }, width, paneHeight, layout.axisGutter)
+      applyRealtimeViewport(model, snapshot, 'category')
+      if (!primary) model.plottedCandles = []
+      scale = rescale(model, values, scaleOptions, base)
+    }
     panes.push({
       id,
       top,
@@ -160,9 +238,11 @@ export function buildEngineFrame (
         snapshot,
         model,
         figureStyles,
+        pricePrecision,
         previousClose: primary ? previousClose : undefined,
         indicatorPane: !primary,
         title: primary ? undefined : indicators.filter(item => item.pane === id).map(item => item.name).join(' · '),
+        inspectBar: x => inspectBar(model, x),
         inspect: x => inspect(model, x)
       },
       scale

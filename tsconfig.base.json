@@ -46,6 +46,9 @@
       ],
       "@supersolutions/super-chart-chat-plugin": [
         "packages/integrations/chat-plugin/src/index.ts"
+      ],
+      "@supersolutions/super-chart-web/engine": [
+        "packages/bindings/web/src/engine.ts"
       ]
     }
   }

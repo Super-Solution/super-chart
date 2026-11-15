@@ -32,7 +32,7 @@ export const WORKSPACE_DOCUMENT_LIMITS = Object.freeze({
 
 const BUILTINS = new Set(['MA', 'EMA', 'BOLL', 'VOL', 'MACD', 'RSI', 'KDJ'])
 const SYMBOL_KEYS = ['ticker', 'name', 'shortName', 'exchange', 'market', 'pricePrecision', 'volumePrecision', 'priceCurrency', 'type', 'logo', 'timezone']
-const RENDER_KEYS = ['chartType', 'baseline', 'background', 'grid', 'text', 'up', 'down', 'line', 'font', 'pricePrecision', 'timeZone']
+const RENDER_KEYS = ['chartType', 'candleDensity', 'baseline', 'background', 'grid', 'text', 'up', 'down', 'line', 'font', 'pricePrecision', 'timeZone']
 const DANGEROUS_KEYS = new Set(['__proto__', 'prototype', 'constructor'])
 
 function object (value: unknown, allowed: readonly string[], required: readonly string[], label: string): Record<string, unknown> {
@@ -133,6 +133,7 @@ function periodOf (value: unknown): Period {
 }
 function renderOf (value: unknown): WorkspaceSavedRender {
   const input = object(value, RENDER_KEYS, [], 'render options')
+  if (input.candleDensity !== undefined && input.candleDensity !== 'raw' && input.candleDensity !== 'pixel-envelope') throw new RangeError('Unknown candle density mode')
   if (input.chartType !== undefined && !ENGINE_CHART_TYPES.includes(input.chartType as NonNullable<EngineRenderOptions['chartType']>)) throw new TypeError('Unknown chart type')
   if (input.baseline !== undefined) finite(input.baseline, 'baseline')
   if (input.pricePrecision !== undefined) integer(input.pricePrecision, 'render price precision', 0, 20)

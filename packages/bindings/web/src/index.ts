@@ -3,7 +3,7 @@ export { EngineChart } from './chart'
 export type { EngineChartOptions, EngineConfiguration } from './chart'
 export { paintEngineFrame, paintEngineCursor } from './canvasRenderer'
 export { ChartWorkspace, ChartWorkspace as SuperChart } from './workspace'
-export type { ChartWorkspaceOptions, WorkspaceSearchOptions } from './workspace'
+export type { ChartWorkspaceOptions, WorkspaceSearchOptions, WorkspaceAppearanceOptions } from './workspace'
 export { DrawingImageRenderer, createDrawingImage } from './drawingMedia'
 export type { EngineLayer } from './layer'
 
@@ -19,3 +19,5 @@ export type {
   Datafeed, SymbolInfo, Period, Timespan, HistoryRequest, HistoryResult, SearchRequest, DatafeedSubscribeCallback, MarketBar,
   WorkspaceState, WorkspaceEvents, WorkspaceLoadState, WorkspaceLoadResult, WorkspaceMarket, WorkspaceReplayState
 } from '@supersolutions/super-chart-core'
+
+export type { WorkspaceDrawingStorage, WorkspaceDrawingCacheOptions } from './drawingDocuments'

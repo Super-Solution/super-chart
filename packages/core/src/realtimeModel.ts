@@ -32,15 +32,17 @@ export interface RealtimeChartFrame {
 
 /** Apply an opt-in fractional view to an existing visible-only model. */
 export function applyRealtimeViewport (model: FinancialChartModel, snapshot: RealtimeViewSnapshot, spacing: 'time' | 'category'): void {
-  if (snapshot.dataStart === undefined || snapshot.viewport.i1 <= snapshot.viewport.i0 || snapshot.bars.length < 2) return
+  if (snapshot.dataStart === undefined || snapshot.viewport.i1 <= snapshot.viewport.i0 || snapshot.bars.length === 0) return
   const dataStart = snapshot.dataStart, g = model.geometry
+  const category = spacing === 'category' || snapshot.bars.length === 1
   const timeAt = (index: number): number => {
+    if (snapshot.bars.length === 1) return snapshot.bars[0].timestamp
     const local = index - dataStart, first = Math.max(0, Math.min(snapshot.bars.length - 2, Math.floor(local)))
     const a = snapshot.bars[first].timestamp, b = snapshot.bars[first + 1].timestamp
     return a + (b - a) * (local - first)
   }
   const firstTime = timeAt(snapshot.viewport.i0), lastTime = timeAt(snapshot.viewport.i1)
-  model.x = (key, index) => g.left + (spacing === 'category'
+  model.x = (key, index) => g.left + (category
     ? (dataStart + index - snapshot.viewport.i0) / (snapshot.viewport.i1 - snapshot.viewport.i0)
     : (Number(key) - firstTime) / (lastTime - firstTime)) * g.plotWidth
   model.xPositions = model.xKeys.map((key, index) => model.x(key, index))
@@ -86,6 +88,13 @@ export function createRealtimeChartFrame (
     model,
     inspect: chartX => {
       if (!Number.isFinite(chartX)) return null
+      if (snapshot.dataStart !== undefined && snapshot.viewport.i1 > snapshot.viewport.i0 && model.xPositions.length > 0) {
+        const positions = model.xPositions, last = positions.length - 1
+        const halfSlot = model.geometry.plotWidth / (snapshot.viewport.i1 - snapshot.viewport.i0) / 2
+        const leftHalf = (options.spacing ?? 'time') === 'time' && last > 0 ? Math.abs(positions[1] - positions[0]) / 2 : halfSlot
+        const rightHalf = (options.spacing ?? 'time') === 'time' && last > 0 ? Math.abs(positions[last] - positions[last - 1]) / 2 : halfSlot
+        if (chartX < positions[0] - leftHalf || chartX > positions[last] + rightHalf) return null
+      }
       const index = nearestChartIndex(model, chartX)
       if (index === null) return null
       const timestamp = model.xKeys[index]
