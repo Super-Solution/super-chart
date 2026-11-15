@@ -433,10 +433,11 @@ export class EngineChart {
   private validateBars (bars: readonly MarketBar[], layout = this.layout, base = this.series.getDataList()[0]?.close ?? bars[0]?.close, normalized = false): void {
     if (layout.priceScale?.mode === 'percentage' && base === 0) throw new RangeError('Percentage scale needs a nonzero reference price')
     for (const bar of bars) {
-      if (normalized && [bar.volume, bar.turnover].some(value => value !== undefined && value !== null && (typeof value !== 'number' || !Number.isFinite(value)))) throw new TypeError('Normalized candle has invalid volume or turnover')
-      if (![bar.timestamp, bar.open, bar.high, bar.low, bar.close].every(Number.isFinite) || bar.high < Math.max(bar.open, bar.close) || bar.low > Math.min(bar.open, bar.close)) throw new RangeError('Candle has invalid OHLC bounds')
-      if (Math.abs(bar.timestamp) > 8.64e15) throw new RangeError('Candle timestamp is outside the supported Date range')
-      if (layout.priceScale?.mode === 'log' && Math.min(bar.open, bar.high, bar.low, bar.close) <= 0) throw new RangeError('Log scale requires positive prices')
+      const { timestamp, open, high, low, close, volume, turnover } = bar
+      if (normalized && ((volume != null && !Number.isFinite(volume)) || (turnover != null && !Number.isFinite(turnover)))) throw new TypeError('Normalized candle has invalid volume or turnover')
+      if (!Number.isFinite(timestamp) || !Number.isFinite(open) || !Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(close) || high < Math.max(open, close) || low > Math.min(open, close)) throw new RangeError('Candle has invalid OHLC bounds')
+      if (Math.abs(timestamp) > 8.64e15) throw new RangeError('Candle timestamp is outside the supported Date range')
+      if (layout.priceScale?.mode === 'log' && Math.min(open, high, low, close) <= 0) throw new RangeError('Log scale requires positive prices')
     }
   }
 
