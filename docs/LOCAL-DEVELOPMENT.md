@@ -1,13 +1,12 @@
 # Local workspace dependencies
 
 The four chart packages depend only downwards; the chat plugin additionally uses
-`@supersolutions/super-protocol@0.1.0`. As checked on 2026-11-15, npm returns 404 for
-both that name and the former `@super-solution/super-protocol` scope. This is an
-unpublished dependency, not a missing TypeScript declaration to replace with a stub.
-The canonical source is `Super-Solution/super-chat`, `packages/protocol`, an
-Apache-2.0 package with real runtime validators and no runtime dependencies.
+`@supersolutions/super-protocol@0.1.0`. That package has been on npm since 2026-11-15
+(released from `Super-Solution/super-protocol`), and `package-lock.json` pins it, so
+`npm ci` is all you need. The section below is only for building against an unreleased
+protocol checkout.
 
-## Before the protocol registry release
+## Building against an unreleased protocol checkout
 
 Use Node 22 or newer and npm. Obtain an authorized checkout of
 `https://github.com/Super-Solution/super-chat.git`; it can live anywhere. With the

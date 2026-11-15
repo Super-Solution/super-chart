@@ -1,6 +1,6 @@
 # Public npm publishing
 
-> **Package split (draft, nothing published).** The single package `@super-solution/super-chart` (latest 0.0.53) is replaced by four packages under `@supersolutions`: `super-chart-core`, `-superscript`, `-web`, `-chat-plugin`, all at 0.1.0. Each needs its own trusted publisher entry on npm with the same fields below, and `@supersolutions/super-protocol` must be published first (the plugin depends on it). The workflow publishes in dependency order. The old package would then be deprecated pointing at the new names. None of this has been done; it waits for the owner. A lockfile (`npm ci`) can only be created after `super-protocol` is on the registry.
+> **Package split (draft, nothing published).** The single package `@super-solution/super-chart` (latest 0.0.53) is replaced by four packages under `@supersolutions`: `super-chart-core`, `-superscript`, `-web`, `-chat-plugin`, all at 0.1.0. Each needs its own trusted publisher entry on npm with the same fields below, and `@supersolutions/super-protocol` must be published first (the plugin depends on it). The workflow publishes in dependency order. The old package would then be deprecated pointing at the new names. None of this has been done; it waits for the owner. `@supersolutions/super-protocol@0.1.0` is on the registry and `package-lock.json` is committed, so the workflow installs with `npm ci`.
 
 The original text below describes the old single package.
 
