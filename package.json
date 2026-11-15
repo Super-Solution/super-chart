@@ -1,7 +1,7 @@
 {
   "name": "super-chart-workspace",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Super Chart monorepo: core, superscript, web and the super-chat plugin.",
   "type": "module",
   "license": "GPL-3.0-or-later",
@@ -29,6 +29,8 @@
     "setup:local": "node scripts/setup-local.mjs"
   },
   "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
     "@typescript-eslint/eslint-plugin": "^5.54.0",
     "dts-bundle-generator": "^7.2.0",
     "esbuild": "^0.17.18",
@@ -37,6 +39,8 @@
     "eslint-plugin-import": "^2.27.5",
     "eslint-plugin-n": "^15.6.1",
     "eslint-plugin-promise": "^6.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "typescript": "^4.9.5",
     "vite": "^4.1.1",
     "vitest": "^0.28.4"

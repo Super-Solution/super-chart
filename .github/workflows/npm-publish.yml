@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Exact version already committed in all four packages
+        description: Exact version already committed in all five packages
         required: true
         type: string
 
@@ -37,7 +37,7 @@ jobs:
         run: |
           node --input-type=module -e "
             import fs from 'node:fs'
-            for (const dir of ['core', 'superscript', 'bindings/web', 'integrations/chat-plugin']) {
+            for (const dir of ['core', 'superscript', 'bindings/web', 'bindings/react', 'integrations/chat-plugin']) {
               const p = JSON.parse(fs.readFileSync('packages/' + dir + '/package.json', 'utf8'))
               if (p.version !== process.env.RELEASE_VERSION) throw new Error(p.name + ' is ' + p.version + ', not ' + process.env.RELEASE_VERSION)
             }"
@@ -46,8 +46,8 @@ jobs:
       - name: Build and check packages
         run: npm run build
       - name: Publish with npm Trusted Publishing
-        # Dependency order: core, then superscript and web, then the plugin.
+        # Dependency order: core, then superscript and web, then the React binding and the plugin.
         run: |
-          for dir in core superscript bindings/web integrations/chat-plugin; do
+          for dir in core superscript bindings/web bindings/react integrations/chat-plugin; do
             npm publish "./packages/$dir" --registry=https://registry.npmjs.org/ --access=public --provenance --tag=latest --ignore-scripts
           done

@@ -1,0 +1,46 @@
+{
+  "name": "@supersolutions/super-chart-react",
+  "version": "0.2.0",
+  "description": "React component and hooks for the Super Chart workspace: lifecycle-safe mount, Strict Mode, market and theme props, events.",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Super-Solution/super-chart.git",
+    "directory": "packages/bindings/react"
+  },
+  "homepage": "https://github.com/Super-Solution/super-chart#readme",
+  "bugs": {
+    "url": "https://github.com/Super-Solution/super-chart/issues"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/",
+    "tag": "latest"
+  },
+  "dependencies": {
+    "@supersolutions/super-chart-core": "0.2.0",
+    "@supersolutions/super-chart-web": "0.2.0"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "author": "SUPER SOLUTION LABS INC"
+}
