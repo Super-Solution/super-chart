@@ -1,6 +1,7 @@
-import { DrawingStore, drawingAnchorCount, drawingUsesText, type EngineFrame, type Drawing, type DrawingAnchor, type DrawingPoint, type DrawingType } from '@supersolutions/super-chart-core'
+import { type DrawingStore, drawingAnchorCount, drawingUsesText, type EngineFrame, type Drawing, type DrawingAnchor, type DrawingPoint, type DrawingType } from '@supersolutions/super-chart-core'
 import { attachFreehandDrawingInput } from './freehandDrawing'
 import { createDrawingImage, DrawingImageRenderer } from './drawingMedia'
+import { attachHoldDraw, type HoldDrawEvent, type ResolvedHoldDraw } from './holdDraw'
 
 interface Drag {
   pointerId: number
@@ -22,7 +23,8 @@ export function attachDrawingInteraction (
   onPreview: (drawing: Drawing | null) => void,
   onToolComplete?: () => void,
   onInteractionStart?: () => void,
-  imageRenderer?: DrawingImageRenderer
+  imageRenderer?: DrawingImageRenderer,
+  hold?: { options: () => ResolvedHoldDraw | null, onEvent: (event: HoldDrawEvent) => void }
 ): { setTool: (tool: DrawingType | null) => void, dispose: () => void } {
   const doc = element.ownerDocument, win = doc.defaultView
   if (win === null) return { setTool: () => {}, dispose: () => {} }
@@ -61,6 +63,7 @@ export function attachDrawingInteraction (
     if (tool === null) return
     tool = null; onToolComplete?.()
   }
+  let freehandTool = false
   const freehand = attachFreehandDrawingInput(element, store, getFrame, onPreview, onToolComplete, onInteractionStart)
   const current = (value: Drag): boolean => value.original === null ||
     store.getSnapshot().drawings.find(item => item.id === value.original?.id) === value.original
@@ -325,15 +328,23 @@ export function attachDrawingInteraction (
     if (drag !== null && !current(drag)) cancel()
     if (editor?.original !== null && editor?.original !== undefined && store.getSnapshot().drawings.find(item => item.id === editor?.original?.id) !== editor.original) editor.close()
   })
+  // Registered after the pointer handlers above, so a press on one of the person's drawings is theirs first.
+  const holdDraw = hold === undefined ? null : attachHoldDraw(element, store, getFrame, {
+    options: hold.options,
+    onEvent: hold.onEvent,
+    onPreview,
+    onInteractionStart: () => { onInteractionStart?.() },
+    canStart: () => tool === null && !freehandTool && drag === null && placement === null && editor === null && media === null
+  })
   return {
     setTool: next => {
       if (disposed) return
-      cancel(); freehand.setTool(next === 'brush' || next === 'highlighter' ? next : null)
+      cancel(); holdDraw?.cancel(); freehandTool = next === 'brush' || next === 'highlighter'; freehand.setTool(next === 'brush' || next === 'highlighter' ? next : null)
       tool = next === 'brush' || next === 'highlighter' ? null : next
     },
     dispose: () => {
       if (disposed) return
-      disposed = true; abort.abort(); unsubscribe(); cancel(); freehand.dispose(); tool = null
+      disposed = true; abort.abort(); unsubscribe(); cancel(); freehand.dispose(); holdDraw?.dispose(); tool = null
     }
   }
 }
