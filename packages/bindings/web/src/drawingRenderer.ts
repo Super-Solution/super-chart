@@ -1,7 +1,10 @@
 import type { DrawingBounds, DrawingGeometry } from '@supersolutions/super-chart-core'
 import type { DrawingImageRenderer } from './drawingMedia'
+import { colors, CANVAS_LABEL_FONT, type ThemeName } from './tokens'
 
 export interface DrawingRenderOptions {
+  /** Picks the default colours: your drawings are ink; selection shows handles, never a new colour. */
+  theme?: ThemeName
   color?: string
   selectedColor?: string
   fillColor?: string
@@ -36,10 +39,12 @@ export function paintDrawings (
       ctx.beginPath(); ctx.rect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top); ctx.clip()
     }
     ctx.lineWidth = lineWidth; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.setLineDash([])
-    ctx.font = options.font ?? '11px system-ui'; ctx.textBaseline = 'bottom'
+    const theme = colors(options.theme)
+    const font = options.font ?? CANVAS_LABEL_FONT, handleFill = options.handleFill ?? theme.surface
+    ctx.font = font; ctx.textBaseline = 'bottom'
     for (const geometry of geometries) {
       const selected = geometry.id === selectedId
-      const color = selected ? options.selectedColor ?? '#c3d5ff' : options.color ?? '#8bafff'
+      const color = selected ? options.selectedColor ?? options.color ?? theme.ink : options.color ?? theme.ink
       ctx.strokeStyle = color
       for (const primitive of geometry.primitives) {
         if (primitive.kind === 'image') {
@@ -50,7 +55,7 @@ export function paintDrawings (
               const box = primitive.bounds, clip = primitive.clip
               ctx.beginPath(); ctx.rect(clip.left, clip.top, clip.right - clip.left, clip.bottom - clip.top); ctx.clip()
               ctx.strokeRect(box.left, box.top, box.right - box.left, box.bottom - box.top)
-              ctx.fillStyle = color; ctx.font = '12px system-ui'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'
+              ctx.fillStyle = color; ctx.font = font; ctx.textAlign = 'left'; ctx.textBaseline = 'top'
               ctx.fillText('Image unavailable', box.left + 4, box.top + 4, Math.max(1, box.right - box.left - 8))
             } finally { ctx.restore() }
           }
@@ -100,12 +105,12 @@ export function paintDrawings (
             const box = primitive.bounds, clip = primitive.clip
             ctx.beginPath(); ctx.rect(clip.left, clip.top, clip.right - clip.left, clip.bottom - clip.top); ctx.clip()
             if (primitive.boxed !== false) {
-              ctx.fillStyle = options.handleFill ?? '#10151d'; ctx.globalAlpha = 0.92
+              ctx.fillStyle = handleFill; ctx.globalAlpha = 0.92
               ctx.fillRect(box.left, box.top, box.right - box.left, box.bottom - box.top)
               ctx.globalAlpha = 1; ctx.strokeRect(box.left, box.top, box.right - box.left, box.bottom - box.top)
             }
             ctx.beginPath(); ctx.rect(box.left, box.top, box.right - box.left, box.bottom - box.top); ctx.clip()
-            ctx.fillStyle = color; ctx.font = '12px system-ui'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'
+            ctx.fillStyle = color; ctx.font = font; ctx.textAlign = 'left'; ctx.textBaseline = 'top'
             const lines = primitive.price === undefined ? primitive.lines : [options.formatPrice?.(primitive.price) ?? String(primitive.price)]
             lines.forEach((text, index) => ctx.fillText(text, box.left + 6, box.top + 4 + index * 16, box.right - box.left - 12))
           } finally { ctx.restore() }
@@ -117,13 +122,13 @@ export function paintDrawings (
         ctx.fillText(text, primitive.position.x, primitive.position.y - 3)
       }
       if (!selected || geometry.locked) continue
-      ctx.fillStyle = options.handleFill ?? '#10151d'
+      // Square handles on the canvas colour with an ink edge: selection never recolours the drawing.
+      ctx.fillStyle = handleFill; ctx.lineWidth = 1
       ctx.beginPath()
       for (const handle of geometry.handles) {
-        ctx.moveTo(handle.point.x + radius, handle.point.y)
-        ctx.arc(handle.point.x, handle.point.y, radius, 0, Math.PI * 2)
+        ctx.rect(Math.round(handle.point.x - radius) + 0.5, Math.round(handle.point.y - radius) + 0.5, radius * 2, radius * 2)
       }
-      ctx.fill(); ctx.stroke()
+      ctx.fill(); ctx.stroke(); ctx.lineWidth = lineWidth
     }
   } finally { ctx.restore() }
 }

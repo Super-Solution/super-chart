@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { ChartWorkspace } from '@supersolutions/super-chart-web'
+import { ChartWorkspace, SUPER_CHART_COLORS, FONT_SANS } from '@supersolutions/super-chart-web'
 import { EngineAnnotations } from '@supersolutions/super-chart-web/annotations'
 import { symbolKey, type Datafeed as CoreDatafeed, type MarketBar as CoreBar, type Period as CorePeriod, type SymbolInfo as CoreSymbol } from '@supersolutions/super-chart-core'
 import { TECHNICAL_INDICATOR_DEFINITIONS, CLASSIC_INDICATOR_DEFINITIONS } from '@supersolutions/super-chart-core/indicators'
@@ -29,11 +29,6 @@ export interface ChartSnapshot {
   bars: { count: number, first: number | null, last: number | null }
   replay: { active: boolean }
 }
-
-const RENDER_THEME = {
-  light: { background: '#ffffff', grid: '#e6e9ee', text: '#3a4250', up: '#16a34a', down: '#dc2626', line: '#2962ff' },
-  dark: { background: '#0f1419', grid: '#1e2630', text: '#a9b4c2', up: '#22c55e', down: '#ef4444', line: '#5b8cff' }
-} as const
 
 const CHART_TYPE_TO_ENGINE: Record<ChartType, { chartType?: string, mode: 'raw' | 'heikin-ashi' }> = {
   candles: { chartType: 'candles', mode: 'raw' },
@@ -165,7 +160,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
         host.style.cssText = `position:relative;width:100%;height:${spec.height ?? 420}px;overflow:hidden`
         const notes = doc.createElement('div')
         notes.setAttribute('role', 'status')
-        notes.style.cssText = `padding:4px 12px;font:12px system-ui,sans-serif;color:${RENDER_THEME[context.theme].text}`
+        notes.style.cssText = `padding:4px 12px;font:12px ${FONT_SANS};color:${SUPER_CHART_COLORS[context.theme].inkMuted}`
         container.replaceChildren(host, notes)
         const engine = CHART_TYPE_TO_ENGINE[spec.chartType ?? 'candles']
         const periods = DEFAULT_PERIODS.some(p => p.multiplier === spec.period.multiplier && p.timespan === spec.period.timespan) ? DEFAULT_PERIODS : [spec.period, ...DEFAULT_PERIODS]
@@ -174,10 +169,11 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
           symbol: spec.symbol,
           period: spec.period,
           periods,
-          chart: { mode: engine.mode, render: { ...RENDER_THEME[context.theme], chartType: engine.chartType as never } }
+          theme: context.theme,
+          chart: { mode: engine.mode, render: { chartType: engine.chartType as never } }
         })
         for (const definition of [...TECHNICAL_INDICATOR_DEFINITIONS, ...CLASSIC_INDICATOR_DEFINITIONS]) workspace.registerIndicator(definition)
-        const annotations = new EngineAnnotations({ symbol: symbolKey(spec.symbol), theme: context.theme, onChange: () => { if (!destroyed) workspace.chart.requestPaint() } })
+        const annotations = new EngineAnnotations({ symbol: symbolKey(spec.symbol), theme: context.theme, pricePrecision: spec.symbol.pricePrecision, onChange: () => { if (!destroyed) workspace.chart.requestPaint() } })
         const removeLayer = workspace.chart.addLayer(annotations)
         const id = spec.id ?? `chart-${++counter}`
         const chart: Mounted = {

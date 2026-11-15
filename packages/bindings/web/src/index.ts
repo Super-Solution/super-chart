@@ -6,6 +6,8 @@ export { ChartWorkspace, ChartWorkspace as SuperChart } from './workspace'
 export type { ChartWorkspaceOptions, WorkspaceSearchOptions } from './workspace'
 export { DrawingImageRenderer, createDrawingImage } from './drawingMedia'
 export type { EngineLayer } from './layer'
+export { SUPER_CHART_COLORS, FONT_SANS, FONT_MONO } from './tokens'
+export type { SuperChartColors, ThemeName } from './tokens'
 
 // Models the Web surface has always exposed from its main entry; they now live in core.
 export { ENGINE_CHART_TYPES, EngineIndicators, DrawingStore, projectDrawing, hitTestDrawingGeometry, DRAWING_TYPES, drawingAnchorCount, createPriceScale, buildEngineFrame, parseWorkspaceDocument, WORKSPACE_DOCUMENT_LIMITS, validateDrawingImage, DRAWING_IMAGE_LIMITS } from '@supersolutions/super-chart-core'

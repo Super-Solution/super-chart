@@ -2,6 +2,8 @@
 import { EngineChart, type EngineChartOptions, type EngineConfiguration } from './chart'
 import { ENGINE_CHART_TYPES, DRAWING_TYPES, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, parseWorkspaceDocument, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1 } from '@supersolutions/super-chart-core'
 import { moveActiveIndex, decideEnter, createRecentsStore, visibleRecents, type RecentsStore } from './symbolSearchNav'
+import { chromeVariables, themeName } from './tokens'
+import { adoptWorkspaceStyles } from './workspaceStyles'
 
 export interface WorkspaceSearchOptions {
   /** In-memory recents by default. Set zero to disable; at most 50. */
@@ -22,6 +24,8 @@ export interface ChartWorkspaceOptions {
   search?: WorkspaceSearchOptions
   /** Period-close estimate. Disable or supply the exchange's real session close. */
   countdown?: { enabled?: boolean, closeTimestamp?: (market: WorkspaceMarket, lastBar: MarketBar) => number | null }
+  /** Super Chart light or dark theme for the chrome and the canvas. Default dark. Colours set in chart.render still win. */
+  theme?: 'light' | 'dark'
 }
 
 const EMPTY_DRAWINGS = '{"version":1,"drawings":[]}'
@@ -108,6 +112,7 @@ export class ChartWorkspace {
   private searchTimer: number | null = null
   private searchGeneration = 0
   private disposed = false
+  private readonly releaseStyles: () => void
   private restoreGeneration = 0
   private pendingRestore: { generation: number, key: string, configuration: EngineConfiguration, applied: boolean } | null = null
 
@@ -137,7 +142,11 @@ export class ChartWorkspace {
     if (!this.periods.some(period => periodKey(period) === periodKey(this.period))) this.periods.push(this.period)
     this.scale = { ...options.chart?.layout?.priceScale }
     this.root = this.node('div')
-    this.root.style.cssText = 'display:flex;flex-direction:column;position:relative;width:100%;height:100%;min-height:280px;background:#10151d;color:#d6deea;font:13px system-ui;box-sizing:border-box;'
+    const theme = themeName(options.theme ?? options.chart?.render?.theme)
+    this.root.className = 'sc-ws'
+    this.root.style.cssText = `display:flex;flex-direction:column;position:relative;width:100%;height:100%;min-height:280px;box-sizing:border-box;color-scheme:${theme};`
+    for (const [name, value] of Object.entries(chromeVariables(theme))) this.root.style.setProperty(name, value)
+    this.releaseStyles = adoptWorkspaceStyles(host)
     this.root.setAttribute('aria-label', 'Chart workspace')
     this.listen(this.root, 'click', event => {
       const button = event.target instanceof this.win.Element ? event.target.closest('button') : null
@@ -145,6 +154,7 @@ export class ChartWorkspace {
     })
     const toolbar = this.row('Chart controls'), drawingBar = this.row('Drawing controls'), footer = this.row('Chart playback')
     this.symbolButton = this.button(this.symbol.ticker, () => this.openSearch())
+    this.symbolButton.classList.add('sc-sym')
     this.symbolButton.setAttribute('aria-haspopup', 'dialog'); this.symbolButton.setAttribute('aria-expanded', 'false')
     this.periodSelect = this.select('Interval', this.periods.map(period => [periodKey(period), period.text]), periodKey(this.period))
     this.listen(this.periodSelect, 'change', () => this.run(() => {
@@ -174,7 +184,7 @@ export class ChartWorkspace {
       scale.value = this.scale.mode ?? 'linear'
       reverse.setAttribute('aria-pressed', String(this.scale.reversed === true))
     }
-    toolbar.append(this.symbolButton, this.field('Interval', this.periodSelect), this.field('Type', chartType), this.field('Prices', mode), this.field('Scale', scale), reverse)
+    toolbar.append(this.symbolButton, this.separator(), this.field('Interval', this.periodSelect), this.field('Type', chartType), this.field('Prices', mode), this.field('Scale', scale), reverse, this.separator())
 
     this.indicatorSelect = this.select('Add indicator', INDICATORS.map(name => [name, name]), 'MA')
     const indicatorList = this.node('span')
@@ -205,12 +215,16 @@ export class ChartWorkspace {
           const current = this.chart.listIndicators().find(item => item.id === indicator.id)
           if (current !== undefined) this.chart.updateIndicator(indicator.id, { visible: !current.visible })
         }))
-        const remove = this.button(`${indicator.name} ${indicator.params.join(',')}${indicator.visible === false ? ' (hidden)' : ''} ×`, () => {
+        const remove = this.button('×', () => {
           this.run(() => { this.chart.removeIndicator(indicator.id) })
         })
+        remove.classList.add('sc-x')
         remove.setAttribute('aria-label', `Remove ${indicator.name} ${indicator.params.join(',')}`)
-        settings.append(title, this.field('Parameters', params), this.field('Pane', pane), this.field('Group', group), apply, toggle)
-        const entry = this.node('span'); entry.style.cssText = 'display:inline-flex;align-items:start;gap:4px;'
+        params.className = group.className = 'sc-input'
+        const panel = this.node('div'); panel.className = 'sc-pop'
+        panel.append(this.field('Parameters', params), this.field('Pane', pane), this.field('Group', group), apply, toggle)
+        settings.append(title, panel)
+        const entry = this.node('span'); entry.className = 'sc-chip'
         entry.append(settings, remove); return entry
       }))
     }
@@ -245,12 +259,14 @@ export class ChartWorkspace {
 
     this.searchPanel = this.node('div'); this.searchPanel.hidden = true
     this.searchPanel.setAttribute('role', 'dialog'); this.searchPanel.setAttribute('aria-label', 'Find a symbol')
-    this.searchPanel.style.cssText = 'position:absolute;z-index:4;top:44px;left:8px;right:8px;max-width:480px;padding:12px;border:1px solid #40516b;background:#17202c;box-sizing:border-box;'
+    this.searchPanel.className = 'sc-search'
     this.searchInput = this.node('input'); this.searchInput.type = 'search'; this.searchInput.placeholder = 'Symbol or name'; this.searchInput.setAttribute('aria-label', 'Symbol or name')
-    this.searchInput.autocomplete = 'off'; this.searchInput.style.cssText = 'width:75%;padding:6px;'
-    this.searchStatus = this.node('div'); this.searchStatus.setAttribute('role', 'status')
-    this.searchResults = this.node('ul'); this.searchResults.style.cssText = 'list-style:none;margin:8px 0 0;padding:0;max-height:260px;overflow:auto;'
-    this.searchPanel.append(this.searchInput, this.button('Close', () => this.closeSearch()), this.searchStatus, this.searchResults)
+    this.searchInput.autocomplete = 'off'; this.searchInput.className = 'sc-input'
+    this.searchStatus = this.node('div'); this.searchStatus.setAttribute('role', 'status'); this.searchStatus.className = 'sc-label'
+    this.searchResults = this.node('ul'); this.searchResults.className = 'sc-results'
+    const searchRow = this.node('div'); searchRow.className = 'sc-search-row'
+    searchRow.append(this.searchInput, this.button('Close', () => this.closeSearch()))
+    this.searchPanel.append(searchRow, this.searchStatus, this.searchResults)
     this.listen(this.searchInput, 'input', () => this.queueSearch(200))
     this.listen(this.searchPanel, 'keydown', event => this.searchKey(event as KeyboardEvent))
     this.listen(this.root, 'keydown', event => {
@@ -264,12 +280,12 @@ export class ChartWorkspace {
 
     const stage = this.node('div'); stage.style.cssText = 'flex:1;min-height:160px;position:relative;'
     this.chartHost = this.node('div'); this.chartHost.style.cssText = 'position:absolute;inset:0;'
-    this.notice = this.node('div'); this.notice.setAttribute('role', 'alert'); this.notice.style.cssText = 'padding:0 8px;color:#f4b8ae;'
-    this.statusNode = this.node('div'); this.statusNode.setAttribute('role', 'status'); this.statusNode.style.cssText = 'padding:4px 8px;'
+    this.notice = this.node('div'); this.notice.setAttribute('role', 'alert'); this.notice.className = 'sc-notice'
+    this.statusNode = this.node('div'); this.statusNode.setAttribute('role', 'status'); this.statusNode.className = 'sc-status'
     stage.append(this.chartHost)
     this.retryButton = this.button('Retry', () => this.reload())
     this.olderButton = this.button('Load older', () => this.run(() => this.chart.view.requestMore()))
-    this.replayInfo = this.node('span')
+    this.replayInfo = this.node('span'); this.replayInfo.className = 'sc-meta'
     this.replayButtons = {
       start: this.button('Replay', () => this.run(() => { if (!this.startReplay()) throw new Error('At least three loaded bars are needed for replay') })),
       back: this.button('Previous bar', () => this.run(() => { this.stepReplay(-1) })),
@@ -279,19 +295,20 @@ export class ChartWorkspace {
     }
     this.replaySpeed = this.select('Replay speed', [0.25, 0.5, 1, 2, 4, 8, 16].map(speed => [String(speed), `${speed}×`]), '1')
     this.listen(this.replaySpeed, 'change', () => this.run(() => this.setReplaySpeed(Number(this.replaySpeed.value))))
-    const countdownNode = this.node('span'); countdownNode.title = 'Period boundary estimate; exchange holidays and early closes need a host-provided close time.'
+    const countdownNode = this.node('span'); countdownNode.className = 'sc-meta'; countdownNode.title = 'Period boundary estimate; exchange holidays and early closes need a host-provided close time.'
+    footer.classList.add('sc-foot')
     footer.append(...Object.values(this.replayButtons), this.field('Speed', this.replaySpeed), this.replayInfo, countdownNode, this.olderButton, this.retryButton)
     this.root.append(toolbar, drawingBar, this.notice, stage, this.statusNode, footer, this.searchPanel)
     host.append(this.root)
     try {
       this.chart = new EngineChart(this.chartHost, {
         ...options.chart,
-        render: { ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone },
+        render: { theme, ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone },
         onToolComplete: () => {
           this.drawingSelect.value = ''; options.chart?.onToolComplete?.()
         }
       })
-    } catch (error) { this.abort.abort(); this.root.remove(); throw error }
+    } catch (error) { this.abort.abort(); this.root.remove(); this.releaseStyles(); throw error }
     this.loader = this.createLoader()
     this.timedReplay = this.createReplay()
     this.countdown = createBarCountdown({
@@ -304,7 +321,7 @@ export class ChartWorkspace {
         }
         return { marketKey: this.requestedPair(), lastBar, period: this.period, symbolTimezone: this.symbol.timezone, replaying: this.loader.replaying, closeTimestamp }
       },
-      onChange: snapshot => { countdownNode.textContent = snapshot === null ? '' : `Estimated interval close · ${snapshot.text}` },
+      onChange: snapshot => { countdownNode.textContent = snapshot === null ? '' : `Bar closes in ${snapshot.text}` },
       hidden: () => this.doc.hidden,
       timer: { setTimeout: (callback, ms) => this.win.setTimeout(callback, ms), clearTimeout: handle => this.win.clearTimeout(handle as number) }
     })
@@ -530,7 +547,7 @@ export class ChartWorkspace {
 
   dispose (): void {
     if (this.disposed) return
-    this.disposed = true; this.cancelSearch(); this.abort.abort()
+    this.disposed = true; this.cancelSearch(); this.abort.abort(); this.releaseStyles()
     this.restoreGeneration++; this.pendingRestore = null
     this.timedReplay.dispose(); this.countdown.dispose()
     this.loads.dispose(); this.events.clear()
@@ -678,10 +695,14 @@ export class ChartWorkspace {
 
   private updateStatus (): void {
     if (this.disposed) return
-    const status = this.getStatus(), pair = `${this.symbol.ticker} · ${this.period.text}`
-    this.statusNode.textContent = this.cancelled ? `Loading cancelled · ${pair}` : status.state === 'loading' ? `Loading ${pair}…`
-      : status.state === 'error' ? `Could not load ${pair}: ${this.errorMessage(status.error?.error)}`
-        : status.state === 'empty' ? `No data for ${pair}` : status.loadingMore ? `${pair} · Loading older bars…` : pair
+    // The market as ticker plus interval chip; what is happening to it as a sentence after.
+    const status = this.getStatus()
+    const message = this.cancelled ? 'Loading cancelled.' : status.state === 'loading' ? 'Loading…'
+      : status.state === 'error' ? `Could not load: ${this.errorMessage(status.error?.error)}`
+        : status.state === 'empty' ? 'No bars for this market.' : status.loadingMore ? 'Loading older bars…' : ''
+    const ticker = this.node('b'), interval = this.node('span'), note = this.node('span')
+    ticker.textContent = this.symbol.ticker; interval.className = 'sc-ivl'; interval.textContent = this.period.text; note.textContent = message
+    this.statusNode.replaceChildren(ticker, interval, note)
     this.chartHost.style.visibility = status.state === 'ready' && this.displayedPair === this.requestedPair() ? 'visible' : 'hidden'
     this.chartHost.inert = status.state !== 'ready'
     this.drawingSelect.disabled = status.state !== 'ready'; this.retryButton.hidden = status.state !== 'error' && !this.cancelled
@@ -708,7 +729,7 @@ export class ChartWorkspace {
     }
     this.replaySpeed.value = speed
     this.countdown?.refresh()
-    this.replayInfo.textContent = info === null ? '' : `Replay · ${Number.isFinite(info.timestamp) ? new Date(info.timestamp).toISOString() : ''}`
+    this.replayInfo.textContent = info === null || !Number.isFinite(info.timestamp) ? '' : `Replaying at ${new Date(info.timestamp).toISOString().slice(0, 16).replace('T', ' ')} UTC`
     const state = this.getReplayState(), signature = JSON.stringify(state)
     if (signature !== this.reportedReplayState) { this.reportedReplayState = signature; this.events.emit('replayChange', state) }
   }
@@ -765,10 +786,16 @@ export class ChartWorkspace {
       this.searchSymbols = results; this.searchShownQuery = query; this.searchLoading = false; this.searchActive = -1
       this.searchStatus.textContent = results.length === 0 ? 'No matching symbols' : symbols.length > 50 ? 'Showing the first 50 matches' : `${results.length} matches`
       this.searchResults.replaceChildren(...results.map((symbol, index) => {
-        const item = this.node('li'), button = this.button(`${symbol.ticker}${symbol.name ? ` · ${symbol.name}` : ''}${symbol.exchange ? ` · ${symbol.exchange}` : ''}`, () => {
+        const item = this.node('li'), button = this.button(symbol.ticker, () => {
           this.chooseSearchResult(index)
         })
-        button.style.cssText += ';width:100%;text-align:left;margin-bottom:4px;'; item.append(button); return item
+        // Ticker, then the name, then the venue at the end: each in its own place, no joined string.
+        const name = this.node('span'), venue = this.node('span')
+        name.className = 'sc-muted'; name.textContent = symbol.name ?? ''
+        venue.className = 'sc-muted sc-end'; venue.textContent = symbol.exchange ?? ''
+        button.classList.add('sc-result'); button.append(name, venue)
+        button.setAttribute('aria-label', [symbol.ticker, symbol.name, symbol.exchange].filter(Boolean).join(', '))
+        item.append(button); return item
       }))
     } catch (error) {
       if (this.disposed || controller.signal.aborted || generation !== this.searchGeneration) return
@@ -824,24 +851,30 @@ export class ChartWorkspace {
   private listen (target: EventTarget, type: string, listener: EventListener): void { target.addEventListener(type, listener, { signal: this.abort.signal }) }
   private button (text: string, action: () => unknown): HTMLButtonElement {
     const button = this.node('button'); button.type = 'button'; button.textContent = text
-    button.style.cssText = 'padding:5px 8px;border:1px solid #40516b;border-radius:4px;background:#17202c;color:inherit;font:inherit;cursor:pointer;'
+    button.className = 'sc-btn'
     this.actions.set(button, action); return button
   }
 
   private select (name: string, values: ReadonlyArray<readonly [string, string]>, selected: string): HTMLSelectElement {
     const select = this.node('select'); select.setAttribute('aria-label', name)
-    select.style.cssText = 'padding:4px;border:1px solid #40516b;background:#17202c;color:inherit;font:inherit;max-width:160px;'
+    select.className = 'sc-select'
     for (const [value, text] of values) { const option = this.node('option'); option.value = value; option.textContent = text; select.append(option) }
     select.value = selected; return select
   }
 
   private row (name: string): HTMLDivElement {
     const row = this.node('div'); row.setAttribute('role', 'toolbar'); row.setAttribute('aria-label', name)
-    row.style.cssText = 'display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:6px 8px;border-bottom:1px solid #283444;'; return row
+    row.className = 'sc-row'; return row
+  }
+
+  private separator (): HTMLSpanElement {
+    const line = this.node('span'); line.className = 'sc-sep'; line.setAttribute('aria-hidden', 'true'); return line
   }
 
   private field (name: string, control: HTMLElement): HTMLLabelElement {
-    const field = this.node('label'); field.style.cssText = 'display:inline-flex;align-items:center;gap:4px;'; field.append(this.doc.createTextNode(`${name} `), control); return field
+    const field = this.node('label'), text = this.node('span')
+    field.className = 'sc-field'; text.className = 'sc-label'; text.textContent = name
+    field.append(text, control); return field
   }
 
   private run (action: () => void): boolean {

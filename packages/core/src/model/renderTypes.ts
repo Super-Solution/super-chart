@@ -12,6 +12,8 @@ export interface EngineRenderOptions {
   chartType?: EngineChartType
   /** Baseline chart reference price; defaults to the first visible close. */
   baseline?: number
+  /** Selects the Super Chart light or dark palette; the single colours below override it. Default dark. */
+  theme?: 'light' | 'dark'
   background?: string
   grid?: string
   text?: string

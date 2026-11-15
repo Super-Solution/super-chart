@@ -1,5 +1,6 @@
 import { baselineSegments, columnExtents, highLowExtents, hlcAreaPoints, stepLinePoints, volumeIntensities, type Bar } from './geometry'
 import { nearestBarIndex, type ChartCandlePoint, type FinancialChartModel, type EngineRenderFrame, type EngineRenderOptions } from '@supersolutions/super-chart-core'
+import { colors } from './tokens'
 
 export { ENGINE_CHART_TYPES } from '@supersolutions/super-chart-core'
 
@@ -80,7 +81,8 @@ export function paintPriceSeries (
   const type = options.chartType ?? 'candles'
   if (type === 'candles' || type === 'ohlc' || type === 'line' || type === 'area') return false
   const model = frame.model, candles = model.plottedCandles, half = halfWidth(model)
-  const up = options.up ?? '#58c9ac', down = options.down ?? '#f28b82', line = options.line ?? '#8bafff'
+  const theme = colors(options.theme)
+  const up = options.up ?? theme.up, down = options.down ?? theme.down, line = options.line ?? theme.ink
   const color = (rising: boolean): string => rising ? up : down
   ctx.save()
   try {
@@ -191,7 +193,7 @@ export function paintPriceSeries (
       }
       case 'baseline': {
         const baseline = options.baseline ?? frame.snapshot.bars[0]?.close
-        if (baseline !== undefined && Number.isFinite(baseline)) drawBaseline(ctx, model, baseline, up, down, options.text ?? '#aebcca')
+        if (baseline !== undefined && Number.isFinite(baseline)) drawBaseline(ctx, model, baseline, up, down, options.text ?? theme.inkMuted)
         break
       }
       default: return false
