@@ -1,11 +1,57 @@
 # Workspace interface
 
-The owned Web workspace uses a compact trading-chart layout by default. Market
-and interval stay in the first row. Chart presentation and indicator editors open
-above the chart instead of expanding the toolbar. Drawing commands remain in a
-single horizontally scrollable row. Replay transport appears only during replay.
+The owned Web workspace ships a default look aligned with the established
+trading-chart layout: a top bar (symbol, intervals, chart type, indicators,
+objects, then undo/redo, view history, snapshot, fullscreen on the right), a
+**left tool rail** with the drawing tools grouped under icons, the chart, and a
+slim footer. Chart presentation and indicator editors open above the chart
+instead of expanding the toolbar. Replay transport appears only during replay.
 These are DOM-shell changes; the datafeed, raw-price calculations, indicators,
 Canvas rendering and saved workspace document format keep their existing APIs.
+
+The default is a preset, not a fixed design. Everything about it is one of three
+levels, from least to most work: **tokens** (`--sc-*` CSS variables and
+`registerWorkspaceTheme`), **parts** (switch pieces off), and **slots / the API**
+(replace a piece with your own element). Nothing in the default needs forking.
+
+## The left tool rail
+
+The rail holds a cursor and one button per tool group (lines, channels,
+Fibonacci & Gann, patterns & waves, shapes & curves, measurement & risk,
+annotations, data studies, freehand). Each group button shows the tool you used
+last in that group and arms it; pressing it again hands the pointer back to the
+chart. The small arrow on its right edge, a right click, a long press on touch,
+or Right Arrow opens the whole group in a flyout. The rail is one tab stop; the
+arrow keys move within it, Enter or Space chooses, Escape closes the flyout and
+returns focus.
+
+Below the groups are two modes and the actions on the selection:
+
+| Control | Does |
+| --- | --- |
+| Magnet | While on, a point you place or drag snaps to the open, high, low or close of a bar within 24 px (`chart.setDrawingMagnet(true)`; off by default). Whole-drawing moves never snap. |
+| Keep drawing | Re-arms the tool after each completed drawing; Escape ends it. Built on `chart.onToolComplete(reason)`, where `reason` is `'completed'` or `'cancelled'`. |
+| Lock / Delete | Act on the selected drawing. |
+| Remove all | Removes every unlocked drawing in one undoable step. |
+
+The rail shows at `regular` and `compact` widths; `narrow` keeps the Tools
+button and the compact dropdown. To use the dropdown everywhere, switch the rail
+off: `ui: { parts: { toolRail: false } }`. To build your own toolbox, switch it
+off, set tools with `workspace.chart.setDrawingTool(type | null)` and put your
+element in a slot. The rail's DOM is stable styling surface: `.sc-rail`,
+`.sc-rail-group[data-group][data-tools]`, `.sc-rail-tool`, `.sc-rail-more`,
+`.sc-flyout`, `.sc-flyout-item[data-tool]`.
+
+Find the chart element with `.sc-chart`; a bare `[tabindex="0"]` now matches the
+rail's tab stop first.
+
+## Host styles
+
+Every button, select, input and summary in the chrome resets `text-transform`,
+`letter-spacing`, `word-spacing` and `font-family`, so a host's global `button`
+rule (uppercase, wide tracking, a monospace face) does not reach it. A rule that
+is more specific than `.sc-workspace button`, or `!important`, still wins: that
+is the host's choice. Set `--sc-font` for the chrome's typeface.
 
 ## Customising the chrome
 
@@ -43,12 +89,14 @@ light palette should also set `--sc-color-scheme: light`.
 | `--sc-border`, `--sc-control-border`, `--sc-panel-border`, `--sc-hover-border` | Boundaries |
 | `--sc-control-background`, `--sc-hover-background`, `--sc-active-background`, `--sc-error-background` | Control and feedback surfaces |
 | `--sc-font`, `--sc-font-size`, `--sc-color-scheme` | Typography and native controls |
-| `--sc-control-height`, `--sc-touch-target` | Control sizes; coarse pointers default to 36px |
-| `--sc-radius`, `--sc-panel-radius`, `--sc-panel-shadow` | Shape and panel elevation |
+| `--sc-control-height`, `--sc-touch-target`, `--sc-bar-height` | Control and bar sizes (32px, 40px on coarse pointers, 44px) |
+| `--sc-icon-size`, `--sc-rail-icon-size`, `--sc-rail-width` | Icon sizes (18px, 22px) and the rail width (48px) |
+| `--sc-button-background`, `--sc-button-border` | Bar buttons are flat (transparent) by default; set these for filled or outlined buttons |
+| `--sc-radius`, `--sc-radius-small`, `--sc-panel-radius`, `--sc-panel-shadow` | Shape and panel elevation (6px, 4px, 8px) |
 
 The stable styling hooks are `.sc-marketbar`, `.sc-drawingbar`, `.sc-menu-panel`,
 `.sc-indicator-list`, `.sc-stage`, `.sc-footer`, `.sc-replay-controls`, `.sc-search`,
-`.sc-button`, `.sc-select`, `.sc-input` and `.sc-field`. They are scoped under the
+`.sc-button`, `.sc-select`, `.sc-input`, `.sc-field`, `.sc-body`, `.sc-rail` and `.sc-history`. They are scoped under the
 workspace root. A custom stylesheet can qualify them with the host's root class;
 multiple workspaces can have different variables without sharing application state.
 
@@ -178,16 +226,16 @@ new ChartWorkspace(host, {
   the drawing tools behind a Tools button and shows the intervals as one
   dropdown. `auto` follows the workspace's own width (`LAYOUT_BREAKPOINTS`:
   narrow below 560px, compact below 780px), not the window's. `getLayout()`
-  returns the class in effect. The drawing toolbar keeps a usable height at every
-  class; it no longer collapses on narrow screens.
+  returns the class in effect. With the rail, `compact` also moves undo/redo into
+  More; `narrow` has no rail.
 - `intervals: 'select'` renders the period list as a dropdown at any width;
   `'bar'` keeps buttons; `'auto'` picks the bar unless the layout is `narrow`.
 - `headless: true` removes the market bar, drawing bar, footer, status, notice and
   replay controls. Loading, replay, drawings, the command palette (keyboard) and
   the API keep working. `parts` switches off one piece at a time
   (`WORKSPACE_PARTS`: `symbol`, `intervals`, `presentation`, `indicators`,
-  `objects`, `drawingBar`, `footer`, `scaleBar`, `commands`); `headless` is all of
-  them.
+  `objects`, `drawingBar`, `toolRail`, `footer`, `scaleBar`, `commands`); `headless` is all of
+  them. `toolRail: false` keeps the drawing bar but puts the tools back in its dropdown.
 - `getSlot(name)` returns a host-owned element in one of six named places
   (`WORKSPACE_SLOTS`: `header-start`, `header-end`, `drawing-start`, `drawing-end`,
   `footer-start`, `footer-end`). The workspace never styles or reads its content

@@ -1,7 +1,7 @@
 import { RealtimeSeries, RealtimeView, normalizeBars, normalizeBar, ENGINE_CHART_TYPES, buildEngineFrame, validateEngineLayout, validatePriceScale, EngineIndicators, DrawingStore, DRAWING_TYPES, projectDrawing, viewportLimitsForWidth, financialGeometry, type CandleMode, type MarketBar, type ChartDataPort, type EngineRenderOptions, type EngineFrame, type EngineLayout, type EngineInspection, type EngineIndicatorSpec, type IndicatorDefinition, type Drawing, type DrawingType } from '@supersolutions/super-chart-core'
 import { paintEngineFrame, paintEngineCursor } from './canvasRenderer'
 import { attachEngineGestures } from './gestures'
-import { attachDrawingInteraction } from './drawingInteraction'
+import { attachDrawingInteraction, type ToolEnd } from './drawingInteraction'
 import { resolveHoldDraw, type DrawByHoldingOptions, type HoldDrawEvent, type ResolvedHoldDraw } from './holdDraw'
 import { paintDrawings } from './drawingRenderer'
 import type { EngineLayer } from './layer'
@@ -20,7 +20,8 @@ export interface EngineChartOptions {
   indicators?: readonly EngineIndicatorSpec[]
   inertia?: boolean
   onInspect?: (inspection: EngineInspection | null) => void
-  onToolComplete?: () => void
+  /** A tool ended: `completed` when a drawing was placed, `cancelled` on Escape. The tool is already disarmed; call `setDrawingTool` to arm it again. */
+  onToolComplete?: (reason: ToolEnd) => void
   /** Accessible description of the chart region. Default is the English text; the workspace passes its locale's. */
   ariaLabel?: string
   /**
@@ -88,6 +89,7 @@ export class EngineChart {
   private readonly unsubscribers: Array<() => void> = []
   private readonly stopGestures: ReturnType<typeof attachEngineGestures>
   private readonly drawingInput: ReturnType<typeof attachDrawingInteraction>
+  private drawingMagnet = false
   private holdDraw: ResolvedHoldDraw | null
   private holdListener: ((event: HoldDrawEvent) => void) | undefined
   private readonly onInspect?: EngineChartOptions['onInspect']
@@ -186,7 +188,7 @@ export class EngineChart {
     }, options.onToolComplete, () => this.stopGestures.cancelInput(), this.drawingImages, {
       options: () => this.holdDraw,
       onEvent: event => { try { this.holdListener?.(event) } catch (error) { this.win.console.warn('Hold-to-draw listener failed', error) } }
-    })
+    }, { magnet: () => this.drawingMagnet })
     this.stopGestures = attachEngineGestures(this.root, this.view, () => this.frame?.model.geometry ?? null, x => {
       if (this.cursorX !== x) { this.cursorX = x; this.cursorDirty = true; this.schedule() }
     }, {
@@ -301,6 +303,18 @@ export class EngineChart {
   }
 
   getDrawByHolding (): ResolvedHoldDraw | null { return this.holdDraw }
+
+  /**
+   * Magnet: while on, a point you place or drag (not a whole-drawing move) snaps to the open, high, low or close of a
+   * bar within 24 px, so levels and trend lines land on real prices. Off by default.
+   */
+  setDrawingMagnet (enabled: boolean): void {
+    this.assertLive()
+    if (typeof enabled !== 'boolean') throw new TypeError('The drawing magnet must be true or false')
+    this.drawingMagnet = enabled
+  }
+
+  getDrawingMagnet (): boolean { return this.drawingMagnet }
 
   /** Replace the hold-to-draw progress listener; pass undefined to remove it. */
   setHoldDrawListener (listener: ((event: HoldDrawEvent) => void) | undefined): void {

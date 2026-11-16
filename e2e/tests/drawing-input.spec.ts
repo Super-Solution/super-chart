@@ -1,4 +1,4 @@
-import { test, expect, openHarness, pageErrors } from './fixtures'
+import { test, expect, openHarness, pageErrors, pickTool } from './fixtures'
 
 // Restores the original segment/Escape and create-once brush checks through
 // the owned input controller. Magnet/stay-mode rail contracts remain separate.
@@ -10,10 +10,9 @@ test('drawing input creates one segment, cancels with Escape and commits a brush
     ;(window as any).pro = pro
     await H.ready(pro)
   })
-  const root = page.locator('#drawing-input [tabindex="0"]')
+  const root = page.locator('#drawing-input .sc-chart [tabindex="0"]')
   const bounds = (await root.boundingBox())!
-  const tools = page.locator('#drawing-input select[aria-label="Drawing tool"]')
-  await tools.selectOption('segment')
+  await pickTool(page, '#drawing-input', 'segment')
   await page.mouse.move(bounds.x + 250, bounds.y + 90)
   await page.mouse.down()
   await page.mouse.move(bounds.x + 450, bounds.y + 160, { steps: 6 })
@@ -22,7 +21,7 @@ test('drawing input creates one segment, cancels with Escape and commits a brush
   expect(first.length).toBe(1)
   expect(first[0].type).toBe('segment')
   expect(first[0].anchors.length).toBe(2)
-  await tools.selectOption('rectangle')
+  await pickTool(page, '#drawing-input', 'rectangle')
   await page.mouse.move(bounds.x + 300, bounds.y + 110)
   await page.mouse.down()
   await page.mouse.move(bounds.x + 500, bounds.y + 180, { steps: 4 })
@@ -40,7 +39,7 @@ test('drawing input creates one segment, cancels with Escape and commits a brush
     store.remove = (...args: any[]) => { state.brushCalls.remove++; return remove(...args) }
     state.restoreDrawingMethods = () => { store.add = add; store.remove = remove }
   })
-  await tools.selectOption('brush')
+  await pickTool(page, '#drawing-input', 'brush')
   await page.mouse.move(bounds.x + 150, bounds.y + 240)
   await page.mouse.down()
   await page.mouse.move(bounds.x + 230, bounds.y + 180, { steps: 8 })

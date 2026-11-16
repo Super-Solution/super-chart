@@ -13,7 +13,7 @@ async function mount (page: Page): Promise<{ x: number, y: number, width: number
     pro.chart.view.setViewport({ i0: 100, i1: 199 })
     await H.sleep(50)
   })
-  return (await page.locator('#motion [tabindex="0"]').boundingBox())!
+  return (await page.locator('#motion .sc-chart [tabindex="0"]').boundingBox())!
 }
 
 async function flick (page: Page, hold: number): Promise<number[]> {

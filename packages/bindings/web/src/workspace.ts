@@ -9,6 +9,7 @@ import { resolveLayout, resolveIntervalControl, validLayoutMode, validIntervalCo
 import { CommandRegistry, validateCommand, type WorkspaceCommand } from './commands'
 import { CommandPalette, ContextMenu, type ContextMenuItem } from './panels'
 import { createIcon, type IconName } from './icons'
+import { ToolRail } from './toolRail'
 import { DrawingDocuments, type WorkspaceDrawingCacheOptions } from './drawingDocuments'
 import { WORKSPACE_STYLE } from './workspaceStyle'
 import { moveActiveIndex, decideEnter, createRecentsStore, visibleRecents, type RecentsStore } from './symbolSearchNav'
@@ -43,8 +44,8 @@ export interface WorkspaceSearchOptions {
 export type WorkspaceSlotName = 'header-start' | 'header-end' | 'drawing-start' | 'drawing-end' | 'footer-start' | 'footer-end'
 export const WORKSPACE_SLOTS: readonly WorkspaceSlotName[] = Object.freeze(['header-start', 'header-end', 'drawing-start', 'drawing-end', 'footer-start', 'footer-end'])
 /** Parts of the chrome a host can switch off one by one. `headless` switches off every one of them. */
-export type WorkspacePart = 'symbol' | 'intervals' | 'presentation' | 'indicators' | 'objects' | 'drawingBar' | 'footer' | 'scaleBar' | 'commands'
-export const WORKSPACE_PARTS: readonly WorkspacePart[] = Object.freeze(['symbol', 'intervals', 'presentation', 'indicators', 'objects', 'drawingBar', 'footer', 'scaleBar', 'commands'])
+export type WorkspacePart = 'symbol' | 'intervals' | 'presentation' | 'indicators' | 'objects' | 'drawingBar' | 'toolRail' | 'footer' | 'scaleBar' | 'commands'
+export const WORKSPACE_PARTS: readonly WorkspacePart[] = Object.freeze(['symbol', 'intervals', 'presentation', 'indicators', 'objects', 'drawingBar', 'toolRail', 'footer', 'scaleBar', 'commands'])
 
 export interface WorkspaceAppearanceOptions {
   /** Additional root classes for host styles; .sc-workspace always remains. */
@@ -235,6 +236,15 @@ export class ChartWorkspace {
   private readonly symbolButton: HTMLButtonElement
   private readonly periodSelect: HTMLSelectElement
   private readonly drawingSelect: HTMLSelectElement
+  private readonly rail: ToolRail
+  private readonly drawingField: HTMLLabelElement
+  private readonly clearButton: HTMLButtonElement
+  private readonly history: HTMLDivElement
+  private readonly drawingActions: HTMLDivElement
+  private readonly drawingModes: HTMLDivElement
+  private stayInDrawing = false
+  private lastTool: DrawingType | null = null
+  private arrangement = ''
   private readonly indicatorSelect: HTMLSelectElement
   private readonly syncPresentation: () => void
   private readonly searchPanel: HTMLDivElement
@@ -497,36 +507,58 @@ export class ChartWorkspace {
     indicatorAdd.append(this.field('indicators.field', this.indicatorSelect), add)
     indicators.panel.append(indicatorAdd, indicatorList)
     this.drawingSelect = this.select('draw.tool', [], '')
+    this.drawingField = this.field('draw', this.drawingSelect)
     this.buildToolOptions()
-    this.listen(this.drawingSelect, 'change', () => this.run(() => {
-      this.chart.setDrawingTool(this.drawingSelect.value === '' ? null : this.drawingSelect.value as DrawingType)
-      this.chartHost.querySelector<HTMLElement>('[tabindex="0"]')?.focus({ preventScroll: true })
-    }))
+    this.listen(this.drawingSelect, 'change', () => this.chooseTool(this.drawingSelect.value === '' ? null : this.drawingSelect.value as DrawingType))
+    this.rail = new ToolRail({
+      doc: this.doc,
+      win: this.win,
+      t: (key, params) => this.t(key, params),
+      bind: apply => { this.bind(apply) },
+      listen: (target, type, listener) => { this.listen(target, type, listener) },
+      tools: DRAWING_TYPES,
+      groupOf: toolCategory,
+      toolLabel: type => this.toolLabel(type),
+      choose: tool => { this.chooseTool(tool) }
+    })
     this.drawingButtons = {
-      undo: this.control('draw.undo', () => this.run(() => { this.chart.drawings.undo() }), { icon: 'undo' }),
-      redo: this.control('draw.redo', () => this.run(() => { this.chart.drawings.redo() }), { icon: 'redo' }),
+      undo: this.control('draw.undo', () => this.run(() => { this.chart.drawings.undo() }), { icon: 'undo', iconOnly: true }),
+      redo: this.control('draw.redo', () => this.run(() => { this.chart.drawings.redo() }), { icon: 'redo', iconOnly: true }),
       lock: this.control('draw.lock', () => this.run(() => {
         const state = this.chart.drawings.getSnapshot(), selected = state.drawings.find(item => item.id === state.selectedId)
         if (selected !== undefined) this.chart.drawings.update(selected.id, { locked: !selected.locked })
-      }), { icon: 'lock' }),
+      }), { icon: 'lock', iconOnly: true }),
       remove: this.control('draw.delete', () => this.run(() => {
         const id = this.chart.drawings.getSnapshot().selectedId
         if (id !== null) this.chart.drawings.remove(id)
-      }), { icon: 'trash' })
+      }), { icon: 'trash', iconOnly: true })
     }
-    const navBack = this.control('nav.back', () => this.run(() => { this.chart.view.undoNavigation() }), { icon: 'back', title: 'nav.back.title' })
-    const navForward = this.control('nav.forward', () => this.run(() => { this.chart.view.redoNavigation() }), { icon: 'forward', title: 'nav.forward.title' })
+    // Remove every unlocked drawing in one undoable step. It is the only drawing control that changes more than the selection.
+    this.clearButton = this.control('context.removeAll', () => this.run(() => { this.chart.drawings.clear() }), { icon: 'eraser', iconOnly: true })
+    this.clearButton.classList.add('sc-danger')
+    const magnet = this.control('draw.magnet', () => this.run(() => {
+      const next = !this.chart.getDrawingMagnet(); this.chart.setDrawingMagnet(next); magnet.setAttribute('aria-pressed', String(next))
+    }), { icon: 'magnet', iconOnly: true, title: 'draw.magnet.title' })
+    magnet.setAttribute('aria-pressed', 'false')
+    const stay = this.control('draw.stay', () => {
+      this.stayInDrawing = !this.stayInDrawing; stay.setAttribute('aria-pressed', String(this.stayInDrawing))
+    }, { icon: 'keep', iconOnly: true, title: 'draw.stay.title' })
+    stay.setAttribute('aria-pressed', 'false')
+    this.drawingModes = this.node('div'); this.drawingModes.className = 'sc-history'; this.drawingModes.setAttribute('role', 'group')
+    this.drawingModes.append(magnet, stay)
+    const navBack = this.control('nav.back', () => this.run(() => { this.chart.view.undoNavigation() }), { icon: 'back', iconOnly: true, title: 'nav.back.title' })
+    const navForward = this.control('nav.forward', () => this.run(() => { this.chart.view.redoNavigation() }), { icon: 'forward', iconOnly: true, title: 'nav.forward.title' })
     const updateNavigation = (): void => { const history = this.chart.view.getNavigationHistory(); navBack.disabled = !history.canUndo; navForward.disabled = !history.canRedo }
     navBack.disabled = navForward.disabled = true
-    const latest = this.control('nav.latest', () => this.run(() => { this.chart.view.followLatest(); }), { icon: 'latest', title: 'nav.latest.title' })
-    this.downloadButton = this.control('png', () => { void this.download() }, { icon: 'image', title: 'png.title' })
+    const latest = this.control('nav.latest', () => this.run(() => { this.chart.view.followLatest(); }), { icon: 'latest', iconOnly: true, title: 'nav.latest.title' })
+    this.downloadButton = this.control('png', () => { void this.download() }, { icon: 'camera', iconOnly: true, title: 'png.title' })
     this.drawingButtons.remove.classList.add('sc-danger')
     this.secondary = this.node('div'); this.secondary.className = 'sc-secondary'
     this.secondary.append(navBack, navForward, latest, this.downloadButton)
     if (typeof this.root.requestFullscreen === 'function' && typeof this.doc.exitFullscreen === 'function') {
       const fullscreen = this.control('fullscreen', () => {
         void (this.doc.fullscreenElement === this.root ? this.doc.exitFullscreen() : this.root.requestFullscreen()).catch(error => { this.showNotice(error); })
-      }, { icon: 'fullscreen' })
+      }, { icon: 'fullscreen', iconOnly: true })
       const syncFullscreen = (): void => {
         const active = this.doc.fullscreenElement === this.root
         const key = active ? 'fullscreen.exit' : 'fullscreen'
@@ -538,7 +570,14 @@ export class ChartWorkspace {
       fullscreen.setAttribute('aria-pressed', 'false')
       this.secondary.append(fullscreen)
     }
-    drawingBar.append(this.slots.get('drawing-start')!, this.field('draw', this.drawingSelect), ...Object.values(this.drawingButtons), this.secondary, this.slots.get('drawing-end')!)
+    // Two groups so the layout can place them apart: undo and redo go to the market bar beside the rail, lock and
+    // delete (they act on the selected drawing) go to the foot of the rail; without a rail they sit together.
+    this.history = this.node('div'); this.history.className = 'sc-history'; this.history.setAttribute('role', 'group')
+    this.history.append(this.drawingButtons.undo, this.drawingButtons.redo)
+    this.drawingActions = this.node('div'); this.drawingActions.className = 'sc-history'; this.drawingActions.setAttribute('role', 'group')
+    this.drawingActions.append(this.drawingButtons.lock, this.drawingButtons.remove, this.clearButton)
+    this.bind(() => { this.history.setAttribute('aria-label', this.t('draw.undo')); this.drawingActions.setAttribute('aria-label', this.t('bar.drawing')) })
+    drawingBar.append(this.slots.get('drawing-start')!, this.drawingField, this.history, this.drawingModes, this.drawingActions, this.secondary, this.slots.get('drawing-end')!)
 
     this.searchPanel = this.node('div'); this.searchPanel.hidden = true
     this.searchPanel.setAttribute('role', 'dialog'); this.bind(() => { this.searchPanel.setAttribute('aria-label', this.t('search.title')); })
@@ -587,6 +626,7 @@ export class ChartWorkspace {
       if (!this.searchPanel.hidden && !this.searchPanel.contains(event.target) && !this.symbolButton.contains(event.target)) this.closeSearch(false)
       if (this.palette.isOpen && !this.palette.panel.contains(event.target) && !this.paletteButton.contains(event.target)) this.palette.close(false)
       if (this.contextMenu.isOpen && !this.contextMenu.element.contains(event.target)) this.contextMenu.close(false)
+      if (this.rail.isOpen && !this.rail.contains(event.target)) this.rail.close(false)
       for (const menu of this.root.querySelectorAll<HTMLDetailsElement>('.sc-menu[open]')) if (!menu.contains(event.target)) menu.open = false
     })
     this.chartHost = this.node('div')
@@ -600,6 +640,7 @@ export class ChartWorkspace {
     this.holdNote = this.node('div'); this.holdNote.className = 'sc-holdnote'; this.holdNote.setAttribute('role', 'status')
     this.statusNode = this.node('div'); this.statusNode.className = 'sc-status'; this.statusNode.setAttribute('role', 'status')
     stage.append(this.chartHost, this.stageStatus)
+    const body = this.node('div'); body.className = 'sc-body'; body.append(this.rail.element, this.rail.flyoutElement, stage)
     this.retryButton = this.control('status.retry', () => this.reload())
     this.olderButton = this.control('status.loadOlder', () => this.run(() => { this.chart.view.requestMore(); }), { title: 'status.loadOlder.title' })
     this.replayInfo = this.node('span')
@@ -618,15 +659,19 @@ export class ChartWorkspace {
     this.countdownNode = countdownNode
     this.replayControls.append(this.replayButtons.back, this.replayButtons.next, this.replayButtons.play, this.field('replay.speed', this.replaySpeed), this.replayButtons.exit, this.replayInfo)
     footer.append(this.slots.get('footer-start')!, this.statusNode, countdownNode, this.scaleBar, this.replayButtons.start, this.olderButton, this.retryButton, this.slots.get('footer-end')!)
-    this.root.append(toolbar, drawingBar, this.notice, this.holdNote, stage, this.replayControls, footer, this.searchPanel, this.palette.panel, this.contextMenu.element)
+    this.root.append(toolbar, drawingBar, this.notice, this.holdNote, body, this.replayControls, footer, this.searchPanel, this.palette.panel, this.contextMenu.element)
     host.append(this.root)
     try {
       this.chart = new EngineChart(this.chartHost, {
         ...options.chart,
         ariaLabel: this.t('chart.label'),
         render: { ...(options.theme === undefined ? {} : getWorkspaceTheme(options.theme)?.render), ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone },
-        onToolComplete: () => {
-          this.drawingSelect.value = ''; options.chart?.onToolComplete?.()
+        onToolComplete: reason => {
+          const again = reason === 'completed' && this.stayInDrawing ? this.lastTool : null
+          this.setToolValue(null)
+          // Re-arm after the pointer handler that just finished the drawing has returned.
+          if (again !== null) queueMicrotask(() => { if (!this.disposed && this.drawingSelect.value === '') this.run(() => { this.chart.setDrawingTool(again); this.setToolValue(again) }) })
+          options.chart?.onToolComplete?.(reason)
         },
         onHoldDraw: event => { this.showHoldDraw(event); options.chart?.onHoldDraw?.(event) }
       })
@@ -1004,7 +1049,7 @@ export class ChartWorkspace {
   private prepareRequest (): void {
     this.drawingSymbol = null; this.displayedPair = null; this.pending = true; this.waitingStart = true; this.applyError = null; this.cancelled = false
     this.olderPending = false
-    this.chart.setDrawingTool(null); this.drawingSelect.value = ''
+    this.chart.setDrawingTool(null); this.setToolValue(null)
     this.chart.drawings.importJson(EMPTY_DRAWINGS); this.chart.setData([], false)
     this.annotations.setScope(null)
     this.holdNote.textContent = ''
@@ -1108,7 +1153,7 @@ export class ChartWorkspace {
       this.root.dataset.state = this.cancelled ? 'cancelled' : status.state
       this.chartHost.style.visibility = shown ? 'visible' : 'hidden'; this.chartHost.inert = !shown
       this.setText(this.stageStatus, shown ? '' : text); this.stageStatus.hidden = shown
-      this.drawingSelect.disabled = !shown; this.downloadButton.disabled = !shown || this.downloading
+      this.drawingSelect.disabled = !shown; this.setToolValue(this.drawingSelect.value === '' ? null : this.drawingSelect.value as DrawingType); this.downloadButton.disabled = !shown || this.downloading
       this.retryButton.hidden = status.state !== 'error' && !this.cancelled
       this.olderButton.hidden = !hasMore && status.state === 'ready'
       this.olderButton.disabled = status.state !== 'ready' || status.loadingMore || this.olderPending || !hasMore
@@ -1164,6 +1209,7 @@ export class ChartWorkspace {
     this.drawingButtons.lock.setAttribute('aria-pressed', String(locked))
     this.setLabel(this.drawingButtons.remove, this.t('draw.delete'), this.t(locked ? 'draw.delete.locked' : 'draw.delete.selected'))
     this.drawingButtons.remove.disabled = selected === undefined || selected.locked
+    this.clearButton.disabled = !state.drawings.some(item => !item.locked)
   }
 
   private openSearch (initialQuery?: string, trigger: SymbolSearchRequest['trigger'] = 'api'): boolean {
@@ -1381,6 +1427,18 @@ export class ChartWorkspace {
 
   private toolLabel (type: DrawingType): string { return this.t(`tool.${type}`) }
 
+  /** The person picked a drawing tool (rail or dropdown), or the cursor (`null`). */
+  private chooseTool (tool: DrawingType | null): void {
+    this.setToolValue(this.run(() => { this.chart.setDrawingTool(tool) }) ? tool : null)
+    this.chartHost.querySelector<HTMLElement>('[tabindex="0"]')?.focus({ preventScroll: true })
+  }
+
+  /** Show the armed tool in every control that names one: the dropdown and the rail. */
+  private setToolValue (tool: DrawingType | null): void {
+    this.drawingSelect.value = tool ?? ''; if (tool !== null) this.lastTool = tool
+    this.rail.sync(tool, this.drawingSelect.disabled)
+  }
+
   private buildToolOptions (): void {
     const select = this.drawingSelect, current = select.value
     const none = this.node('option'); none.value = ''; none.textContent = this.t('draw.none')
@@ -1427,12 +1485,30 @@ export class ChartWorkspace {
     this.toolsToggle.hidden = !show('drawingBar') || this.layoutClass !== 'narrow'
     if (this.layoutClass !== 'narrow') this.toolsOpen = false
     this.toolsToggle.setAttribute('aria-pressed', String(this.toolsOpen)); this.toolsToggle.setAttribute('aria-expanded', String(this.toolsOpen))
-    this.drawingBar.hidden = !show('drawingBar') || (this.layoutClass === 'narrow' && !this.toolsOpen)
+    // The rail replaces the tool dropdown wherever there is room beside the chart; a phone keeps the Tools button.
+    const rail = show('drawingBar') && show('toolRail') && this.layoutClass !== 'narrow'
+    this.root.dataset.rail = String(rail); this.rail.element.hidden = !rail; this.drawingField.hidden = rail
+    if (!rail) this.rail.close(false)
+    const slotted = [this.slots.get('drawing-start'), this.slots.get('drawing-end')].some(slot => slot !== undefined && slot.childNodes.length > 0)
+    this.drawingBar.hidden = !show('drawingBar') || (this.layoutClass === 'narrow' && !this.toolsOpen) || (rail && !slotted)
     // Secondary actions (view history, latest, PNG, fullscreen) sit inline when there is room and in the More menu otherwise.
-    const target = compact ? this.parts.more.querySelector<HTMLElement>('.sc-menu-panel')! : this.drawingBar
-    if (this.secondary.parentElement !== target) target.append(this.secondary)
+    // With the rail, undo and redo lead the right of the market bar and lock and delete sit at the foot of the rail.
+    const arrangement = `${rail}|${compact}`
+    if (arrangement !== this.arrangement) {
+      this.arrangement = arrangement
+      const inMenu = this.parts.more.querySelector<HTMLElement>('.sc-menu-panel')!, end = this.slots.get('drawing-end')!
+      if (rail) {
+        this.rail.modes.append(this.drawingModes); this.rail.foot.append(this.drawingActions)
+        // Beside the rail there is room for undo and redo only on a wide bar; a narrower one keeps them with the other actions in More.
+        if (compact) inMenu.append(this.history, this.secondary)
+        else { this.toolbar.insertBefore(this.history, this.parts.more); this.toolbar.insertBefore(this.secondary, this.parts.more) }
+      } else {
+        this.drawingBar.insertBefore(this.history, end); this.drawingBar.insertBefore(this.drawingModes, end); this.drawingBar.insertBefore(this.drawingActions, end)
+        if (compact) inMenu.append(this.secondary); else this.drawingBar.insertBefore(this.secondary, end)
+      }
+    }
     this.footer.hidden = !show('footer')
-    const marketBarEmpty = !show('symbol') && !show('intervals') && !show('presentation') && !show('indicators') && !show('objects') && !show('commands') && !(compact && show('drawingBar')) &&
+    const marketBarEmpty = !show('symbol') && !show('intervals') && !show('presentation') && !show('indicators') && !show('objects') && !show('commands') && !(compact && show('drawingBar')) && !rail &&
       ![this.slots.get('header-start'), this.slots.get('header-end')].some(slot => slot !== undefined && slot.childNodes.length > 0)
     this.toolbar.hidden = headless || marketBarEmpty
     if (headless) this.closeFloating()
@@ -1539,8 +1615,8 @@ export class ChartWorkspace {
     add('view.reset', t('context.reset'), 'palette.group.view', () => { this.chart.view.resetViewport() })
     add('view.latest', t('nav.latest.title'), 'palette.group.view', () => { this.chart.view.followLatest() })
     add('view.timezone', t(((this.chart.getRenderOptions().timeZone ?? 'UTC') === 'UTC') ? 'scale.local.title' : 'scale.utc.title'), 'palette.group.view', () => { this.toggleTimeZone() })
-    add('draw.pan', t('palette.tool', { name: t('draw.none') }), 'palette.group.draw', () => { this.chart.setDrawingTool(null); this.drawingSelect.value = '' })
-    for (const type of DRAWING_TYPES) add(`draw.${type}`, t('palette.tool', { name: this.toolLabel(type) }), 'palette.group.draw', () => { this.chart.setDrawingTool(type); this.drawingSelect.value = type }, { keywords: ['draw', type] })
+    add('draw.pan', t('palette.tool', { name: t('draw.none') }), 'palette.group.draw', () => { this.chart.setDrawingTool(null); this.setToolValue(null) })
+    for (const type of DRAWING_TYPES) add(`draw.${type}`, t('palette.tool', { name: this.toolLabel(type) }), 'palette.group.draw', () => { this.chart.setDrawingTool(type); this.setToolValue(type) }, { keywords: ['draw', type] })
     add('draw.undo', t('draw.undo'), 'palette.group.draw', () => { this.chart.drawings.undo() }, { shortcut: 'Ctrl+Z', when: () => this.chart.drawings.getSnapshot().canUndo })
     add('draw.redo', t('draw.redo'), 'palette.group.draw', () => { this.chart.drawings.redo() }, { shortcut: 'Ctrl+Shift+Z', when: () => this.chart.drawings.getSnapshot().canRedo })
     add('draw.clear', t('palette.clearDrawings'), 'palette.group.draw', () => { this.chart.drawings.clear() }, { when: () => this.chart.drawings.getSnapshot().drawings.length > 0 })

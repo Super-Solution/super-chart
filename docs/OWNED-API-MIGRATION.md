@@ -183,6 +183,16 @@ undo/redo and strict version-1 JSON import/export. Incomplete gestures are disca
 on cancellation; a completed freehand stroke creates one undo operation.
 ChartWorkspace keeps drawings per market in memory across market switches.
 
+The workspace's own tool picker is a left rail with grouped icons and flyouts
+(see [Workspace interface](WORKSPACE-UI.md)); the old `<select>` is still there
+as `ui: { parts: { toolRail: false } }`, and in the `narrow` layout. The rail adds
+a **magnet** (`chart.setDrawingMagnet`) and **keep drawing**; both were features
+of the previous rail. Still not carried over, and not claimed: per-drawing style
+editing (colour, width, dash), hide-all, favourite tools and per-tool hotkeys.
+A selected brush or highlighter stroke no longer shows an editing handle at each
+sample point (it moves as one body), and `onToolComplete` now receives
+`'completed'` or `'cancelled'`.
+
 Images accept bounded local static PNG/JPEG/WebP files. SVG, animation and remote
 URLs are rejected. Image decoding has per-image and per-chart limits, and bitmap
 resources are released when unused or disposed. A snapshot waits for its retained

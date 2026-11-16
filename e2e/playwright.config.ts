@@ -18,7 +18,7 @@ export default defineConfig({
     'analysis-overlays.spec.ts', 'api-core.spec.ts', 'chart-interaction.spec.ts',
     'commands.spec.ts', 'drawing-editor.spec.ts', 'drawing-input.spec.ts',
     'indicators.spec.ts', 'interaction.spec.ts', 'lifecycle.spec.ts',
-    'loader.spec.ts', 'motion.spec.ts', 'smoke.spec.ts', 'superscript.spec.ts'
+    'loader.spec.ts', 'motion.spec.ts', 'smoke.spec.ts', 'superscript.spec.ts', 'tool-rail.spec.ts'
   ],
   timeout: 180_000,
   expect: { timeout: 10_000 },

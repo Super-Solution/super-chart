@@ -10,7 +10,7 @@ test('wheel over the main pane and the price axis zooms the owned viewport', asy
     const chart = await H.ready(pro)
     // Data readiness precedes the first geometry/paint frame used by pointer input.
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-    const root = container.querySelector('[tabindex="0"]') as HTMLElement
+    const root = container.querySelector('.sc-chart [tabindex="0"]') as HTMLElement
     const span = () => { const v = chart.view.getSnapshot().viewport; return v.i1 - v.i0 }
     const r = root.getBoundingClientRect(), before = span()
     const wheel = (x: number) => root.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: x, clientY: r.top + r.height / 3, deltaY: -100 }))
@@ -32,7 +32,7 @@ test('keyboard navigation pans older, zooms out and follows the newest bar', asy
     const { H } = window as any
     const { pro, container } = H.mount()
     const chart = await H.ready(pro)
-    const root = container.querySelector('[tabindex="0"]') as HTMLElement
+    const root = container.querySelector('.sc-chart [tabindex="0"]') as HTMLElement
     root.focus()
     const key = (key: string) => root.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key }))
     const before = chart.view.getSnapshot().viewport
@@ -137,7 +137,7 @@ test('type-to-search opens from the focused chart and continues typing in the in
     const { H } = window as any
     const { pro, container } = H.mount({ id: 'typing' })
     await H.ready(pro)
-    ;(container.querySelector('[tabindex="0"]') as HTMLElement).focus()
+    ;(container.querySelector('.sc-chart [tabindex="0"]') as HTMLElement).focus()
   })
   await page.keyboard.type('et')
   const input = page.locator('#typing [role=dialog] input')

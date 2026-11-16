@@ -69,11 +69,16 @@ const feed: Datafeed = {
     subscriptions.delete(id)
   }
 }
+// ?theme=light, ?layout=compact and ?rail=off try the default chrome without code changes.
+const query = new URLSearchParams(window.location.search)
 const workspace = new ChartWorkspace(document.querySelector<HTMLElement>('#workspace')!, {
   datafeed: feed, symbol: symbols[0], period: { multiplier: 1, timespan: 'minute', text: '1m' },
+  theme: query.get('theme') ?? undefined,
+  ui: { ...(query.has('layout') ? { layout: query.get('layout') as 'compact' } : {}), parts: { toolRail: query.get('rail') !== 'off' } },
   loader: { count: 1000, historyCache: { max: 6 } },
-  chart: { count: 160, indicators: [{ name: 'MA', params: [20] }, { name: 'VOL' }], render: { timeZone: 'UTC' } }
+  chart: { count: 160, indicators: [{ name: 'MA', params: [20] }, { name: 'VOL' }], render: { timeZone: 'UTC' }, drawByHolding: true }
 })
+Object.assign(window, { workspace })
 let disposed = false
 const optionalButton = document.querySelector<HTMLButtonElement>('#indicators')!
 optionalButton.addEventListener('click', () => {
