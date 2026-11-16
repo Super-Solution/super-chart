@@ -38,6 +38,10 @@ publishing in npm package settings.
 
 ## Subsequent releases
 
+Before dispatching, run `npm run examples` and go through the playground's release checklist and the React example
+(see [`examples/README.md`](../examples/README.md)); fix what they show first. The examples are never published:
+`npm run build` fails if a workspace or a packed file would include them.
+
 Merge the reviewed release version and this workflow to `main`. In GitHub Actions,
 run **Publish npm package** on `main`, entering the exact package version. The
 workflow uses a GitHub-hosted runner, locked dependencies, and the existing build

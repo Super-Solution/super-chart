@@ -197,7 +197,9 @@ contents, plain-Node import of the server-safe entries). `npm run typecheck`,
 `npm test`, `npm run lint`. Browser cases: `cd e2e && npx playwright test`.
 
 `npm run dev` serves `/demo/workspace.html` and `/demo/engine.html` with synthetic
-local data. The chat plugin additionally needs `@supersolutions/super-protocol`.
+local data. `npm run examples` opens [`examples/`](examples/README.md): runnable web and React
+examples and a playground, against the sources in your checkout; they are not published.
+The chat plugin additionally needs `@supersolutions/super-protocol`.
 Ask the owner before adding tests, assertions, fixtures or snapshots (AGENTS.md).
 
 License: GPL-3.0-or-later; commercial licence available. See LICENSE and NOTICE.
