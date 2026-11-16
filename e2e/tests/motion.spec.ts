@@ -7,7 +7,7 @@ import type { Page } from '@playwright/test'
 async function mount (page: Page): Promise<{ x: number, y: number, width: number, height: number }> {
   await page.evaluate(async () => {
     const { H } = window as any
-    const { pro } = H.mount({ id: 'motion', chart: { chart: { inertia: true, indicators: [] } } })
+    const { pro } = H.mount({ id: 'motion', chart: { chart: { inertia: true, indicators: [], prefetchBars: 0 } } })
     ;(window as any).pro = pro
     await H.ready(pro)
     pro.chart.view.setViewport({ i0: 100, i1: 199 })

@@ -10,6 +10,7 @@ import { CommandRegistry, validateCommand, type WorkspaceCommand } from './comma
 import { CommandPalette, ContextMenu, type ContextMenuItem } from './panels'
 import { createIcon, type IconName } from './icons'
 import { ToolRail } from './toolRail'
+import { DrawingToolbar } from './drawingToolbar'
 import { DrawingDocuments, type WorkspaceDrawingCacheOptions } from './drawingDocuments'
 import { WORKSPACE_STYLE } from './workspaceStyle'
 import { moveActiveIndex, decideEnter, createRecentsStore, visibleRecents, type RecentsStore } from './symbolSearchNav'
@@ -44,8 +45,8 @@ export interface WorkspaceSearchOptions {
 export type WorkspaceSlotName = 'header-start' | 'header-end' | 'drawing-start' | 'drawing-end' | 'footer-start' | 'footer-end'
 export const WORKSPACE_SLOTS: readonly WorkspaceSlotName[] = Object.freeze(['header-start', 'header-end', 'drawing-start', 'drawing-end', 'footer-start', 'footer-end'])
 /** Parts of the chrome a host can switch off one by one. `headless` switches off every one of them. */
-export type WorkspacePart = 'symbol' | 'intervals' | 'presentation' | 'indicators' | 'objects' | 'drawingBar' | 'toolRail' | 'footer' | 'scaleBar' | 'commands'
-export const WORKSPACE_PARTS: readonly WorkspacePart[] = Object.freeze(['symbol', 'intervals', 'presentation', 'indicators', 'objects', 'drawingBar', 'toolRail', 'footer', 'scaleBar', 'commands'])
+export type WorkspacePart = 'symbol' | 'intervals' | 'presentation' | 'indicators' | 'objects' | 'drawingBar' | 'toolRail' | 'drawingToolbar' | 'footer' | 'scaleBar' | 'commands'
+export const WORKSPACE_PARTS: readonly WorkspacePart[] = Object.freeze(['symbol', 'intervals', 'presentation', 'indicators', 'objects', 'drawingBar', 'toolRail', 'drawingToolbar', 'footer', 'scaleBar', 'commands'])
 
 export interface WorkspaceAppearanceOptions {
   /** Additional root classes for host styles; .sc-workspace always remains. */
@@ -226,6 +227,7 @@ export class ChartWorkspace {
   private readonly fullscreenSync: () => void = () => {}
   private resizeObserver: ResizeObserver | null = null
   private readonly chartHost: HTMLDivElement
+  private readonly drawingToolbar: DrawingToolbar
   private readonly statusNode: HTMLDivElement
   private readonly stageStatus: HTMLDivElement
   private readonly replayControls: HTMLDivElement
@@ -677,6 +679,18 @@ export class ChartWorkspace {
       })
       this.annotations = new EngineAnnotations({ symbol: null, theme: this.annotationTheme(), onChange: () => { this.chart.requestPaint(); this.objectsDirty = true; this.renderObjects() } })
       this.chart.addLayer(this.annotations)
+      this.drawingToolbar = new DrawingToolbar({
+        doc: this.doc,
+        win: this.win,
+        stage,
+        store: this.chart.drawings,
+        t: (key, params) => this.t(key, params),
+        bind: apply => { this.bind(apply) },
+        listen: (target, type, listener) => { this.listen(target, type, listener) },
+        geometryOf: id => this.chart.getDrawingGeometry(id),
+        changed: () => { this.objectsDirty = true }
+      })
+      this.unsubscribe.push(this.chart.onFrame(() => { this.drawingToolbar.refresh() }), this.chart.drawings.subscribe(() => { this.drawingToolbar.refresh() }))
       this.unsubscribe.push(attachAnnotationIntents(this.chartHost, this.annotations, event => { for (const listener of [...this.intentListeners]) listener(event) }))
     } catch (error) { this.abort.abort(); this.root.remove(); throw error }
     this.loader = this.createLoader()
@@ -1486,6 +1500,7 @@ export class ChartWorkspace {
     if (this.layoutClass !== 'narrow') this.toolsOpen = false
     this.toolsToggle.setAttribute('aria-pressed', String(this.toolsOpen)); this.toolsToggle.setAttribute('aria-expanded', String(this.toolsOpen))
     // The rail replaces the tool dropdown wherever there is room beside the chart; a phone keeps the Tools button.
+    this.drawingToolbar.setEnabled(show('drawingToolbar'))
     const rail = show('drawingBar') && show('toolRail') && this.layoutClass !== 'narrow'
     this.root.dataset.rail = String(rail); this.rail.element.hidden = !rail; this.drawingField.hidden = rail
     if (!rail) this.rail.close(false)

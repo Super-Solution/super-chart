@@ -17,6 +17,8 @@ export interface RealtimeSeriesChange {
  * EMA seed (not the Web SMA seed). Inputs must be normalized, ascending bars.
  * History changes rebuild; live updates only calculate the changed tail.
  */
+const OLDER_REQUEST_EXPIRY_MS = 3000
+
 export class RealtimeSeries implements ChartDataPort {
   private _bars: MarketBar[] = []
   private _ha: MarketBar[] | null = null
@@ -29,6 +31,8 @@ export class RealtimeSeries implements ChartDataPort {
   private _version = 0
   private _more = false
   private _loadMore: ((timestamp: number | null) => void) | null = null
+  /** A request for older bars is out. Several callers (edge, prefetch, button) must not start the same page twice. */
+  private _olderSince = -Infinity
   private readonly _listeners = new Set<(change: RealtimeSeriesChange) => void>()
   private readonly _referenceIndicators: boolean
 
@@ -71,10 +75,17 @@ export class RealtimeSeries implements ChartDataPort {
 
   /** Host calls this when its own viewport reaches the oldest loaded bar. */
   requestMore (): void {
-    if (this._more) this._loadMore?.(this._bars[0]?.timestamp ?? null)
+    if (!this._more || this._loadMore === null) return
+    // Every outcome of a request comes back through applyMoreData (a page, an empty page, or the loader's release after
+    // a failure), which clears this. The expiry only covers a request that was refused and so never answers.
+    const now = Date.now()
+    if (now - this._olderSince < OLDER_REQUEST_EXPIRY_MS) return
+    this._olderSince = now
+    this._loadMore(this._bars[0]?.timestamp ?? null)
   }
 
   applyNewData (bars: MarketBar[], more = false): void {
+    this._olderSince = -Infinity
     this._bars = this._copyValidated(bars)
     this._more = more
     this._rebuild()
@@ -94,6 +105,7 @@ export class RealtimeSeries implements ChartDataPort {
   }
 
   applyMoreData (bars: MarketBar[], more = false): void {
+    this._olderSince = -Infinity
     this._validate(bars)
     const first = this._bars[0]?.timestamp ?? Infinity
     const older = bars.filter(bar => bar.timestamp < first).map(bar => ({ ...bar }))

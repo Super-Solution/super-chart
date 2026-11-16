@@ -37,6 +37,11 @@ export function traceSmooth (ctx: Pick<CanvasRenderingContext2D, 'moveTo' | 'lin
   ctx.lineTo(last.x, last.y)
 }
 
+/** The dash pattern for a style: dots are zero-length dashes that the round line cap turns into round dots. */
+export function dashPattern (dash: 'solid' | 'dashed' | 'dotted' | undefined, width: number): number[] {
+  return dash === 'dashed' ? [width * 4 + 2, width * 2.5 + 2] : dash === 'dotted' ? [0, width * 2 + 3] : []
+}
+
 /** Paint already-projected primitives in logical pixels; retained anchors remain untouched. */
 export function paintDrawings (
   ctx: CanvasRenderingContext2D,
@@ -45,7 +50,7 @@ export function paintDrawings (
   options: DrawingRenderOptions = {}
 ): void {
   const lineWidth = options.lineWidth !== undefined && Number.isFinite(options.lineWidth) && options.lineWidth > 0 ? options.lineWidth : 1.5
-  const radius = options.handleRadius !== undefined && Number.isFinite(options.handleRadius) && options.handleRadius > 0 ? options.handleRadius : 4
+  const radius = options.handleRadius !== undefined && Number.isFinite(options.handleRadius) && options.handleRadius > 0 ? options.handleRadius : 5
   const fillOpacity = options.fillOpacity !== undefined && Number.isFinite(options.fillOpacity) ? Math.max(0, Math.min(1, options.fillOpacity)) : 0.1
   ctx.save()
   try {
@@ -55,14 +60,18 @@ export function paintDrawings (
       if (![bounds.left, bounds.right, bounds.top, bounds.bottom].every(Number.isFinite) || bounds.left >= bounds.right || bounds.top >= bounds.bottom) return
       ctx.beginPath(); ctx.rect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top); ctx.clip()
     }
-    ctx.lineWidth = lineWidth; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.setLineDash([])
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'
     const theme = colors(options.theme)
     const font = options.font ?? CANVAS_LABEL_FONT, handleFill = options.handleFill ?? theme.surface
     ctx.font = font; ctx.textBaseline = 'bottom'
     for (const geometry of geometries) {
-      const selected = geometry.id === selectedId
-      const color = selected ? options.selectedColor ?? options.color ?? theme.ink : options.color ?? theme.ink
-      ctx.strokeStyle = color
+      const selected = geometry.id === selectedId, style = geometry.style
+      // A drawing's own style wins over the chart-wide options, which win over the theme.
+      const base = style?.color ?? options.color ?? theme.ink
+      const color = selected ? options.selectedColor ?? base : base
+      const width = style?.width ?? lineWidth, textColor = style?.textColor ?? color
+      const fill = style?.fillColor ?? options.fillColor ?? base, opacity = style?.fillOpacity ?? fillOpacity
+      ctx.strokeStyle = color; ctx.lineWidth = width; ctx.globalAlpha = 1; ctx.setLineDash(dashPattern(style?.dash, width))
       for (const primitive of geometry.primitives) {
         if (primitive.kind === 'image') {
           const status = options.imageRenderer?.paint(ctx, primitive.source, primitive.bounds, primitive.clip, options.onInvalidate)
@@ -82,6 +91,7 @@ export function paintDrawings (
           try {
             const clip = primitive.clip
             ctx.beginPath(); ctx.rect(clip.left, clip.top, clip.right - clip.left, clip.bottom - clip.top); ctx.clip()
+            ctx.setLineDash([])
             // A selected stroke sits on a soft halo of the same ink, so it reads as chosen without per-point handles.
             if (selected && primitive.opacity === 1) { ctx.lineWidth = primitive.width + 6; ctx.globalAlpha = 0.18; ctx.beginPath(); traceSmooth(ctx, primitive.points); ctx.stroke() }
             ctx.lineWidth = primitive.width; ctx.globalAlpha = primitive.opacity; ctx.beginPath()
@@ -92,7 +102,7 @@ export function paintDrawings (
       }
       for (const primitive of geometry.primitives) {
         if (primitive.kind !== 'rect' && primitive.kind !== 'polygon') continue
-        ctx.fillStyle = options.fillColor ?? color; ctx.globalAlpha = fillOpacity
+        ctx.fillStyle = fill; ctx.globalAlpha = opacity
         if (primitive.kind === 'rect') ctx.fillRect(primitive.from.x, primitive.from.y, primitive.to.x - primitive.from.x, primitive.to.y - primitive.from.y)
         else {
           ctx.beginPath()
@@ -107,7 +117,7 @@ export function paintDrawings (
           const clip = primitive.clip
           ctx.beginPath(); ctx.rect(clip.left, clip.top, clip.right - clip.left, clip.bottom - clip.top); ctx.clip()
           ctx.beginPath(); ctx.ellipse(primitive.center.x, primitive.center.y, primitive.radiusX, primitive.radiusY, 0, 0, Math.PI * 2)
-          ctx.fillStyle = options.fillColor ?? color; ctx.globalAlpha = fillOpacity; ctx.fill()
+          ctx.fillStyle = fill; ctx.globalAlpha = opacity; ctx.fill()
           ctx.globalAlpha = 1; ctx.stroke()
         } finally { ctx.restore() }
       }
@@ -116,7 +126,7 @@ export function paintDrawings (
         if (primitive.kind !== 'line') continue
         ctx.moveTo(primitive.from.x, primitive.from.y); ctx.lineTo(primitive.to.x, primitive.to.y)
       }
-      ctx.stroke(); ctx.fillStyle = color
+      ctx.stroke(); ctx.fillStyle = textColor; ctx.setLineDash([])
       for (const primitive of geometry.primitives) {
         if (primitive.kind === 'label') {
           ctx.save()
@@ -129,25 +139,25 @@ export function paintDrawings (
               ctx.globalAlpha = 1; ctx.strokeRect(box.left, box.top, box.right - box.left, box.bottom - box.top)
             }
             ctx.beginPath(); ctx.rect(box.left, box.top, box.right - box.left, box.bottom - box.top); ctx.clip()
-            ctx.fillStyle = color; ctx.font = font; ctx.textAlign = 'left'; ctx.textBaseline = 'top'
+            ctx.fillStyle = textColor; ctx.font = font; ctx.textAlign = 'left'; ctx.textBaseline = 'top'
             const lines = primitive.price === undefined ? primitive.lines : [options.formatPrice?.(primitive.price) ?? String(primitive.price)]
             lines.forEach((text, index) => ctx.fillText(text, box.left + 6, box.top + 4 + index * 16, box.right - box.left - 12))
           } finally { ctx.restore() }
           continue
         }
         if (primitive.kind !== 'text') continue
-        ctx.textAlign = primitive.align
+        ctx.fillStyle = textColor; ctx.textAlign = primitive.align
         const text = primitive.price === undefined ? primitive.text : `${primitive.text}  ${options.formatPrice?.(primitive.price) ?? String(primitive.price)}`
         ctx.fillText(text, primitive.position.x, primitive.position.y - 3)
       }
       if (!selected || geometry.locked) continue
       // Round handles on the canvas colour with an ink edge: selection never recolours the drawing.
-      ctx.fillStyle = handleFill; ctx.lineWidth = 1.5
+      ctx.fillStyle = handleFill; ctx.lineWidth = 2; ctx.setLineDash([]); ctx.strokeStyle = color
       ctx.beginPath()
       for (const handle of geometry.handles) {
         ctx.moveTo(handle.point.x + radius, handle.point.y); ctx.arc(handle.point.x, handle.point.y, radius, 0, Math.PI * 2)
       }
-      ctx.fill(); ctx.stroke(); ctx.lineWidth = lineWidth
+      ctx.fill(); ctx.stroke()
     }
   } finally { ctx.restore() }
 }

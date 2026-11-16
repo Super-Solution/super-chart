@@ -45,6 +45,35 @@ element in a slot. The rail's DOM is stable styling surface: `.sc-rail`,
 Find the chart element with `.sc-chart`; a bare `[tabindex="0"]` now matches the
 rail's tab stop first.
 
+## The selection toolbar
+
+Selecting a drawing shows a floating toolbar over it, like TradingView's. It is
+built from what the drawing actually draws, so a trend line offers colour, width
+and dash, a rectangle adds fill and opacity, a text note adds text colour, and a
+brush or highlighter offers width only. Every drawing also gets lock, delete and
+a "more" menu (clone, hide, reset style).
+
+- It follows the drawing while you pan or zoom, takes itself out of the way while
+  you press on the chart, flips below the drawing when there is no room above,
+  and stays inside the plot. The grip on its left moves it for the rest of that
+  selection.
+- A locked drawing keeps the lock button and loses the editing controls.
+- Style lives on the drawing: `Drawing.style` is `{ color, fillColor, fillOpacity,
+  textColor, width, dash: 'solid' | 'dashed' | 'dotted' }`, every field optional
+  and `#rrggbb` / `#rrggbbaa` for colours. Set it with `chart.drawings.add({ ...,
+  style })` or `chart.drawings.update(id, { style })` (`style: null` resets it).
+  It round-trips through the version-1 JSON export. An older reader rejects the
+  unknown `style` key, so upgrade readers before writers.
+- Resolution order: the drawing's `style`, then the chart's drawing options, then
+  the theme. Nothing here is hard-wired to the toolbar; a host that wants its own
+  editor can switch the part off and drive `style` itself.
+- Off: `ui: { parts: { drawingToolbar: false } }`. DOM and CSS surface: `.sc-dt`,
+  `.sc-dt-button[data-control]`, `.sc-dt-pop`, `.sc-dt-chip`, `.sc-dt-item`.
+- Box tools (rectangle, ellipse and friends) have eight handles: corners resize
+  both sides, edge handles resize one. Drawing a two-point tool also works as
+  click, move, click; position tools place a ready-made long or short with one
+  click, which you then shape with the handles.
+
 ## Host styles
 
 Every button, select, input and summary in the chrome resets `text-transform`,
@@ -108,6 +137,19 @@ with `chart: { inertia: false, viewport: { minBars: 30, maxBars: 600 } }`.
 The same bounds apply to wheel, pinch, keyboard and programmatic navigation;
 reduced-motion preference disables coasting and wheel easing. Candle body width
 scales with the available slot instead of stopping at 12px.
+
+Wheel and trackpad gestures no longer lock to one of four directions. Each event
+is split into a pan part and a zoom part; the weaker part is dropped only when it
+is less than about 0.41 times the stronger (a 22.5 degree cone, so eight
+directions with the diagonals free). Moving from a vertical scale to a
+horizontal pan, or back, takes effect on the next event with no hold-off, and a
+real diagonal does both at once.
+
+History loads ahead of the viewport. When the left edge is within about one and a
+half screens of the oldest loaded bar, the next page is requested (a single
+request at a time), so a pan rarely reaches the end of the data. Tune with
+`prefetchBars` on `EngineChart` / `chart: { prefetchBars }` (a number of bars;
+`0` waits for the edge).
 
 ## Interaction details
 

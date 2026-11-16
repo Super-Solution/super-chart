@@ -20,6 +20,23 @@ export const DRAWING_TYPES = Object.freeze([
 ] as const)
 export type DrawingType = typeof DRAWING_TYPES[number]
 export interface DrawingAnchor { readonly timestamp: number, readonly price: number }
+/**
+ * How one drawing looks. Every field is optional: what is missing comes from the chart's theme (ink colour, default
+ * width, a translucent fill of the line colour), so a drawing without a style follows the theme and one with a style
+ * keeps it across themes. Colours are `#rrggbb` or `#rrggbbaa` only.
+ */
+export interface DrawingStyle {
+  readonly color?: string
+  /** Line width in CSS pixels, 1 to 8. Freehand strokes use `strokeWidth` instead. */
+  readonly width?: number
+  readonly dash?: 'solid' | 'dashed' | 'dotted'
+  /** Fill of closed shapes. */
+  readonly fillColor?: string
+  /** 0 (no fill) to 1. */
+  readonly fillOpacity?: number
+  /** Colour of the text and labels of the drawing. */
+  readonly textColor?: string
+}
 export interface Drawing {
   readonly id: string
   readonly type: DrawingType
@@ -30,6 +47,7 @@ export interface Drawing {
   readonly text?: string
   readonly image?: string
   readonly strokeWidth?: number
+  readonly style?: DrawingStyle
 }
 export interface DrawingInput {
   id: string
@@ -40,8 +58,10 @@ export interface DrawingInput {
   text?: string
   image?: string
   strokeWidth?: number
+  style?: DrawingStyle
 }
-export interface DrawingPatch { anchors?: readonly DrawingAnchor[], locked?: boolean, hidden?: boolean, text?: string, image?: string, strokeWidth?: number }
+/** `style: null` clears the style; any other value replaces it whole (spread the old one to change one field). */
+export interface DrawingPatch { anchors?: readonly DrawingAnchor[], locked?: boolean, hidden?: boolean, text?: string, image?: string, strokeWidth?: number, style?: DrawingStyle | null }
 export interface DrawingPoint { readonly x: number, readonly y: number }
 export interface DrawingBounds { readonly left: number, readonly top: number, readonly right: number, readonly bottom: number }
 export type DrawingProjector = (timestamp: number, price: number) => DrawingPoint | null
@@ -69,6 +89,7 @@ export interface DrawingGeometry {
   readonly id: string
   readonly type: DrawingType
   readonly locked: boolean
+  readonly style?: DrawingStyle
   readonly primitives: readonly DrawingPrimitive[]
   readonly handles: readonly DrawingHandle[]
   readonly analysis?: DataDrivenDrawingResult
@@ -130,8 +151,33 @@ function anchors (value: unknown, type: DrawingType): readonly DrawingAnchor[] {
   if (type === 'vertical-segment' || type === 'vertical-ray') result[1].timestamp = result[0].timestamp
   return Object.freeze(result.map(point => Object.freeze(point)))
 }
+const COLOR = /^#(?:[0-9a-f]{6}|[0-9a-f]{8})$/i
+function drawingStyle (value: unknown): DrawingStyle | undefined {
+  if (value === undefined || value === null) return undefined
+  const input = record(value, ['color', 'width', 'dash', 'fillColor', 'fillOpacity', 'textColor'], 'drawing style')
+  const style: { -readonly [K in keyof DrawingStyle]: DrawingStyle[K] } = {}
+  for (const key of ['color', 'fillColor', 'textColor'] as const) {
+    const colour = input[key]
+    if (colour === undefined) continue
+    if (typeof colour !== 'string' || !COLOR.test(colour)) throw new TypeError(`Invalid drawing style ${key}: use #rrggbb or #rrggbbaa`)
+    style[key] = colour.toLowerCase()
+  }
+  if (input.width !== undefined) {
+    if (typeof input.width !== 'number' || !Number.isFinite(input.width) || input.width < 1 || input.width > 8) throw new TypeError('Invalid drawing style width: 1 to 8')
+    style.width = input.width
+  }
+  if (input.dash !== undefined) {
+    if (input.dash !== 'solid' && input.dash !== 'dashed' && input.dash !== 'dotted') throw new TypeError('Invalid drawing style dash')
+    style.dash = input.dash
+  }
+  if (input.fillOpacity !== undefined) {
+    if (typeof input.fillOpacity !== 'number' || !Number.isFinite(input.fillOpacity) || input.fillOpacity < 0 || input.fillOpacity > 1) throw new TypeError('Invalid drawing style fillOpacity: 0 to 1')
+    style.fillOpacity = input.fillOpacity
+  }
+  return Object.keys(style).length === 0 ? undefined : Object.freeze(style)
+}
 function drawing (value: unknown): Drawing {
-  const input = record(value, ['id', 'type', 'anchors', 'locked', 'hidden', 'text', 'image', 'strokeWidth'], 'drawing')
+  const input = record(value, ['id', 'type', 'anchors', 'locked', 'hidden', 'text', 'image', 'strokeWidth', 'style'], 'drawing')
   if (typeof input.id !== 'string' || input.id.trim() === '' || input.id.length > 128) throw new TypeError('Invalid drawing id')
   if (!DRAWING_TYPES.includes(input.type as DrawingType)) throw new TypeError('Invalid drawing type')
   const type = input.type as DrawingType
@@ -150,10 +196,11 @@ function drawing (value: unknown): Drawing {
     if ((type !== 'brush' && type !== 'highlighter') || typeof input.strokeWidth !== 'number' || !Number.isFinite(input.strokeWidth) || input.strokeWidth < 1 || input.strokeWidth > 64) throw new TypeError('Invalid freehand stroke width')
     content.strokeWidth = input.strokeWidth
   }
-  return Object.freeze({ id: input.id, type, anchors: anchors(input.anchors, type), locked: flag(input.locked, 'locked'), hidden: flag(input.hidden, 'hidden'), ...content })
+  const style = drawingStyle(input.style)
+  return Object.freeze({ id: input.id, type, anchors: anchors(input.anchors, type), locked: flag(input.locked, 'locked'), hidden: flag(input.hidden, 'hidden'), ...content, ...(style === undefined ? {} : { style }) })
 }
 function same (a: Drawing, b: Drawing): boolean {
-  return a.id === b.id && a.type === b.type && a.locked === b.locked && a.hidden === b.hidden && a.text === b.text && a.image === b.image && a.strokeWidth === b.strokeWidth &&
+  return a.id === b.id && a.type === b.type && a.locked === b.locked && a.hidden === b.hidden && a.text === b.text && a.image === b.image && a.strokeWidth === b.strokeWidth && JSON.stringify(a.style) === JSON.stringify(b.style) &&
     a.anchors.length === b.anchors.length && a.anchors.every((point, i) => point.timestamp === b.anchors[i].timestamp && point.price === b.anchors[i].price)
 }
 function finitePoint (point: DrawingPoint | null): point is DrawingPoint {
@@ -377,8 +424,41 @@ export function projectDrawing (value: Drawing, project: DrawingProjector, bound
   // A freehand stroke is one gesture, not a shape with a few corners: its hundreds of sample points are not editing
   // handles (they painted as a dotted line of squares). The whole stroke moves as one.
   const freehand = value.type === 'brush' || value.type === 'highlighter'
-  const handles = value.locked || freehand ? [] : points.flatMap((point, anchorIndex) => inside(point, bounds) ? [{ point, anchorIndex }] : [])
-  return { id: value.id, type: value.type, locked: value.locked, primitives, handles, ...(analysis === undefined ? {} : { analysis }) }
+  let handlePoints: readonly DrawingPoint[] = points
+  if (BOX_TYPES.includes(value.type) && points.length === 2 && points.every(finitePoint)) {
+    const [p1, p2] = points, mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2
+    // Four corners, then the middle of each edge: see moveDrawingHandle for what each one moves.
+    handlePoints = [p1, p2, { x: p1.x, y: p2.y }, { x: p2.x, y: p1.y }, { x: mx, y: p1.y }, { x: mx, y: p2.y }, { x: p1.x, y: my }, { x: p2.x, y: my }]
+  }
+  const handles = value.locked || freehand ? [] : handlePoints.flatMap((point, anchorIndex) => inside(point, bounds) ? [{ point, anchorIndex }] : [])
+  return { id: value.id, type: value.type, locked: value.locked, primitives, handles, ...(value.style === undefined ? {} : { style: value.style }), ...(analysis === undefined ? {} : { analysis }) }
+}
+
+/** Two-anchor shapes drawn as a box: they get edge handles as well as corner handles. */
+const BOX_TYPES: readonly DrawingType[] = ['rectangle', 'price-range', 'time-range', 'ellipse', 'image']
+
+/**
+ * The anchors after the handle `handleIndex` (the `anchorIndex` of a `DrawingHandle`) is dragged to `next`. For most
+ * drawings a handle is an anchor and it moves there. A box has eight: 0 and 1 are the two anchors, 2 and 3 the other
+ * corners, 4 to 7 the middles of the edges (anchor 0's price, anchor 1's price, anchor 0's time, anchor 1's time), and an
+ * edge handle moves only along its own axis.
+ */
+export function moveDrawingHandle (value: Drawing, handleIndex: number, next: DrawingAnchor): readonly DrawingAnchor[] {
+  const anchors = value.anchors.map(item => ({ ...item }))
+  if (BOX_TYPES.includes(value.type) && anchors.length === 2 && handleIndex >= 2) {
+    const [a, b] = anchors
+    switch (handleIndex) {
+      case 2: a.timestamp = next.timestamp; b.price = next.price; break
+      case 3: b.timestamp = next.timestamp; a.price = next.price; break
+      case 4: a.price = next.price; break
+      case 5: b.price = next.price; break
+      case 6: a.timestamp = next.timestamp; break
+      case 7: b.timestamp = next.timestamp; break
+    }
+    return anchors
+  }
+  if (handleIndex >= 0 && handleIndex < anchors.length) anchors[handleIndex] = { ...next }
+  return anchors
 }
 
 function lineDistance (point: DrawingPoint, from: DrawingPoint, to: DrawingPoint): number {
@@ -478,12 +558,12 @@ export class DrawingStore {
 
   /** Locked anchors are unchanged until explicitly unlocked. Visibility remains editable. */
   update (id: string, patch: DrawingPatch): boolean {
-    const fields = record(patch, ['anchors', 'locked', 'hidden', 'text', 'image', 'strokeWidth'], 'drawing patch')
+    const fields = record(patch, ['anchors', 'locked', 'hidden', 'text', 'image', 'strokeWidth', 'style'], 'drawing patch')
     const index = this.drawings.findIndex(item => item.id === id)
     if (index < 0) return false
     const current = this.drawings[index]
     const value = drawing({ ...current, ...fields })
-    if (current.locked && (fields.anchors !== undefined || fields.text !== undefined || fields.image !== undefined || fields.strokeWidth !== undefined)) return false
+    if (current.locked && (fields.anchors !== undefined || fields.text !== undefined || fields.image !== undefined || fields.strokeWidth !== undefined || fields.style !== undefined)) return false
     if (same(current, value)) return false
     const next = this.drawings.slice(); next[index] = value
     this.commit(next)

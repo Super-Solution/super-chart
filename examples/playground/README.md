@@ -10,7 +10,7 @@ One page that exposes the levers of `ChartWorkspace` against the shared syntheti
 - **Parts:** every `ui.parts` switch, including the left tool rail.
 - **Overrides:** `--sc-accent`, `--sc-radius`, `--sc-control-height`, `--sc-font-size` set on the workspace root, which is
   what a host stylesheet or `ui.variables` does.
-- **Drawings and indicators:** sample drawings, undo, hold-to-draw, and a few indicators.
+- **Drawings and indicators:** sample drawings, the selection toolbar, undo, hold-to-draw, and a few indicators.
 - **Release check:** a checklist stored in the browser per package version, and a counter of window errors,
   unhandled rejections and `console.error` calls (it must stay at 0).
 

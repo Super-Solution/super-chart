@@ -1,4 +1,4 @@
-import { RealtimeSeries, RealtimeView, normalizeBars, normalizeBar, ENGINE_CHART_TYPES, buildEngineFrame, validateEngineLayout, validatePriceScale, EngineIndicators, DrawingStore, DRAWING_TYPES, projectDrawing, viewportLimitsForWidth, financialGeometry, type CandleMode, type MarketBar, type ChartDataPort, type EngineRenderOptions, type EngineFrame, type EngineLayout, type EngineInspection, type EngineIndicatorSpec, type IndicatorDefinition, type Drawing, type DrawingType } from '@supersolutions/super-chart-core'
+import { RealtimeSeries, RealtimeView, derivePrecision, normalizeBars, normalizeBar, ENGINE_CHART_TYPES, buildEngineFrame, validateEngineLayout, validatePriceScale, EngineIndicators, DrawingStore, DRAWING_TYPES, projectDrawing, viewportLimitsForWidth, financialGeometry, type CandleMode, type MarketBar, type ChartDataPort, type EngineRenderOptions, type EngineFrame, type EngineLayout, type EngineInspection, type EngineIndicatorSpec, type IndicatorDefinition, type Drawing, type DrawingType, type DrawingGeometry, type DrawingBounds } from '@supersolutions/super-chart-core'
 import { paintEngineFrame, paintEngineCursor } from './canvasRenderer'
 import { attachEngineGestures } from './gestures'
 import { attachDrawingInteraction, type ToolEnd } from './drawingInteraction'
@@ -10,6 +10,8 @@ import { DrawingImageRenderer } from './drawingMedia'
 
 export interface EngineChartOptions {
   count?: number
+  /** Ask for older history while this many bars are left of the view (default about 1.5 screens); 0 asks only at the edge. */
+  prefetchBars?: number
   /** Visible candle bounds for wheel, pinch, keyboard and programmatic navigation. */
   viewport?: { minBars?: number, maxBars?: number, rightPaddingBars?: number, minCandleSpacing?: number, maxCandleSpacing?: number }
   /** Optional quality budget per Canvas layer; default uses the device pixel ratio. */
@@ -97,6 +99,7 @@ export class EngineChart {
   private readonly layers = new Set<EngineLayer>()
   private readonly indicatorListeners = new Set<() => void>()
   private readonly layoutListeners = new Set<() => void>()
+  private readonly frameListeners = new Set<() => void>()
   private indicatorNoticeQueued = false
   private layoutNoticeQueued = false
   private inputId = 0
@@ -139,7 +142,7 @@ export class EngineChart {
     this.renderOptions = { ...options.render }
     this.validateRender(this.renderOptions)
     for (const spec of options.indicators ?? [{ name: 'MA', params: [20] }, { name: 'EMA', params: [21] }]) this.indicators.add(spec)
-    this.view = new RealtimeView(this.series, { count: options.count, mode: options.mode, continuous: true, limits: this.viewportOptions })
+    this.view = new RealtimeView(this.series, { count: options.count, mode: options.mode, continuous: true, limits: this.viewportOptions, prefetchBars: options.prefetchBars })
     this.onInspect = options.onInspect
     this.root = this.doc.createElement('div')
     this.root.style.cssText = 'position:relative;width:100%;height:100%;min-height:0;overflow:hidden;touch-action:none;'
@@ -232,8 +235,7 @@ export class EngineChart {
 
   private retryOlderAtEdge (): void {
     if (this.disposed) return
-    const snapshot = this.view.getSnapshot()
-    if (snapshot.viewport.i0 <= 0 && snapshot.hasMore) this.view.requestMore()
+    this.view.prefetchHistory()
   }
 
   updateBatch (bars: unknown, more?: boolean): void {
@@ -363,6 +365,22 @@ export class EngineChart {
    * Notified (once per microtask) after the layout changed, whether by `setLayout`, by dragging the price axis or a
    * pane divider, or by double-clicking the axis to fit it. Read `getLayoutOptions()` for the new state.
    */
+  /** Notified after each frame in which the plot or the drawings were repainted (a pan, a zoom, a data or drawing change). */
+  onFrame (listener: () => void): () => void {
+    this.assertLive(); this.frameListeners.add(listener)
+    return () => { this.frameListeners.delete(listener) }
+  }
+
+  /** One drawing as last painted (clipped to the plot) and the plot area, in the chart's pixels; null if it is not shown. */
+  getDrawingGeometry (id: string): { geometry: DrawingGeometry, plot: DrawingBounds } | null {
+    this.assertLive()
+    const frame = this.frame, value = this.drawings.getSnapshot().drawings.find(item => item.id === id)
+    if (frame === null || value === undefined) return null
+    const g = frame.model.geometry, plot = { left: g.left, top: g.top, right: g.right, bottom: g.bottom }
+    const geometry = projectDrawing(value, frame.project, plot, frame.drawingContext)
+    return geometry === null ? null : { geometry, plot }
+  }
+
   onLayoutChanged (listener: () => void): () => void {
     this.assertLive(); this.layoutListeners.add(listener)
     return () => { this.layoutListeners.delete(listener) }
@@ -543,7 +561,7 @@ export class EngineChart {
     if (this.frameId !== 0) this.win.cancelAnimationFrame(this.frameId)
     this.frameId = 0; this.inputs.clear(); this.frame = null; this.preview = null
     this.series.loadMore(() => {}); this.series.applyNewData([]); this.indicators.dispose()
-    this.indicatorListeners.clear(); this.layoutListeners.clear()
+    this.indicatorListeners.clear(); this.layoutListeners.clear(); this.frameListeners.clear()
     this.root.remove()
     this.canvas.width = this.canvas.height = this.drawingCanvas.width = this.drawingCanvas.height = this.cursorCanvas.width = this.cursorCanvas.height = 0
     const layers = [...this.layers]; this.layers.clear()
@@ -610,6 +628,14 @@ export class EngineChart {
     if (this.drawingCanvas.height !== height) this.drawingCanvas.height = height
   }
 
+  /** Prices on drawings (fibonacci levels, price labels) read like the axis: same precision, same scale mode. */
+  private drawingPriceFormat (): ((price: number) => string) | undefined {
+    const pane = this.frame?.panes[0]
+    if (pane === undefined) return undefined
+    const digits = this.renderOptions.pricePrecision ?? pane.frame.pricePrecision ?? derivePrecision(pane.frame.snapshot.bars)
+    return price => pane.scale.label(price, digits)
+  }
+
   private flush (): void {
     if (this.disposed) return
     const started = this.win.performance.now(), rect = this.root.getBoundingClientRect()
@@ -634,6 +660,7 @@ export class EngineChart {
       if (this.preview === null && this.drawings.getSnapshot().drawings.length === 0) this.sizeDrawingCanvas(false)
       return
     }
+    let repainted = false
     if (this.geometryDirty || this.frame === null) {
       const bars = this.series.getDataList()
       const indicators = this.indicators.compute(bars).map(result => ({ ...result, pane: result.pane === 'price' ? 'price' : `indicator:${result.paneId ?? result.id}` }))
@@ -646,6 +673,7 @@ export class EngineChart {
       this.counters.geometryBuilds++
     }
     if (this.paintDirty) {
+      repainted = true
       this.context.setTransform(this.canvas.width / this.width, 0, 0, this.canvas.height / this.height, 0, 0)
       this.context.clearRect(0, 0, this.width, this.height)
       for (const [i, pane] of this.frame.panes.entries()) {
@@ -661,6 +689,7 @@ export class EngineChart {
       this.paintDirty = false; this.counters.plotPaints++
     }
     if (this.drawingDirty) {
+      repainted = true
       const drawingState = this.drawings.getSnapshot()
       // Layer labels (agent chips, axis price tags) paint here too, so a chart with marks but no drawings still needs it.
       this.sizeDrawingCanvas(this.preview !== null || drawingState.drawings.length > 0 || this.hasLayerLabels())
@@ -673,7 +702,7 @@ export class EngineChart {
       this.frame.drawingContext = { bars: this.series.getDataList(), revision: this.series.version, visibleRange: [this.frame.snapshot.viewport.i0, this.frame.snapshot.viewport.i1] }
       const geometries = this.drawings.geometry(this.frame.project, g, this.frame.drawingContext).filter(item => item.id !== this.preview?.id)
       if (this.preview !== null) { const geometry = projectDrawing(this.preview, this.frame.project, g, this.frame.drawingContext); if (geometry !== null) geometries.push(geometry) }
-      paintDrawings(this.drawingContext, geometries, this.preview?.id ?? drawingState.selectedId, { theme: this.renderOptions.theme, bounds: g, imageRenderer: this.drawingImages, onInvalidate: this.invalidateDrawings })
+      paintDrawings(this.drawingContext, geometries, this.preview?.id ?? drawingState.selectedId, { theme: this.renderOptions.theme, bounds: g, formatPrice: this.drawingPriceFormat(), imageRenderer: this.drawingImages, onInvalidate: this.invalidateDrawings })
       // Labels above every line, the person's drawings included (layer.ts has the full order).
       this.paintLayerLabels(this.drawingContext)
       if (this.disposed) return
@@ -694,5 +723,6 @@ export class EngineChart {
     this.counters.frames++; this.counters.lastFrameMs = this.win.performance.now() - started
     if (this.counters.firstDataFrameMs === 0 && this.frame.snapshot.bars.length > 0) this.counters.firstDataFrameMs = this.counters.lastFrameMs
     this.counters.maxFrameMs = Math.max(this.counters.maxFrameMs, this.counters.lastFrameMs)
+    if (repainted) for (const listener of [...this.frameListeners]) { try { listener() } catch (error) { console.warn('[super-chart] Frame observer failed', error) } }
   }
 }
