@@ -125,7 +125,7 @@ test('SC-026: an identical setSymbol or setPeriod refetches nothing and keeps th
   const state = await page.evaluate(async (kit) => {
     const K = await import(kit)
     const periods = [{ multiplier: 1, timespan: 'hour', text: '1H' }, { multiplier: 4, timespan: 'hour', text: '4H' }]
-    const { pro, container, feed } = K.mountDeferred({ periods })
+    const { pro, container, feed } = K.mountDeferred({ periods, chart: { prefetchBars: 0 } }) // edge-only paging: this case holds the view still
     await K.until(() => feed.history.length === 1)
     feed.answer(0)
     await K.until(() => feed.log.length === 1)

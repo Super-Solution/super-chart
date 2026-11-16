@@ -3,6 +3,8 @@ import { viewportSpan, clampContinuousViewport as clampViewport, zoomContinuousV
 interface Geometry { left: number, plotWidth: number }
 interface Point { x: number, y: number }
 interface Frame { length: number, left: number, width: number, observed: Readonly<Viewport> }
+/** tan(22.5 degrees): the weaker wheel axis below this share of the stronger one is ignored. */
+const AXIS_SNAP = 0.4142
 interface Drag extends Frame { start: Viewport, x: number, distance: number }
 
 /** Browser input for the owned engine. Native hosts retain their native gestures. */
@@ -30,7 +32,7 @@ export function attachEngineGestures (
   let disposed = false, inspection = false
   let drag: Drag | null = null
   let pending: { next: Viewport, frame: Frame } | null = null
-  let wheel: { mode: 'pan' | 'zoom', target: Viewport, direction: number, frame: Frame, time: number, lastInput: number } | null = null
+  let wheel: { target: Viewport, pan: number, zoom: number, frame: Frame, time: number, lastInput: number } | null = null
   let raf: number | null = null, rectFrame: number | null = null
   let rect: DOMRect | null = null
   let velocity = 0, sample = { x: 0, time: 0 }
@@ -72,7 +74,6 @@ export function attachEngineGestures (
     if (drag !== null) drag.observed = snapshot.viewport
     if (coast !== null) coast.frame.observed = snapshot.viewport
     if (wheel !== null) wheel.frame.observed = snapshot.viewport
-    if (snapshot.viewport.i0 === 0 && snapshot.hasMore) view.requestMore()
   }
   const schedule = (): void => {
     if (disposed || raf !== null) return
@@ -233,25 +234,33 @@ export function attachEngineGestures (
     if (frame === null || editable(e.target) || pointers.size > 0) return
     const unitX = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? frame.width : 1
     const unitY = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? element.clientHeight : 1
-    const dx = e.deltaX * unitX, dy = e.deltaY * unitY, now = win.performance.now()
-    const locked = wheel !== null && now - wheel.lastInput < 160 ? wheel.mode : null
-    const mode = e.ctrlKey ? 'zoom' : e.shiftKey ? 'pan' : locked ?? (Math.abs(dx) > Math.abs(dy) * 1.2 ? 'pan' : 'zoom')
-    const raw = mode === 'pan' ? (e.shiftKey && dx === 0 ? dy : dx) : dy
-    const delta = Math.max(-400, Math.min(400, raw))
-    if (!Number.isFinite(delta) || delta === 0) return
+    const rawX = e.deltaX * unitX, rawY = e.deltaY * unitY, now = win.performance.now()
+    // Vertical wheel zooms, horizontal wheel pans, both at once do both (a diagonal trackpad swipe). There is no mode
+    // that sticks: each event is read on its own, so a vertical scale can turn into a horizontal move and back without
+    // a pause. Only a clearly dominant axis drops the other one (within 22.5 degrees of an axis, so eight directions),
+    // which keeps a nearly straight swipe from drifting.
+    let panInput = e.shiftKey && rawX === 0 ? rawY : rawX, zoomInput = e.shiftKey ? 0 : rawY
+    if (e.ctrlKey) panInput = 0
+    const major = Math.max(Math.abs(panInput), Math.abs(zoomInput)), minor = Math.min(Math.abs(panInput), Math.abs(zoomInput))
+    if (minor < major * AXIS_SNAP) { if (Math.abs(panInput) < Math.abs(zoomInput)) panInput = 0; else zoomInput = 0 }
+    const pan = Math.max(-400, Math.min(400, panInput)), zoom = Math.max(-400, Math.min(400, zoomInput))
+    if (!Number.isFinite(pan) || !Number.isFinite(zoom) || (pan === 0 && zoom === 0)) return
     e.preventDefault()
     if (coast !== null) { flush(); view.endNavigation() }
     coast = null; cancelHold(); inspection = false
-    const direction = Math.sign(delta)
-    if (wheel === null || !valid(wheel.frame) || wheel.direction !== direction || wheel.mode !== mode) {
-      if (wheel !== null && wheel.mode !== mode) view.endNavigation()
-      view.beginNavigation()
-      wheel = { mode, target: { ...frame.observed }, direction, frame, time: now, lastInput: now }
+    const panSign = Math.sign(pan), zoomSign = Math.sign(zoom)
+    // Reversing an axis starts from where the view is now, so the remaining glide in the old direction is dropped.
+    const reversed = wheel !== null && ((panSign !== 0 && wheel.pan !== 0 && wheel.pan !== panSign) || (zoomSign !== 0 && wheel.zoom !== 0 && wheel.zoom !== zoomSign))
+    if (wheel === null || !valid(wheel.frame) || reversed) {
+      if (wheel === null) view.beginNavigation()
+      wheel = { target: { ...frame.observed }, pan: 0, zoom: 0, frame, time: now, lastInput: now }
     }
+    if (panSign !== 0) wheel.pan = panSign
+    if (zoomSign !== 0) wheel.zoom = zoomSign
     const x = e.clientX - bounds().left
-    if (mode === 'zoom') wheel.target = zoomViewport(wheel.target, frame.length, Math.exp(-delta * 0.002), (x - frame.left) / frame.width, view.getLimits())
-    else {
-      const bars = delta / frame.width * Math.max(0, viewportSpan(wheel.target) - 1)
+    if (zoom !== 0) wheel.target = zoomViewport(wheel.target, frame.length, Math.exp(-zoom * 0.002), (x - frame.left) / frame.width, view.getLimits())
+    if (pan !== 0) {
+      const bars = pan / frame.width * Math.max(0, viewportSpan(wheel.target) - 1)
       wheel.target = clampViewport({ i0: wheel.target.i0 + bars, i1: wheel.target.i1 + bars }, frame.length, view.getLimits())
     }
     wheel.lastInput = now
@@ -281,8 +290,6 @@ export function attachEngineGestures (
       case '-': view.zoom(1 / 1.5); break
       case 'Home': view.followLatest(); break
     }
-    const snapshot = view.getSnapshot()
-    if (e.key !== 'Home' && snapshot.viewport.i0 === 0 && snapshot.hasMore) view.requestMore()
     e.preventDefault()
   }, false)
   const cleanup = (): void => {

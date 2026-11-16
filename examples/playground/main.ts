@@ -53,6 +53,8 @@ function mount (): void {
     chart: { indicators: [{ name: 'MA', params: [20] }, { name: 'VOL' }], drawByHolding: state.hold, render: { timeZone: 'UTC' } }
   })
   applyOverrides()
+  // For the browser console and scripted checks: `chartWorkspace.chart.drawings`, `chartWorkspace.chart.setDrawingTool('rectangle')`.
+  Object.assign(window, { chartWorkspace: workspace })
   workspace.on('loadResult', result => { statusLine.textContent = 'symbol' in result ? `${result.status}: ${result.symbol.ticker} ${result.period.text}` : 'by' in result ? `${result.status} by ${result.by.symbol.ticker} ${result.by.period.text}` : result.status })
   workspace.on('marketChange', change => { state.symbol = change.requested.symbol; state.period = change.requested.period; sync() })
 }
@@ -153,6 +155,9 @@ const CHECKS = [
   'Dark and light themes look right; the gold preset recolours accent and candles',
   'Left rail: group button arms a tool, the arrow opens the flyout, Escape closes it',
   'Draw a trend line, a rectangle and a brush stroke; the stroke is smooth and has no dots',
+  'Select a drawing: the floating toolbar appears; change colour, width and dash; lock disables editing; Clone and Delete work',
+  'Scroll vertically to zoom, then sideways to pan, and back: no sticking; drag the chart far left: history keeps loading ahead',
+  'Position long and short place with one click; box tools have eight handles; two-point tools also work click, move, click',
   'Magnet and Keep drawing work; Remove all is one undo step',
   'Every timeframe loads; EMPTY shows no data; BROKEN shows an error with Retry',
   'Phone 390 and Small 320: no horizontal scroll, controls reachable',

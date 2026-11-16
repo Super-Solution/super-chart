@@ -1,4 +1,4 @@
-import { type DrawingStore, drawingAnchorCount, drawingUsesText, type EngineFrame, type Drawing, type DrawingAnchor, type DrawingPoint, type DrawingType } from '@supersolutions/super-chart-core'
+import { type DrawingStore, drawingAnchorCount, moveDrawingHandle, drawingUsesText, type EngineFrame, type Drawing, type DrawingAnchor, type DrawingPoint, type DrawingType } from '@supersolutions/super-chart-core'
 import { attachFreehandDrawingInput } from './freehandDrawing'
 import { createDrawingImage, DrawingImageRenderer } from './drawingMedia'
 import { snapToBar } from './magnet'
@@ -81,6 +81,16 @@ export function attachDrawingInteraction (
     ...preview,
     anchors: preview.anchors.map((item, i) => i >= index ? next : item)
   })
+  /**
+   * A position tool is one click: the entry where the person clicks, the target 70 px beyond it and the stop 35 px
+   * behind it (long above, short below), both a little to the right. Three free points would only be valid in one order.
+   */
+  const positionAnchors = (current: EngineFrame, type: DrawingType, p: DrawingPoint): DrawingAnchor[] | null => {
+    const sign = type === 'position-short' ? 1 : -1
+    const entry = anchorAt(current, p), target = current.unproject(p.x + 140, p.y + sign * 70), stop = current.unproject(p.x + 140, p.y - sign * 35)
+    return anchor(entry) && anchor(target) && anchor(stop) ? [entry, target, stop] : null
+  }
+  const oneClick = (type: DrawingType): boolean => drawingAnchorCount(type) === 1 || type === 'position-long' || type === 'position-short'
   const editText = (preview: Drawing, original: Drawing | null): void => {
     editor?.close()
     const currentFrame = frame(), first = preview.anchors[preview.type === 'callout' ? 1 : 0]
@@ -177,12 +187,14 @@ export function attachDrawingInteraction (
     if (value.original === null) {
       const next = anchorAt(currentFrame, p)
       if (!anchor(next)) return false
-      anchors = drawingAnchorCount(value.preview.type) === 1
-        ? [next] : setPlacementAnchor(value.preview, value.anchorIndex ?? 1, next).anchors
+      const placed = oneClick(value.preview.type) && drawingAnchorCount(value.preview.type) > 1 ? positionAnchors(currentFrame, value.preview.type, p) : null
+      if (oneClick(value.preview.type) && drawingAnchorCount(value.preview.type) > 1 && placed === null) return false
+      anchors = placed ?? (drawingAnchorCount(value.preview.type) === 1
+        ? [next] : setPlacementAnchor(value.preview, value.anchorIndex ?? 1, next).anchors)
     } else if (value.anchorIndex !== null) {
       const next = anchorAt(currentFrame, p)
       if (!anchor(next)) return false
-      anchors = value.original.anchors.map((item, i) => i === value.anchorIndex ? next : item)
+      anchors = moveDrawingHandle(value.original, value.anchorIndex, next)
     } else {
       const moved: DrawingAnchor[] = []
       // Keep the grabbed pixels fixed when live prices change the scale during a drag.
@@ -227,7 +239,8 @@ export function attachDrawingInteraction (
       } else {
         let id: string
         do { id = `drawing-${Date.now().toString(36)}-${(++nextId).toString(36)}` } while (store.getSnapshot().drawings.some(item => item.id === id))
-        preview = { id, type: tool, anchors: Array.from({ length: drawingAnchorCount(tool) }, () => first), locked: false, hidden: false }
+        const placed = tool === 'position-long' || tool === 'position-short' ? positionAnchors(currentFrame, tool, p) : null
+        preview = { id, type: tool, anchors: placed ?? Array.from({ length: drawingAnchorCount(tool) }, () => first), locked: false, hidden: false }
       }
       drag = { pointerId: e.pointerId, start: p, original: null, preview, projected: [], anchorIndex: nextAnchor, moved: false }
       onPreview(preview)
@@ -281,15 +294,19 @@ export function attachDrawingInteraction (
       placement = { preview: { ...value.preview, anchors }, nextAnchor }; onPreview(placement.preview); return
     }
     const count = drawingAnchorCount(value.preview.type)
-    if (value.original === null && count > 2 && value.anchorIndex !== count - 1) {
-      placement = { preview: value.preview, nextAnchor: value.anchorIndex === null ? value.moved ? 2 : 1 : value.anchorIndex + 1 }
+    // Two ways to place a shape, as on other charts: press, drag and release, or click, move and click. A press that
+    // did not move starts the second way, and a second click on the very same spot waits for a real second point.
+    const placing = value.original === null && !oneClick(value.preview.type) && count >= 2 && value.anchorIndex !== count - 1 && (count > 2 || !value.moved)
+    const collapsed = value.original === null && count === 2 && value.anchorIndex === 1 && !value.moved &&
+      value.preview.anchors[0].timestamp === value.preview.anchors[1].timestamp && value.preview.anchors[0].price === value.preview.anchors[1].price
+    if (placing || collapsed) {
+      placement = { preview: value.preview, nextAnchor: collapsed ? 1 : value.anchorIndex === null ? value.moved ? 2 : 1 : value.anchorIndex + 1 }
       onPreview(value.preview); return
     }
     if (value.original === null && drawingUsesText(value.preview.type)) { editText(value.preview, null); return }
     if (value.original === null && value.preview.type === 'image') { if (value.moved) insertImage(value.preview); else onPreview(null); return }
     try {
       if (value.original === null) {
-        if (!value.moved && drawingAnchorCount(value.preview.type) === 2) return
         store.add(value.preview); store.select(value.preview.id); finishTool('completed')
       } else if (value.moved && !value.original.locked && current(value)) store.update(value.original.id, { anchors: value.preview.anchors })
     } finally { onPreview(null) }

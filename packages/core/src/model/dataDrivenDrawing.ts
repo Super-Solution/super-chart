@@ -184,17 +184,19 @@ function calculation (type: DataDrivenDrawingType, context: DrawingContext, from
 function position (value: Drawing, type: DataDrivenDrawingType, project: DrawingProjector, bounds: DrawingBounds, sink: DrawingGeometrySink): DataDrivenDrawingResult {
   if (value.anchors.length !== 3) return result(type, 'invalid-position')
   const [entry, target, stop] = value.anchors.map(anchor => anchor.price), long = type === 'position-long'
-  if (![entry, target, stop].every(Number.isFinite) || (long ? !(target > entry && stop < entry) : !(target < entry && stop > entry))) return result(type, 'invalid-position')
+  if (![entry, target, stop].every(Number.isFinite)) return result(type, 'invalid-position')
+  // A wrong-sided target/stop (for example after dragging a handle across the entry) is still drawn so the shape never
+  // vanishes under the pointer; the status tells the host it is not a valid position.
+  const ordered = long ? target > entry && stop < entry : target < entry && stop > entry
   const rewardRiskRatio = Math.abs(target - entry) / Math.abs(entry - stop)
-  if (!Number.isFinite(rewardRiskRatio)) return result(type, 'invalid-position')
   const percentage = (price: number): number | undefined => {
     const number = (price - entry) / Math.abs(entry) * 100
     return entry !== 0 && Number.isFinite(number) ? number : undefined
   }
   const targetChangePercent = percentage(target), stopChangePercent = percentage(stop)
-  const statistics = { rewardRiskRatio, ...(targetChangePercent === undefined ? {} : { targetChangePercent }), ...(stopChangePercent === undefined ? {} : { stopChangePercent }) }
+  const statistics = Number.isFinite(rewardRiskRatio) ? { rewardRiskRatio, ...(targetChangePercent === undefined ? {} : { targetChangePercent }), ...(stopChangePercent === undefined ? {} : { stopChangePercent }) } : undefined
   const points = value.anchors.map(anchor => project(anchor.timestamp, anchor.price))
-  if (!points.every(finitePoint)) return result(type, 'unprojectable', { statistics })
+  if (!points.every(finitePoint)) return result(type, 'unprojectable', statistics === undefined ? undefined : { statistics })
   const left = Math.min(...points.map(point => point.x)), right = Math.max(...points.map(point => point.x))
   for (const next of [points[1], points[2]]) sink.polygon([{ x: left, y: points[0].y }, { x: right, y: points[0].y }, { x: right, y: next.y }, { x: left, y: next.y }])
   for (const point of points) sink.line({ x: left, y: point.y }, { x: right, y: point.y })
@@ -203,9 +205,10 @@ function position (value: Drawing, type: DataDrivenDrawingType, project: Drawing
     if (within(place, bounds)) sink.text(place, text, price, 'center')
   }
   const percent = (number: number | undefined): string => number === undefined ? '' : ` ${number >= 0 ? '+' : ''}${number.toFixed(2)}%`
-  caption(points[0], `${long ? 'Long' : 'Short'} R/R ${rewardRiskRatio.toFixed(2)}`)
+  caption(points[0], `${long ? 'Long' : 'Short'}${statistics === undefined ? '' : ` R/R ${rewardRiskRatio.toFixed(2)}`}`)
   caption(points[1], `Target${percent(targetChangePercent)}`, target)
   caption(points[2], `Stop${percent(stopChangePercent)}`, stop)
+  if (!ordered || statistics === undefined) return result(type, 'invalid-position')
   return result(type, 'ready', { statistics })
 }
 

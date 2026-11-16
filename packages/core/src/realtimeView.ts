@@ -40,11 +40,22 @@ export class RealtimeView {
   private _limits: Readonly<Required<ViewportLimits>>
   private readonly _openingCount: number
   private readonly _historyLimit: number
+  private readonly _prefetchBars: number | undefined
   private readonly _past: NavigationState[] = []
   private readonly _future: NavigationState[] = []
   private _navigationStart: NavigationState | null = null
 
-  constructor (private readonly _series: RealtimeSeries, options: { count?: number, mode?: CandleMode, continuous?: boolean, limits?: ViewportLimits, navigationHistory?: number } = {}) {
+  constructor (private readonly _series: RealtimeSeries, options: {
+    count?: number, mode?: CandleMode, continuous?: boolean, limits?: ViewportLimits, navigationHistory?: number
+    /**
+     * Ask for older bars while this many bars are still left of the viewport, so the next page arrives before the
+     * person reaches the oldest loaded bar. `0` asks only at the very edge. Default: one and a half screens plus 50.
+     */
+    prefetchBars?: number
+  } = {}) {
+    const prefetch = options.prefetchBars
+    if (prefetch !== undefined && (!Number.isFinite(prefetch) || prefetch < 0)) throw new RangeError('prefetchBars must be zero or a positive number')
+    this._prefetchBars = prefetch
     const historyLimit = options.navigationHistory ?? 32
     if (!Number.isSafeInteger(historyLimit) || historyLimit < 0 || historyLimit > 100) throw new RangeError('Navigation history must be an integer from 0 to 100')
     this._historyLimit = historyLimit
@@ -92,6 +103,7 @@ export class RealtimeView {
     this._count = viewportSpan(next)
     if (before !== null) this._recordNavigation(before)
     this._publish()
+    this.prefetchHistory()
   }
 
   pan (bars: number): void {
@@ -182,6 +194,13 @@ export class RealtimeView {
 
   requestMore (): void { if (!this._disposed) this._series.requestMore() }
 
+  /** Ask for the next older page when the viewport is within the prefetch distance of the oldest loaded bar. */
+  prefetchHistory (): void {
+    if (this._disposed || !this._series.hasMore) return
+    const ahead = this._prefetchBars ?? Math.ceil(viewportSpan(this._viewport) * 1.5) + 50
+    if (this._viewport.i0 <= ahead) this._series.requestMore()
+  }
+
   dispose (): void {
     if (this._disposed) return
     this._disposed = true
@@ -243,6 +262,9 @@ export class RealtimeView {
     } else if (change.kind === 'prepend') {
       const added = this._length - oldLength
       this._viewport = this._clamp({ i0: this._viewport.i0 + added, i1: this._viewport.i1 + added })
+      // A page can leave the person still near the new edge (a fast fling, or a short page): keep filling ahead. Later,
+      // so the loader has finished handling this answer.
+      void Promise.resolve().then(() => { this.prefetchHistory() })
     } else {
       this._viewport = this._clamp(this._viewport)
     }
