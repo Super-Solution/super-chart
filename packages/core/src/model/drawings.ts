@@ -374,7 +374,10 @@ export function projectDrawing (value: Drawing, project: DrawingProjector, bound
     const box = { left: Math.min(a.x, b.x), top: Math.min(a.y, b.y), right: Math.max(a.x, b.x), bottom: Math.max(a.y, b.y) }
     if (box.left < bounds.right && box.right > bounds.left && box.top < bounds.bottom && box.bottom > bounds.top && box.left < box.right && box.top < box.bottom) primitives.push({ kind: 'image', source: value.image, bounds: box, clip: { ...bounds } })
   }
-  const handles = value.locked ? [] : points.flatMap((point, anchorIndex) => inside(point, bounds) ? [{ point, anchorIndex }] : [])
+  // A freehand stroke is one gesture, not a shape with a few corners: its hundreds of sample points are not editing
+  // handles (they painted as a dotted line of squares). The whole stroke moves as one.
+  const freehand = value.type === 'brush' || value.type === 'highlighter'
+  const handles = value.locked || freehand ? [] : points.flatMap((point, anchorIndex) => inside(point, bounds) ? [{ point, anchorIndex }] : [])
   return { id: value.id, type: value.type, locked: value.locked, primitives, handles, ...(analysis === undefined ? {} : { analysis }) }
 }
 

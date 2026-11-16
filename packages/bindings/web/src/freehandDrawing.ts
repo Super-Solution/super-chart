@@ -1,4 +1,5 @@
 import { MAX_FREEHAND_POINTS as MAX_POINTS, type DrawingAnchor, type DrawingPoint, type EngineFrame, type FreehandDrawing, type FreehandTool } from '@supersolutions/super-chart-core'
+import type { ToolEnd } from './drawingInteraction'
 
 export { projectFreehandDrawing } from '@supersolutions/super-chart-core'
 export type { FreehandDrawing, FreehandPrimitive, FreehandTool } from '@supersolutions/super-chart-core'
@@ -18,7 +19,7 @@ export function attachFreehandDrawingInput (
   store: FreehandStore,
   getFrame: () => EngineFrame | null,
   onPreview: (drawing: FreehandDrawing | null) => void,
-  onToolComplete?: () => void,
+  onToolComplete?: (reason: ToolEnd) => void,
   onInteractionStart?: () => void
 ): { setTool: (tool: FreehandTool | null) => void, dispose: () => void } {
   const doc = element.ownerDocument, win = doc.defaultView
@@ -120,14 +121,14 @@ export function attachFreehandDrawingInput (
     cancel()
     if (disposed || epoch !== generation || drawing === null || active === null || tool !== active.type || store.getSnapshot().drawings !== active.original || active.points.every(point => Math.hypot(point.x - active.points[0].x, point.y - active.points[0].y) < 2)) return
     // Store owns validation and a single undo transaction for the whole stroke.
-    store.add(drawing); store.select(drawing.id); tool = null; onToolComplete?.()
+    store.add(drawing); store.select(drawing.id); tool = null; onToolComplete?.('completed')
   })
   on('pointercancel', event => { if (stroke?.pointerId === (event as PointerEvent).pointerId) { consume(event); cancel() } })
   on('lostpointercapture', event => { if (stroke?.pointerId === (event as PointerEvent).pointerId) cancel() })
   on('keydown', event => {
     const key = event as KeyboardEvent
     if (key.key === 'Escape' && !key.isComposing && !editable(key.target) && (stroke !== null || tool !== null)) {
-      consume(key); cancel(); tool = null; onToolComplete?.()
+      consume(key); cancel(); tool = null; onToolComplete?.('cancelled')
     }
   })
   on('blur', event => { const next = (event as FocusEvent).relatedTarget; if (!(next instanceof win.Node) || !element.contains(next)) cancel() })

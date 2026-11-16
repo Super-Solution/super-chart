@@ -20,6 +20,23 @@ export interface DrawingRenderOptions {
   onInvalidate?: () => void
 }
 
+/**
+ * Trace a pointer path as one smooth curve: quadratic segments through the midpoints of consecutive samples, with the
+ * samples themselves as control points. The curve never overshoots the input, so a brush stroke follows the hand
+ * without the corners that a polyline of raw pointer samples shows. Two points stay a straight line.
+ */
+export function traceSmooth (ctx: Pick<CanvasRenderingContext2D, 'moveTo' | 'lineTo' | 'quadraticCurveTo'>, points: ReadonlyArray<{ readonly x: number, readonly y: number }>): void {
+  if (points.length === 0) return
+  ctx.moveTo(points[0].x, points[0].y)
+  if (points.length < 3) { for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y); return }
+  for (let i = 1; i < points.length - 1; i++) {
+    const a = points[i], b = points[i + 1]
+    ctx.quadraticCurveTo(a.x, a.y, (a.x + b.x) / 2, (a.y + b.y) / 2)
+  }
+  const last = points[points.length - 1]
+  ctx.lineTo(last.x, last.y)
+}
+
 /** Paint already-projected primitives in logical pixels; retained anchors remain untouched. */
 export function paintDrawings (
   ctx: CanvasRenderingContext2D,
@@ -65,8 +82,10 @@ export function paintDrawings (
           try {
             const clip = primitive.clip
             ctx.beginPath(); ctx.rect(clip.left, clip.top, clip.right - clip.left, clip.bottom - clip.top); ctx.clip()
+            // A selected stroke sits on a soft halo of the same ink, so it reads as chosen without per-point handles.
+            if (selected && primitive.opacity === 1) { ctx.lineWidth = primitive.width + 6; ctx.globalAlpha = 0.18; ctx.beginPath(); traceSmooth(ctx, primitive.points); ctx.stroke() }
             ctx.lineWidth = primitive.width; ctx.globalAlpha = primitive.opacity; ctx.beginPath()
-            primitive.points.forEach((point, i) => { if (i === 0) ctx.moveTo(point.x, point.y); else ctx.lineTo(point.x, point.y) })
+            traceSmooth(ctx, primitive.points)
             ctx.stroke()
           } finally { ctx.restore() }
         }
@@ -122,11 +141,11 @@ export function paintDrawings (
         ctx.fillText(text, primitive.position.x, primitive.position.y - 3)
       }
       if (!selected || geometry.locked) continue
-      // Square handles on the canvas colour with an ink edge: selection never recolours the drawing.
-      ctx.fillStyle = handleFill; ctx.lineWidth = 1
+      // Round handles on the canvas colour with an ink edge: selection never recolours the drawing.
+      ctx.fillStyle = handleFill; ctx.lineWidth = 1.5
       ctx.beginPath()
       for (const handle of geometry.handles) {
-        ctx.rect(Math.round(handle.point.x - radius) + 0.5, Math.round(handle.point.y - radius) + 0.5, radius * 2, radius * 2)
+        ctx.moveTo(handle.point.x + radius, handle.point.y); ctx.arc(handle.point.x, handle.point.y, radius, 0, Math.PI * 2)
       }
       ctx.fill(); ctx.stroke(); ctx.lineWidth = lineWidth
     }

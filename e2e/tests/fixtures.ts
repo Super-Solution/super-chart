@@ -28,3 +28,9 @@ export async function openHarness (page: Page, build: 'esm' | 'umd' = 'esm'): Pr
 export async function pageErrors (page: Page): Promise<string[]> {
   return await page.evaluate(() => (window as any).__errors as string[])
 }
+
+/** Arm a drawing tool through the workspace's own rail: open its group's flyout and choose the tool. */
+export async function pickTool (page: Page, scope: string, type: string): Promise<void> {
+  await page.locator(`${scope} .sc-rail-group[data-tools~="${type}"] .sc-rail-more`).click()
+  await page.locator(`${scope} .sc-flyout-item[data-tool="${type}"]`).click()
+}

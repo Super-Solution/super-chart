@@ -1,7 +1,11 @@
 import { type DrawingStore, drawingAnchorCount, drawingUsesText, type EngineFrame, type Drawing, type DrawingAnchor, type DrawingPoint, type DrawingType } from '@supersolutions/super-chart-core'
 import { attachFreehandDrawingInput } from './freehandDrawing'
 import { createDrawingImage, DrawingImageRenderer } from './drawingMedia'
+import { snapToBar } from './magnet'
 import { attachHoldDraw, type HoldDrawEvent, type ResolvedHoldDraw } from './holdDraw'
+
+/** How a tool ended: a drawing was placed (`completed`), or the person backed out (`cancelled`: Escape, leaving a text editor). */
+export type ToolEnd = 'completed' | 'cancelled'
 
 interface Drag {
   pointerId: number
@@ -21,10 +25,11 @@ export function attachDrawingInteraction (
   store: DrawingStore,
   getFrame: () => EngineFrame | null,
   onPreview: (drawing: Drawing | null) => void,
-  onToolComplete?: () => void,
+  onToolComplete?: (reason: ToolEnd) => void,
   onInteractionStart?: () => void,
   imageRenderer?: DrawingImageRenderer,
-  hold?: { options: () => ResolvedHoldDraw | null, onEvent: (event: HoldDrawEvent) => void }
+  hold?: { options: () => ResolvedHoldDraw | null, onEvent: (event: HoldDrawEvent) => void },
+  behavior?: { magnet: () => boolean }
 ): { setTool: (tool: DrawingType | null) => void, dispose: () => void } {
   const doc = element.ownerDocument, win = doc.defaultView
   if (win === null) return { setTool: () => {}, dispose: () => {} }
@@ -59,9 +64,14 @@ export function attachDrawingInteraction (
     if (media !== null) { media.abort.abort(); media.input.remove(); media = null }
     onPreview(null)
   }
-  const finishTool = (): void => {
+  const finishTool = (reason: ToolEnd = 'cancelled'): void => {
     if (tool === null) return
-    tool = null; onToolComplete?.()
+    tool = null; onToolComplete?.(reason)
+  }
+  /** The anchor under the pointer; with the magnet on, the open, high, low or close of a bar within reach of it. */
+  const anchorAt = (current: EngineFrame, p: DrawingPoint): DrawingAnchor | null => {
+    const next = current.unproject(p.x, p.y)
+    return next !== null && behavior?.magnet() === true ? snapToBar(current, p, next) : next
   }
   let freehandTool = false
   const freehand = attachFreehandDrawingInput(element, store, getFrame, onPreview, onToolComplete, onInteractionStart)
@@ -98,7 +108,7 @@ export function attachDrawingInteraction (
       } catch (error) {
         input.setCustomValidity(error instanceof Error ? error.message : 'Invalid drawing text'); input.reportValidity(); return
       }
-      close(); finishTool(); element.focus({ preventScroll: true })
+      close(); finishTool('completed'); element.focus({ preventScroll: true })
     }
     editor = { input, original, close }; element.append(input)
     input.addEventListener('input', () => { input.setCustomValidity(''); onPreview({ ...preview, text: input.value }) })
@@ -151,7 +161,7 @@ export function attachDrawingInteraction (
     const value = placement.preview, committed = value.anchors.slice(0, placement.nextAnchor).filter((point, i, all) => i === 0 || point.timestamp !== all[i - 1].timestamp || point.price !== all[i - 1].price)
     if (committed.length < 2) return
     placement = null
-    store.add({ ...value, anchors: committed }); store.select(value.id); onPreview(null); finishTool()
+    store.add({ ...value, anchors: committed }); store.select(value.id); onPreview(null); finishTool('completed')
   }
   const updatePreview = (event: PointerEvent): boolean => {
     const value = drag, currentFrame = frame()
@@ -165,12 +175,12 @@ export function attachDrawingInteraction (
     if (value.original !== null && !value.moved) return true
     let anchors: readonly DrawingAnchor[]
     if (value.original === null) {
-      const next = currentFrame.unproject(p.x, p.y)
+      const next = anchorAt(currentFrame, p)
       if (!anchor(next)) return false
       anchors = drawingAnchorCount(value.preview.type) === 1
         ? [next] : setPlacementAnchor(value.preview, value.anchorIndex ?? 1, next).anchors
     } else if (value.anchorIndex !== null) {
-      const next = currentFrame.unproject(p.x, p.y)
+      const next = anchorAt(currentFrame, p)
       if (!anchor(next)) return false
       anchors = value.original.anchors.map((item, i) => i === value.anchorIndex ? next : item)
     } else {
@@ -208,7 +218,7 @@ export function attachDrawingInteraction (
     const inside = p.x >= g.left && p.x <= g.right && p.y >= g.top && p.y <= g.bottom
     if (tool !== null) {
       if (!inside) return
-      const first = currentFrame.unproject(p.x, p.y)
+      const first = anchorAt(currentFrame, p)
       if (!anchor(first)) return
       let preview: Drawing, nextAnchor: number | null = null
       if (placement !== null) {
@@ -245,8 +255,8 @@ export function attachDrawingInteraction (
     const e = event as PointerEvent
     if (drag === null) {
       if (placement === null || editable(e.target)) return
-      const p = point(e), next = frame()?.unproject(p.x, p.y)
-      if (next !== undefined && anchor(next)) { placement.preview = setPlacementAnchor(placement.preview, placement.nextAnchor, next); onPreview(placement.preview) }
+      const p = point(e), currentFrame = frame(), next = currentFrame === null ? null : anchorAt(currentFrame, p)
+      if (next !== null && anchor(next)) { placement.preview = setPlacementAnchor(placement.preview, placement.nextAnchor, next); onPreview(placement.preview) }
       consume(e); return
     }
     consume(e)
@@ -264,7 +274,7 @@ export function attachDrawingInteraction (
     if (value.original === null && value.preview.type === 'any-waves') {
       const nextAnchor = value.anchorIndex === null ? value.moved ? 2 : 1 : value.anchorIndex + 1
       if (nextAnchor >= 256) {
-        store.add(value.preview); store.select(value.preview.id); onPreview(null); finishTool(); return
+        store.add(value.preview); store.select(value.preview.id); onPreview(null); finishTool('completed'); return
       }
       const anchors = value.preview.anchors.slice(0, nextAnchor)
       anchors.push(anchors[anchors.length - 1])
@@ -280,7 +290,7 @@ export function attachDrawingInteraction (
     try {
       if (value.original === null) {
         if (!value.moved && drawingAnchorCount(value.preview.type) === 2) return
-        store.add(value.preview); store.select(value.preview.id); finishTool()
+        store.add(value.preview); store.select(value.preview.id); finishTool('completed')
       } else if (value.moved && !value.original.locked && current(value)) store.update(value.original.id, { anchors: value.preview.anchors })
     } finally { onPreview(null) }
   })

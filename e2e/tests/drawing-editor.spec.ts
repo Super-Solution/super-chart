@@ -1,4 +1,4 @@
-import { test, expect, openHarness, pageErrors } from './fixtures'
+import { test, expect, openHarness, pageErrors, pickTool } from './fixtures'
 
 // Existing editor wrapper: retain model checks and restore its real shortcut
 // and inline-text checks. This does not restore its old colour/CSS assertions.
@@ -35,10 +35,9 @@ test('drawing editor preserves locking, immutable anchors, shortcuts and inline 
 
   // Existing drawing-editor-suite.js sections 19 and 22, with real keyboard
   // events and the owned textarea instead of upstream overlay-store hooks.
-  const root = page.locator('#drawing-editor [tabindex="0"]')
+  const root = page.locator('#drawing-editor .sc-chart [tabindex="0"]')
   const bounds = (await root.boundingBox())!
-  const tools = page.locator('#drawing-editor select[aria-label="Drawing tool"]')
-  await tools.selectOption('segment')
+  await pickTool(page, '#drawing-editor', 'segment')
   await page.mouse.move(bounds.x + 200, bounds.y + 160)
   await page.mouse.down()
   await page.mouse.move(bounds.x + 400, bounds.y + 160, { steps: 4 })
@@ -59,7 +58,7 @@ test('drawing editor preserves locking, immutable anchors, shortcuts and inline 
   expect(await exists()).toBe(true)
 
   await page.evaluate(() => { (window as any).promptCalled = false; window.prompt = () => { (window as any).promptCalled = true; return 'SHOULD NOT BE USED' } })
-  await tools.selectOption('note')
+  await pickTool(page, '#drawing-editor', 'note')
   await page.mouse.click(bounds.x + 350, bounds.y + 220)
   const editor = root.getByRole('textbox', { name: 'Drawing text', exact: true })
   expect(await page.evaluate(() => (window as any).promptCalled)).toBe(false)
