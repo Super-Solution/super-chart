@@ -74,6 +74,20 @@ for (const pkg of PACKAGES) {
   console.log(`ok   ${pkg.name}  ${names.length} files, ${(info.size / 1024).toFixed(0)} kB packed`)
 }
 
+// Examples are never published: not a workspace, and every example manifest is private. (The packed-contents check
+// above already fails if anything outside dist/ would ship.)
+const rootManifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+for (const pattern of rootManifest.workspaces ?? []) if (/^examples(\/|$)/.test(pattern)) fail(`workspaces includes ${pattern}: examples must stay out of the publish set`)
+if (existsSync(join(root, 'examples'))) {
+  for (const entry of readdirSync(join(root, 'examples'), { withFileTypes: true })) {
+    const manifestPath = join(root, 'examples', entry.name, 'package.json')
+    if (!entry.isDirectory() || !existsSync(manifestPath)) continue
+    const example = JSON.parse(readFileSync(manifestPath, 'utf8'))
+    if (example.private !== true) fail(`examples/${entry.name}/package.json must be "private": true`)
+    if (typeof example.name === 'string' && example.name.startsWith('@supersolutions/')) fail(`examples/${entry.name} must not take a published package name`)
+  }
+}
+
 // Plain-Node import of the entries that must not need a DOM.
 const NODE_SAFE = [['core', ''], ['core', '/native'], ['core', '/indicators'], ['superscript', ''], ['superscript', '/scripts']]
 for (const [dir, sub] of NODE_SAFE) {

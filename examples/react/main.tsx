@@ -1,9 +1,11 @@
 import { StrictMode, useCallback, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { SuperChart, useWorkspaceEvent, type ChartWorkspace } from '@supersolutions/super-chart-react'
-import { datafeed, SYMBOLS } from './feed'
+import { createFeed, MARKETS as SYMBOLS } from '../_shared/feed'
 import { ENVELOPE_SCHEMA, readEnvelope, restoreEnvelope, saveEnvelope } from '../workspace-persistence/persistence'
 
+// One feed for the whole app: a new feed object would be a new data source, and the chart would mount again.
+const { datafeed } = createFeed()
 const STORAGE_KEY = 'super-chart-example:workspace'
 const DEVICE = 'example-browser'
 

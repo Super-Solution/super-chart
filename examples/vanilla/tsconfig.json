@@ -11,5 +11,5 @@
     "resolveJsonModule": true,
     "types": []
   },
-  "include": ["main.ts"]
+  "include": ["main.ts", "../_shared/feed.ts"]
 }

@@ -1,21 +1,10 @@
 import { SuperChart, type ChartWorkspace } from '@supersolutions/super-chart-web'
 import { EngineAnnotations } from '@supersolutions/super-chart-web/annotations'
-import { symbolKey, type Datafeed, type MarketBar, type Period } from '@supersolutions/super-chart-core'
+import { symbolKey } from '@supersolutions/super-chart-core'
+import { createFeed, MARKETS } from '../_shared/feed'
 
-const symbol = { ticker: 'SYNTHETIC', name: 'Local example', pricePrecision: 2 }
-const periodMs = (period: Period): number => period.multiplier * (period.timespan === 'hour' ? 3_600_000 : 60_000)
-const datafeed: Datafeed = {
-  searchSymbols: async () => [symbol],
-  getHistoryKLineData: async (_symbol, period, _from, to) => {
-    const step = periodMs(period), end = Math.floor(to / step)
-    const bars: MarketBar[] = Array.from({ length: 200 }, (_, i) => {
-      const index = end - 200 + i, open = 100 + Math.sin(index / 11), close = 100 + Math.sin((index + 1) / 11)
-      return { timestamp: index * step, open, close, high: Math.max(open, close) + 1, low: Math.min(open, close) - 1, volume: 500 }
-    })
-    return { bars, noData: true }
-  },
-  subscribe: () => {}, unsubscribe: () => {}
-}
+const symbol = MARKETS[0]
+const { datafeed } = createFeed()
 
 export function mountExampleChart (container: HTMLElement): { chart: ChartWorkspace, dispose: () => void } {
   container.style.height = '600px'

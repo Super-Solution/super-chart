@@ -4,10 +4,9 @@
 take-profit level the person can drag (a request, not a change), hold-to-draw, and Save/Restore through
 [`../workspace-persistence`](../workspace-persistence/README.md).
 
-```bash
-npm run build            # at the repository root: the example imports the built packages
-npx vite                 # then open /examples/react/index.html (the root Vite config resolves the sources)
-```
+**Target:** react. **Run:** `npm run examples` at the repository root and pick *React* (or `npm run dev`, then open
+`/examples/react/index.html`). The root Vite config resolves the package sources, so no build is needed. Data comes
+from [`../_shared/feed.ts`](../_shared/feed.ts).
 
 What it demonstrates:
 

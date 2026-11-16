@@ -3,5 +3,5 @@
     "target": "ES2020", "module": "ESNext", "moduleResolution": "node", "lib": ["ES2020", "DOM"], "jsx": "react-jsx",
     "strict": true, "skipLibCheck": true, "noEmit": true, "esModuleInterop": true, "types": []
   },
-  "include": ["main.tsx", "feed.ts", "../workspace-persistence/persistence.ts"]
+  "include": ["main.tsx", "../_shared/feed.ts", "../workspace-persistence/persistence.ts"]
 }

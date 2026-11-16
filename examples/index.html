@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Super Chart examples</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#f4f5f7; --panel:#fff; --text:#16181d; --muted:#626a78; --line:#d9dce3; --accent:#5b45d6 }
+    @media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --panel:#161b22; --text:#e6e9ef; --muted:#9aa3b2; --line:#2b3340; --accent:#a99bff } }
+    * { box-sizing: border-box }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, sans-serif }
+    main { max-width: 760px; margin: 0 auto; padding: 24px 16px }
+    h1 { margin: 0 0 4px; font-size: 20px } p { color: var(--muted); margin: 4px 0 16px }
+    ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px }
+    li { padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel) }
+    a { color: var(--accent); font-weight: 600; text-decoration: none } a:hover { text-decoration: underline }
+    .tag { margin-left: 8px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 999px; font-size: 11px; color: var(--muted) }
+    li span { display: block; color: var(--muted); font-size: 13px }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Super Chart examples</h1>
+    <p>These run the sources in this checkout against one synthetic feed (<code>examples/_shared/feed.ts</code>). They are not published to npm. See <code>examples/README.md</code> to add one.</p>
+    <ul>
+      <li><a href="./playground/index.html">Playground</a><span class="tag">web</span><span>Every look and behaviour switch in one page, plus the pre-release checklist. Start here after a change.</span></li>
+      <li><a href="./vanilla/index.html">Vanilla</a><span class="tag">web</span><span>The smallest mount: <code>new SuperChart(container, …)</code>, a drawing and a host layer.</span></li>
+      <li><a href="./react/index.html">React</a><span class="tag">react</span><span><code>&lt;SuperChart&gt;</code> under Strict Mode, props, events, host annotations, saving.</span></li>
+    </ul>
+    <p>Not here, on purpose: <a href="https://github.com/Super-Solution/super-chart/blob/main/examples/README.md#targets">React Native, Vue, Svelte and others</a> are listed with what exists and what is missing.</p>
+  </main>
+</body>
+</html>
