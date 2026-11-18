@@ -3,7 +3,8 @@ import { ChartWorkspace, SUPER_CHART_COLORS, FONT_SANS } from '@supersolutions/s
 import { EngineAnnotations } from '@supersolutions/super-chart-web/annotations'
 import { symbolKey, type Datafeed as CoreDatafeed, type MarketBar as CoreBar, type Period as CorePeriod, type SymbolInfo as CoreSymbol } from '@supersolutions/super-chart-core'
 import { TECHNICAL_INDICATOR_DEFINITIONS, CLASSIC_INDICATOR_DEFINITIONS } from '@supersolutions/super-chart-core/indicators'
-import { CHART_CARD_KIND, CHART_LIMITS, chartCardKind, validateChartAnnotations, validateChartCardSpec, validatePeriod, validateSymbol, type CardMount, type CardMountContext, type ChartAnnotation, type ChartCardSpec, type ChartIndicator, type ChartType, type ChatPlugin, type Datafeed, type MarketBar, type Period, type PluginTool, type SymbolInfo } from '@supersolutions/super-protocol'
+import { CHART_CARD_KIND, CHART_LIMITS, chartCardKind, validateChartAnnotations, validateChartCardSpec, validatePeriod, validateSymbol, type CardMount, type CardMountContext, type ChartAnnotation, type ChartCardSpec, type ChartIndicator, type ChartType, type ChatPlugin, type Datafeed, type MarketBar, type Period, type SymbolInfo } from '@supersolutions/super-protocol'
+import { chartHostLook, readHostTheme, type AuthorizedPluginTool, type HostCardContext } from './host-theme'
 
 // Compile-time proof that the Apache protocol contracts and the core contracts are the same shapes.
 const sameFeed = (feed: Datafeed): CoreDatafeed => feed
@@ -164,7 +165,9 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
         host.style.cssText = `position:relative;width:100%;height:${spec.height ?? 420}px;overflow:hidden`
         const notes = doc.createElement('div')
         notes.setAttribute('role', 'status')
-        notes.style.cssText = `padding:4px 12px;font:12px ${FONT_SANS};color:${SUPER_CHART_COLORS[context.theme].inkMuted}`
+        const hostTheme = readHostTheme((context as HostCardContext).hostTheme)
+        const look = chartHostLook(hostTheme)
+        notes.style.cssText = `padding:4px 12px;font:12px ${hostTheme?.tokens['font-sans'] ?? FONT_SANS};color:${hostTheme?.tokens['text-muted'] ?? SUPER_CHART_COLORS[context.theme].inkMuted}`
         container.replaceChildren(host, notes)
         const engine = CHART_TYPE_TO_ENGINE[spec.chartType ?? 'candles']
         const periods = DEFAULT_PERIODS.some(p => p.multiplier === spec.period.multiplier && p.timespan === spec.period.timespan) ? DEFAULT_PERIODS : [spec.period, ...DEFAULT_PERIODS]
@@ -174,7 +177,8 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
           period: spec.period,
           periods,
           theme: context.theme,
-          chart: { mode: engine.mode, render: { chartType: engine.chartType as never } }
+          ui: { variables: look.variables },
+          chart: { mode: engine.mode, render: { ...look.render, chartType: engine.chartType as never } }
         })
         for (const definition of [...TECHNICAL_INDICATOR_DEFINITIONS, ...CLASSIC_INDICATOR_DEFINITIONS]) workspace.registerIndicator(definition)
         const annotations = new EngineAnnotations({ symbol: symbolKey(spec.symbol), theme: context.theme, pricePrecision: typeof spec.symbol.pricePrecision === 'number' ? spec.symbol.pricePrecision : undefined, onChange: () => { if (!destroyed) workspace.chart.requestPaint() } })
@@ -219,14 +223,15 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     }
 
     const render = (rawSpec: unknown, context: CardMountContext): void => {
-      const signature = JSON.stringify([rawSpec, context.theme, context.partial === true])
+      const themeKey = JSON.stringify(readHostTheme((context as HostCardContext).hostTheme))
+      const signature = JSON.stringify([rawSpec, context.theme, themeKey, context.partial === true])
       if (signature === shown) return
       shown = signature
       if (context.partial === true) { teardown(); dataSignature = ''; note(container, 'Chart is still being written…'); return }
       const valid = validateChartCardSpec(rawSpec)
       if (!valid.ok) { teardown(); dataSignature = ''; note(container, valid.error, 'alert'); return }
       const spec = rawSpec as ChartCardSpec
-      const key = dataKey(spec) + (spec.height ?? '') + context.theme + (spec.id ?? '')
+      const key = dataKey(spec) + (spec.height ?? '') + context.theme + themeKey + (spec.id ?? '')
       if (current !== null && key === dataSignature) {
         // Same market and data: apply only what changed, keep the viewport and drawings.
         const chart = current
@@ -252,15 +257,17 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
   }
 
   const chartId = { type: 'string', description: 'Which chart; omit for the most recent one on screen.' }
-  const tools: PluginTool[] = [
+  const tools: AuthorizedPluginTool[] = [
     {
       name: 'chart_state',
+      authority: 'read',
       description: 'Read a chart on screen: symbol, period, chart type, indicators, annotations, how many bars are loaded and whether replay is active.',
       inputSchema: { type: 'object', properties: { chartId } },
       run: async (input) => snapshot(find((input as { chartId?: unknown } | undefined)?.chartId))
     },
     {
       name: 'chart_bars',
+      authority: 'read',
       description: 'Read the most recent bars loaded in a chart (oldest first) so you can analyse the data the user is looking at. At most 500.',
       inputSchema: { type: 'object', properties: { chartId, limit: { type: 'integer', minimum: 1, maximum: 500 } } },
       run: async (input) => {
@@ -273,6 +280,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     },
     {
       name: 'chart_set_market',
+      authority: 'draft',
       description: 'Change the symbol and/or period of a chart on screen and wait for the data to load. Needs a datafeed that serves the new market.',
       inputSchema: { type: 'object', properties: { chartId, symbol: { type: 'object', required: ['ticker'] }, period: { type: 'object', required: ['multiplier', 'timespan', 'text'] } } },
       run: async (input) => {
@@ -295,6 +303,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     },
     {
       name: 'chart_annotate',
+      authority: 'draft',
       description: 'Mark a chart: level (horizontal price line), zone (price band over a time range) or marker (labelled point). Keys are stable: sending a key again replaces that mark. Returns which keys were applied and which the engine rejected, with a code.',
       inputSchema: {
         type: 'object',
@@ -313,6 +322,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     },
     {
       name: 'chart_clear_annotations',
+      authority: 'act',
       description: 'Remove marks from a chart: the listed keys, or every mark when no keys are given.',
       inputSchema: { type: 'object', properties: { chartId, keys: { type: 'array', items: { type: 'string' } } } },
       run: async (input) => {
@@ -328,6 +338,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     },
     {
       name: 'chart_indicators',
+      authority: 'draft',
       description: 'Add or remove indicators on a chart (for example MA, EMA, BOLL, VOL, MACD, RSI, KDJ and the expanded catalogue). Returns the indicators now shown and the names available.',
       inputSchema: {
         type: 'object',
@@ -365,6 +376,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     },
     {
       name: 'chart_replay',
+      authority: 'draft',
       description: 'Bar replay on a chart: "start" (optionally at a bar index), "step" forward or back by delta bars, or read the current state.',
       inputSchema: { type: 'object', required: ['action'], properties: { chartId, action: { enum: ['start', 'step', 'state'] }, at: { type: 'integer', minimum: 0 }, delta: { type: 'integer' } } },
       run: async (input) => {
@@ -389,7 +401,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     manifest: {
       manifestVersion: 0,
       name: '@supersolutions/super-chart-chat-plugin',
-      version: '0.1.0',
+      version: '0.4.0',
       license: 'GPL-3.0-or-later',
       capabilities: [
         { id: 'chart.card', surface: 'card', cardKind: CHART_CARD_KIND },
