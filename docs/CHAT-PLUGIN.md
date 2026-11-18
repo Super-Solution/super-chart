@@ -10,13 +10,15 @@ agent acts through tools, the user acts on the chart itself.
 import { installChatPlugin } from '@supersolutions/super-chat-plugin'
 import { createChartChatPlugin } from '@supersolutions/super-chart-chat-plugin'
 
-installChatPlugin(registry, createChartChatPlugin({
+const plugin = createChartChatPlugin({
   resolveFeed: id => feeds[id],            // optional
   onChange: (chartId, snapshot) => save(chartId, snapshot) // optional
-}))
+})
+installChatPlugin(cardRegistry, plugin, { tools: toolRegistry })
 ```
 
-`installChatPlugin` refuses an invalid plugin or a card-kind collision.
+`installChatPlugin` refuses an invalid plugin or a card-kind collision. Pass `tools` to offer the agent the seven
+tools below; without it only the card is installed.
 
 ## The card
 
@@ -45,15 +47,18 @@ One bad indicator is reported under the chart and does not blank it.
 
 ## Tools
 
-| Tool | Does |
-| --- | --- |
-| `chart_state` | symbol, period, chart type, indicators, annotations, bar count, replay |
-| `chart_bars` | the last N loaded bars (≤ 500) |
-| `chart_set_market` | change symbol/period (needs a feed; inline-bar cards refuse) |
-| `chart_annotate` | merge or replace marks by key; returns `applied` / `rejected` with codes |
-| `chart_clear_annotations` | remove some or all marks |
-| `chart_indicators` | add/remove indicators; returns what is shown and what is available |
-| `chart_replay` | start, step, or read bar replay |
+| Tool | Authority | Does |
+| --- | --- | --- |
+| `chart_state` | `read` | symbol, period, chart type, indicators, annotations, bar count, replay |
+| `chart_bars` | `read` | the last N loaded bars (≤ 500) |
+| `chart_set_market` | `draft` | change symbol/period (needs a feed; inline-bar cards refuse) |
+| `chart_annotate` | `draft` | merge or replace the agent's marks by key; returns `applied` / `rejected` with codes |
+| `chart_indicators` | `draft` | add/remove indicators; returns what is shown and what is available |
+| `chart_replay` | `draft` | start, step, or read bar replay |
+| `chart_clear_annotations` | `act` | remove some or all of the agent's marks |
+
+Authority decides which capability presets offer a tool: `read` is in `observer`, `draft` and `executor`; `draft`
+is in `draft` and `executor`; `act` is in `executor` only. `draft` tools change only the chart on screen.
 
 Every tool takes an optional `chartId` (default: the most recent chart on screen)
 and fails with a message that lists the charts on screen.
@@ -65,5 +70,14 @@ marker rendering, all seven tools, indicator rejection, replay (marks beyond the
 replay cursor are hidden by the engine), chart-type change, destroy releasing the
 chart id. Not covered: `feed` references against a live feed, `chart_set_market`
 against a real multi-symbol feed, long-running streaming updates, screen readers.
-Known gap: the workspace toolbars are dark-styled; `theme: light` themes the canvas
-and annotation layers only.
+
+## Remounting
+
+A chat host may remount a card, for example when a turn finishes. The agent's marks and indicators come back with
+the same card. A changed market and the replay position do not: the card returns to the market in its spec.
+
+## Theme
+
+The card follows `theme` (`light` or `dark`). When the host also passes `hostTheme`, the workspace chrome uses the
+host's colours and fonts, and the canvas uses them where they are six-digit hex colours. A changed theme remounts
+the chart.
