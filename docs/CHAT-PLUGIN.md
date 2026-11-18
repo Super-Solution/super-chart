@@ -71,6 +71,11 @@ replay cursor are hidden by the engine), chart-type change, destroy releasing th
 chart id. Not covered: `feed` references against a live feed, `chart_set_market`
 against a real multi-symbol feed, long-running streaming updates, screen readers.
 
+## Remounting
+
+A chat host may remount a card, for example when a turn finishes. The agent's marks and indicators come back with
+the same card. A changed market and the replay position do not: the card returns to the market in its spec.
+
 ## Theme
 
 The card follows `theme` (`light` or `dark`). When the host also passes `hostTheme`, the workspace chrome uses the

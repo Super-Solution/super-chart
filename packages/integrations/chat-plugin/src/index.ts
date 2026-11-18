@@ -70,6 +70,8 @@ interface Mounted {
   destroy: () => void
 }
 
+const MAX_KEPT_CHARTS = 64
+
 const dataKey = (spec: ChartCardSpec): string => {
   const bars = spec.bars
   const data = bars === undefined ? `feed:${spec.feed?.id ?? ''}` : `bars:${bars.length}:${bars[0]?.timestamp}:${bars[bars.length - 1]?.timestamp}:${bars[bars.length - 1]?.close}`
@@ -90,6 +92,21 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
   const charts = new Map<string, Mounted>()
   let counter = 0
   let latest: string | null = null
+  // A chat host may remount a card at any time (a finished turn does). What the agent put on a chart is kept here, so the
+  // same card comes back with it. A card whose data or own marks changed starts from its spec.
+  const kept = new Map<string, { source: string, annotations: ChartAnnotation[], indicators: ChartIndicator[] }>()
+  const keptKey = (spec: ChartCardSpec): string => spec.id ?? dataKey(spec)
+  const keptSource = (spec: ChartCardSpec): string => JSON.stringify([dataKey(spec), spec.annotations ?? [], spec.indicators ?? []])
+  const remember = (chart: Mounted): void => {
+    const key = keptKey(chart.spec)
+    kept.delete(key)
+    kept.set(key, {
+      source: keptSource(chart.spec),
+      annotations: [...chart.annotationsByKey.values()],
+      indicators: chart.workspace.getState().indicators.map(item => ({ name: item.name, params: [...item.params] }))
+    })
+    if (kept.size > MAX_KEPT_CHARTS) kept.delete(kept.keys().next().value as string)
+  }
 
   const snapshot = (chart: Mounted): ChartSnapshot => {
     const state = chart.workspace.getState()
@@ -200,8 +217,11 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
         const loaded = await workspace.ready
         if (mine !== epoch || destroyed) return
         if (loaded.status === 'error') { notes.textContent = `The chart data could not be loaded: ${loaded.message}`; return }
-        applyIndicators(chart, spec.indicators ?? [])
-        if (spec.annotations !== undefined && spec.annotations.length > 0) applyAnnotations(chart, spec.annotations, true)
+        const restored = kept.get(keptKey(spec))
+        const resume = restored?.source === keptSource(spec) ? restored : undefined
+        applyIndicators(chart, resume?.indicators ?? spec.indicators ?? [])
+        const marks = resume?.annotations ?? spec.annotations ?? []
+        if (marks.length > 0) applyAnnotations(chart, marks, true)
         changed(chart)
       } catch (error) {
         if (destroyed || mine !== epoch) return
@@ -316,6 +336,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
         if (problem !== null) throw new TypeError(problem)
         const chart = find(id)
         const result = applyAnnotations(chart, annotations as ChartAnnotation[], replace === true)
+        remember(chart)
         changed(chart)
         return { chartId: chart.id, ...result, total: chart.annotationsByKey.size }
       }
@@ -332,6 +353,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
         const drop = new Set(keys as string[] | undefined)
         const keep = keys === undefined ? [] : [...chart.annotationsByKey.values()].filter(item => !drop.has(item.key))
         applyAnnotations(chart, keep, true)
+        remember(chart)
         changed(chart)
         return { chartId: chart.id, remaining: chart.annotationsByKey.size }
       }
@@ -370,6 +392,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
         const fresh = new Set(added)
         for (const name of (remove as string[] | undefined) ?? []) for (const item of engine.listIndicators().filter(entry => entry.name === name && !fresh.has(entry.id))) engine.removeIndicator(item.id)
         chart.notes.textContent = ''
+        remember(chart)
         changed(chart)
         return { chartId: chart.id, indicators: snapshot(chart).indicators, available }
       }
