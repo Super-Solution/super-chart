@@ -3,8 +3,10 @@ import { ChartWorkspace, SUPER_CHART_COLORS, FONT_SANS } from '@supersolutions/s
 import { EngineAnnotations } from '@supersolutions/super-chart-web/annotations'
 import { symbolKey, type Datafeed as CoreDatafeed, type MarketBar as CoreBar, type Period as CorePeriod, type SymbolInfo as CoreSymbol } from '@supersolutions/super-chart-core'
 import { TECHNICAL_INDICATOR_DEFINITIONS, CLASSIC_INDICATOR_DEFINITIONS } from '@supersolutions/super-chart-core/indicators'
-import { CHART_CARD_KIND, CHART_LIMITS, chartCardKind, validateChartAnnotations, validateChartCardSpec, validatePeriod, validateSymbol, type CardMount, type CardMountContext, type ChartAnnotation, type ChartCardSpec, type ChartIndicator, type ChartType, type ChatPlugin, type Datafeed, type MarketBar, type Period, type SymbolInfo } from '@supersolutions/super-protocol'
-import { chartHostLook, readHostTheme, type AuthorizedPluginTool, type HostCardContext } from './host-theme'
+import { readHostTheme, CHART_CARD_KIND, CHART_LIMITS, chartCardKind, validateChartAnnotations, validateChartCardSpec, validatePeriod, validateSymbol, type CardMount, type CardMountContext, type ChartAnnotation, type ChartCardSpec, type ChartIndicator, type ChartType, type ChatPlugin, type Datafeed, type MarketBar, type Period, type SymbolInfo, type PluginTool, type PluginToolAuthority } from '@supersolutions/super-protocol'
+import { chartHostLook } from './host-theme'
+
+type AuthorizedPluginTool = PluginTool & { authority: PluginToolAuthority }
 
 // Compile-time proof that the Apache protocol contracts and the core contracts are the same shapes.
 const sameFeed = (feed: Datafeed): CoreDatafeed => feed
@@ -182,7 +184,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
         host.style.cssText = `position:relative;width:100%;height:${spec.height ?? 420}px;overflow:hidden`
         const notes = doc.createElement('div')
         notes.setAttribute('role', 'status')
-        const hostTheme = readHostTheme((context as HostCardContext).hostTheme)
+        const hostTheme = readHostTheme(context.hostTheme)
         const look = chartHostLook(hostTheme)
         notes.style.cssText = `padding:4px 12px;font:12px ${hostTheme?.tokens['font-sans'] ?? FONT_SANS};color:${hostTheme?.tokens['text-muted'] ?? SUPER_CHART_COLORS[context.theme].inkMuted}`
         container.replaceChildren(host, notes)
@@ -243,7 +245,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     }
 
     const render = (rawSpec: unknown, context: CardMountContext): void => {
-      const themeKey = JSON.stringify(readHostTheme((context as HostCardContext).hostTheme))
+      const themeKey = JSON.stringify(readHostTheme(context.hostTheme))
       const signature = JSON.stringify([rawSpec, context.theme, themeKey, context.partial === true])
       if (signature === shown) return
       shown = signature
@@ -424,7 +426,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     manifest: {
       manifestVersion: 0,
       name: '@supersolutions/super-chart-chat-plugin',
-      version: '0.4.0',
+      version: '0.5.0',
       license: 'GPL-3.0-or-later',
       capabilities: [
         { id: 'chart.card', surface: 'card', cardKind: CHART_CARD_KIND },
