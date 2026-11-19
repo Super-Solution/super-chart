@@ -1,7 +1,7 @@
 # Local workspace dependencies
 
 The four chart packages depend only downwards; the chat plugin additionally uses
-`@supersolutions/super-protocol@0.1.0`. That package has been on npm since 2026-11-15
+`@supersolutions/super-protocol@0.2.0`. That package is on npm
 (released from `Super-Solution/super-protocol`), and `package-lock.json` pins it, so
 `npm ci` is all you need. The section below is only for building against an unreleased
 protocol checkout.
