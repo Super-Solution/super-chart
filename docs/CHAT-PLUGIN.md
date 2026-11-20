@@ -52,7 +52,7 @@ One bad indicator is reported under the chart and does not blank it.
 | `chart_state` | `read` | symbol, period, chart type, indicators, annotations, bar count, replay |
 | `chart_bars` | `read` | the last N loaded bars (≤ 500) |
 | `chart_set_market` | `draft` | change symbol/period (needs a feed; inline-bar cards refuse) |
-| `chart_annotate` | `draft` | merge or replace the agent's marks by key; returns `applied` / `rejected` with codes |
+| `chart_annotate` | `draft` | merge or replace the agent's marks by key; returns `applied` / `rejected` with codes, and a `ref:` link per mark |
 | `chart_indicators` | `draft` | add/remove indicators; returns what is shown and what is available |
 | `chart_replay` | `draft` | start, step, or read bar replay |
 | `chart_clear_annotations` | `act` | remove some or all of the agent's marks |
@@ -81,3 +81,57 @@ the same card. A changed market and the replay position do not: the card returns
 The card follows `theme` (`light` or `dark`). When the host also passes `hostTheme`, the workspace chrome uses the
 host's colours and fonts, and the canvas uses them where they are six-digit hex colours. A changed theme remounts
 the chart.
+
+## Marks the agent can draw
+
+`chart_annotate` takes seven kinds. The first three are basic; the rest are drawn by the chart's templates and every
+anchor of them needs a price.
+
+| Kind | Anchors | Draws |
+| --- | --- | --- |
+| `level` | 1 | a horizontal price line |
+| `zone` | 2 | a price band over a time range |
+| `marker` | 1 | a labelled point |
+| `trend` | 2 | a line through two points |
+| `ray` | 2 | the same line, extended to the right |
+| `fibonacci` | 2 | retracement levels between two points; `params.levels` is a comma list such as `"0,0.5,1"` |
+| `plan` | 3 | entry, target and stop in that order, with the risk-reward ratio |
+
+Scalar `params` are accepted on `trend`, `ray`, `fibonacci` and `plan` only. A mark the engine refuses is reported
+under `rejected` with its code; the others still apply.
+
+## Words that point at the chart
+
+A message can point at a mark, and the reader sees it light up. The agent writes a Markdown link whose address is a
+card reference (`ref.ts` in super-protocol, `docs/CARD-REFS.md` there):
+
+```md
+Price held [the support level](ref:btc?key=support) twice. [The March rally](ref:btc?from=1772323200000&to=1774915200000&low=92&high=110) ...
+```
+
+`chart_annotate` and `chart_state` return the link for each mark in `refs`. A chart whose id has characters a
+reference cannot carry (a space, say) has no `refs`; give the card a plain id such as `btc`.
+
+The card answers `ref(ref, event)` on its mount handle:
+
+| Link | `enter` (hover, focus) | `activate` (click, Enter, tap) |
+| --- | --- | --- |
+| `ref:btc` | nothing to show; answers with the chart's name | focuses the chart and scrolls the card into view |
+| `ref:btc?key=support` | draws that mark bolder, with a glow | the same, and brings it into view if the view has moved away |
+| `ref:btc?from=<ms>&to=<ms>` | shades that time range (a violet band) | the same, and centres the range if it is not in view |
+| `...&low=<price>&high=<price>` | the band covers that price range only | the same |
+
+`leave`, or `ref(null, ...)`, clears every highlight. A highlight never changes the stored marks or the agent's state.
+The answer is `{ ok: true, label }`, where `label` is a short phrase a host can announce, or `{ ok: false, code, reason }`:
+`ref_no_match` when there is no such mark or the range is outside the loaded bars, `ref_invalid` when the link's params
+do not make sense for a chart. Only bars already loaded can be shown; `activate` never fetches history. A range wider
+than the view is shaded where it is visible and centred, not zoomed to fit.
+
+Under the card: `EngineAnnotations.setEmphasis(keys, layer?)`, `setRangeHighlight(range)` and `getAnnotationSpan(key)`
+do the drawing and are available to any host that uses the web package directly.
+
+### Protocol 0.3.0
+
+The reference shapes and the four new kinds are in super-protocol 0.3.0, which is not on npm yet, so the plugin carries
+a marked copy in `src/protocol-next.ts` (the same approach as `host-theme.ts`). Delete it and import from the protocol
+once 0.3.0 is published.
