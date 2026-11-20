@@ -60,6 +60,10 @@ export interface EngineAnnotationSnapshot {
   readonly bounds: EngineAnnotationBounds | null
   readonly annotations: readonly EngineProjectedAnnotation[]
 }
+/** A stretch of time, and optionally of price, that the chart can mark without a stored annotation. Times are milliseconds. */
+export interface EngineAnnotationRange { readonly from: number, readonly to: number, readonly low?: number, readonly high?: number }
+/** Where an annotation sits and whether the current view shows it. Prices are present when every anchor has one. */
+export interface EngineAnnotationSpan extends EngineAnnotationRange { readonly status: EngineProjectedAnnotation['status'] }
 export interface EngineAnnotationsOptions {
   /** Use a stable market identity, including venue/network when tickers collide. */
   symbol: string | null
@@ -234,6 +238,8 @@ export class EngineAnnotations implements EngineLayer {
   private currentTheme: EngineAnnotationTheme
   private frame: EngineFrame | null = null
   private ghost: { id: string, price: number } | null = null
+  private emphasis: { keys: ReadonlySet<string>, layer: string | undefined } | null = null
+  private range: EngineAnnotationRange | null = null
   private version = 0
   private disposed = false
   private snapshot: EngineAnnotationSnapshot
@@ -376,10 +382,12 @@ export class EngineAnnotations implements EngineLayer {
       for (const annotation of annotations) {
         if (annotation.status !== 'visible') continue
         this.applyTone(context, annotation)
+        const emphasised = this.isEmphasised(annotation)
+        if (emphasised) { context.shadowColor = colors(this.currentTheme).violet; context.shadowBlur = 10; context.lineWidth = 3 }
         // The assistant's marks are dashed, so they never pass for the person's own drawings.
         context.setLineDash([4, 3])
         if (annotation.figures !== undefined) {
-          this.paintFigures(context, annotation, bounds)
+          this.paintFigures(context, annotation, bounds, emphasised)
         } else if (annotation.spec.kind === 'level' && annotation.point !== undefined) {
           const y = Math.round(annotation.point.y) + 0.5
           context.beginPath(); context.moveTo(bounds.left, y); context.lineTo(bounds.right, y); context.stroke()
@@ -390,9 +398,11 @@ export class EngineAnnotations implements EngineLayer {
           context.fillRect(rect.x, rect.y, rect.width, rect.height); context.globalAlpha = 1
           context.lineWidth = 1; context.strokeRect(Math.round(rect.x) + 0.5, Math.round(rect.y) + 0.5, Math.round(rect.width), Math.round(rect.height)); context.lineWidth = 1.5
         } else if (annotation.point !== undefined) {
-          context.fillStyle = context.strokeStyle; diamond(context, annotation.point.x, annotation.point.y, 4.5)
+          context.fillStyle = context.strokeStyle; diamond(context, annotation.point.x, annotation.point.y, emphasised ? 7 : 4.5)
         }
+        if (emphasised) { context.shadowBlur = 0; context.shadowColor = 'transparent'; context.lineWidth = 1.5 }
       }
+      this.paintRange(context, bounds)
       const ghost = this.ghost, source = ghost === null ? undefined : annotations.find(item => item.id === ghost.id)
       if (ghost !== null && source !== undefined) {
         const projected = this.frame?.project(source.spec.anchors[0].time, ghost.price)
@@ -402,6 +412,27 @@ export class EngineAnnotations implements EngineLayer {
           context.beginPath(); context.moveTo(bounds.left, y); context.lineTo(bounds.right, y); context.stroke()
         }
       }
+    } finally { context.restore() }
+  }
+
+  /** The shaded stretch a sentence points at, over the marks and under their words. */
+  private paintRange (context: CanvasRenderingContext2D, bounds: EngineAnnotationBounds): void {
+    const range = this.range, frame = this.frame
+    if (range === null || frame === null) return
+    const anchorPrice = range.high ?? frame.snapshot.bars[frame.snapshot.bars.length - 1]?.close
+    if (anchorPrice === undefined) return
+    const a = frame.project(range.from, anchorPrice), b = frame.project(range.to, range.low ?? anchorPrice)
+    if (a === null || b === null || ![a.x, a.y, b.x, b.y].every(Number.isFinite)) return
+    const left = Math.max(bounds.left, Math.min(a.x, b.x)), right = Math.min(bounds.right, Math.max(a.x, b.x))
+    const top = range.low === undefined ? bounds.top : Math.max(bounds.top, Math.min(a.y, b.y))
+    const bottom = range.low === undefined ? bounds.bottom : Math.min(bounds.bottom, Math.max(a.y, b.y))
+    if (right < left || bottom < top) return
+    const color = colors(this.currentTheme).violet
+    context.save()
+    try {
+      context.fillStyle = color; context.strokeStyle = color; context.setLineDash([]); context.shadowColor = color; context.shadowBlur = 8
+      context.globalAlpha = 0.14; context.fillRect(left, top, Math.max(1, right - left), bottom - top)
+      context.globalAlpha = 0.9; context.lineWidth = 1.5; context.strokeRect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.max(1, Math.round(right - left)), Math.round(bottom - top))
     } finally { context.restore() }
   }
 
@@ -466,6 +497,7 @@ export class EngineAnnotations implements EngineLayer {
         left = Math.max(bounds.left + 4, Math.min(left, bounds.right - width - 4))
         top = Math.max(bounds.top + 2, Math.min(top, bounds.bottom - 20))
         context.fillStyle = palette.violetTint; context.fillRect(left, top, width, 18)
+        if (this.isEmphasised(annotation)) { context.strokeStyle = tone; context.lineWidth = 1.5; context.strokeRect(left + 0.5, top + 0.5, width - 1, 17) }
         context.fillStyle = palette.violet; diamond(context, left + 10, top + 9, 3)
         context.fillStyle = palette.ink; context.fillText(text, left + 19, top + 9.5, width - 25)
       }
@@ -528,6 +560,44 @@ export class EngineAnnotations implements EngineLayer {
     this.project()
   }
 
+  /**
+   * Draws the marks with these keys bolder and with a glow, so a sentence can point at them. `layer` limits it to one layer;
+   * without it a key matches in every layer. Pass null to return to normal. It never changes a spec.
+   */
+  setEmphasis (keys: readonly string[] | null, layer?: string): void {
+    this.assertLive()
+    if (layer !== undefined) named(layer, ENGINE_ANNOTATION_LIMITS.keyLength, 'layer')
+    const next = keys === null || keys.length === 0 ? null : { keys: new Set(keys.slice(0, ENGINE_ANNOTATION_LIMITS.entriesPerScope).filter(key => typeof key === 'string')), layer }
+    const same = next === null ? this.emphasis === null : this.emphasis !== null && this.emphasis.layer === next.layer && this.emphasis.keys.size === next.keys.size && [...next.keys].every(key => this.emphasis?.keys.has(key) === true)
+    if (same) return
+    this.emphasis = next; this.onChange?.()
+  }
+
+  /** Shades a stretch of time (and of price, when `low` and `high` are given) without storing an annotation. Pass null to remove it. */
+  setRangeHighlight (range: EngineAnnotationRange | null): void {
+    this.assertLive()
+    if (range !== null && !(Number.isFinite(range.from) && Number.isFinite(range.to) && range.from <= range.to && (range.low === undefined) === (range.high === undefined) && (range.low === undefined || (Number.isFinite(range.low) && Number.isFinite(range.high!) && range.low <= range.high!)))) throw new RangeError('Invalid annotation range')
+    const same = range === null ? this.range === null : this.range !== null && this.range.from === range.from && this.range.to === range.to && this.range.low === range.low && this.range.high === range.high
+    if (same) return
+    this.range = range === null ? null : Object.freeze({ ...range }); this.onChange?.()
+  }
+
+  /** Where the mark with this key sits in time and price, and whether the current view shows it; null when there is no such mark. */
+  getAnnotationSpan (key: string, layer?: string): EngineAnnotationSpan | null {
+    if (this.disposed) return null
+    const found = this.snapshot.annotations.find(item => item.spec.key === key && (layer === undefined || item.layer === layer))
+    if (found === undefined) return null
+    const times = found.spec.anchors.map(anchor => anchor.time)
+    const prices = found.spec.anchors.map(anchor => anchor.price).filter((price): price is number => price !== undefined)
+    const span = { from: Math.min(...times), to: Math.max(...times), status: found.status }
+    return Object.freeze(prices.length === found.spec.anchors.length ? { ...span, low: Math.min(...prices), high: Math.max(...prices) } : span)
+  }
+
+  private isEmphasised (annotation: EngineProjectedAnnotation): boolean {
+    const emphasis = this.emphasis
+    return emphasis !== null && emphasis.keys.has(annotation.spec.key) && (emphasis.layer === undefined || emphasis.layer === annotation.layer)
+  }
+
   /** The nearest visible draggable level within `tolerance` px of `y`, for pointer code that turns a drag into intent. */
   hitTestDraggable (y: number, tolerance = 6): { readonly id: string, readonly layer: string, readonly key: string, readonly price: number, readonly time: number } | null {
     if (this.disposed || !Number.isFinite(y)) return null
@@ -586,11 +656,11 @@ export class EngineAnnotations implements EngineLayer {
     return Object.freeze({ ...base, status: visible ? 'visible' : 'offscreen', ...(visible ? { figures } : {}) })
   }
 
-  private paintFigures (context: CanvasRenderingContext2D, annotation: EngineProjectedAnnotation, bounds: EngineAnnotationBounds): void {
+  private paintFigures (context: CanvasRenderingContext2D, annotation: EngineProjectedAnnotation, bounds: EngineAnnotationBounds, emphasised = false): void {
     for (const figure of annotation.figures ?? []) {
       if (figure.type === 'text') continue
       this.figureColor(context, figure.color, figure.tone, annotation)
-      context.setLineDash(figure.dash === undefined ? [4, 3] : figure.dash === 'solid' ? [] : [...figure.dash]); context.lineWidth = figure.width ?? 1.5
+      context.setLineDash(figure.dash === undefined ? [4, 3] : figure.dash === 'solid' ? [] : [...figure.dash]); context.lineWidth = (figure.width ?? 1.5) + (emphasised ? 1.5 : 0)
       if (figure.type === 'line') {
         let { from, to } = figure
         const dx = to.x - from.x, dy = to.y - from.y, length = Math.hypot(dx, dy)

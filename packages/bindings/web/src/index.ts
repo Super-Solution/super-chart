@@ -35,7 +35,7 @@ export type {
 export type { WorkspaceDrawingStorage, WorkspaceDrawingCacheOptions } from './drawingDocuments'
 export { EngineAnnotations, ENGINE_ANNOTATION_LIMITS, ANNOTATION_TEMPLATE_LIMITS, BUILT_IN_ANNOTATION_TEMPLATES, DEFAULT_FIBONACCI_LEVELS } from './annotations'
 export type {
-  EngineAnnotationSpec, EngineAnnotationKind, EngineAnnotationTone, EngineAnnotationAnchor, EngineAnnotationSnapshot, EngineProjectedAnnotation, EngineSetAnnotationsResult,
+  EngineAnnotationSpec, EngineAnnotationKind, EngineAnnotationTone, EngineAnnotationAnchor, EngineAnnotationRange, EngineAnnotationSpan, EngineAnnotationSnapshot, EngineProjectedAnnotation, EngineSetAnnotationsResult,
   AnnotationTemplate, AnnotationTemplateInput, AnnotationFigure, AnnotationParams, AnnotationPoint, ProjectedAnchor
 } from './annotations'
 export { HOLD_DRAW_LIMITS } from './holdDraw'

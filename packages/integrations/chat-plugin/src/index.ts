@@ -3,8 +3,9 @@ import { ChartWorkspace, SUPER_CHART_COLORS, FONT_SANS } from '@supersolutions/s
 import { EngineAnnotations } from '@supersolutions/super-chart-web/annotations'
 import { symbolKey, type Datafeed as CoreDatafeed, type MarketBar as CoreBar, type Period as CorePeriod, type SymbolInfo as CoreSymbol } from '@supersolutions/super-chart-core'
 import { TECHNICAL_INDICATOR_DEFINITIONS, CLASSIC_INDICATOR_DEFINITIONS } from '@supersolutions/super-chart-core/indicators'
-import { readHostTheme, CHART_CARD_KIND, CHART_LIMITS, chartCardKind, validateChartAnnotations, validateChartCardSpec, validatePeriod, validateSymbol, type CardMount, type CardMountContext, type ChartAnnotation, type ChartCardSpec, type ChartIndicator, type ChartType, type ChatPlugin, type Datafeed, type MarketBar, type Period, type SymbolInfo, type PluginTool, type PluginToolAuthority } from '@supersolutions/super-protocol'
+import { readHostTheme, CHART_CARD_KIND, CHART_LIMITS, chartCardKind, validatePeriod, validateSymbol, type CardMount, type CardMountContext, type ChartIndicator, type ChartType, type ChatPlugin, type Datafeed, type MarketBar, type Period, type SymbolInfo, type PluginTool, type PluginToolAuthority } from '@supersolutions/super-protocol'
 import { chartHostLook } from './host-theme'
+import { formatCardRef, parseChartRef, validateChartAnnotations, validateChartCard, widenChartCardKind, type CardRef, type CardRefEvent, type CardRefResult, type ChartAnnotation, type ChartCardSpec } from './protocol-next'
 
 type AuthorizedPluginTool = PluginTool & { authority: PluginToolAuthority }
 
@@ -29,6 +30,8 @@ export interface ChartSnapshot {
   chartType: ChartType
   indicators: Array<{ id: string, name: string, params: number[] }>
   annotations: ChartAnnotation[]
+  /** For each mark, the `ref:` link that makes words in a message point at it. Absent when the chart's id cannot be a ref target. */
+  refs: Record<string, string>
   bars: { count: number, first: number | null, last: number | null }
   replay: { active: boolean }
 }
@@ -119,9 +122,18 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
       chartType: chart.spec.chartType ?? 'candles',
       indicators: state.indicators.map(item => ({ id: item.id, name: item.name, params: [...item.params] })),
       annotations: [...chart.annotationsByKey.values()],
+      refs: refsOf(chart),
       bars: { count: state.data.count, first: state.data.firstTimestamp, last: state.data.lastTimestamp },
       replay: { active: state.replay.active }
     }
+  }
+  const refsOf = (chart: Mounted): Record<string, string> => {
+    const refs: Record<string, string> = {}
+    for (const key of chart.annotationsByKey.keys()) {
+      const href = formatCardRef({ target: chart.id, params: { key: [key] } })
+      if (href !== null) refs[key] = href
+    }
+    return refs
   }
   const changed = (chart: Mounted): void => { options.onChange?.(chart.id, snapshot(chart)) }
 
@@ -250,7 +262,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
       if (signature === shown) return
       shown = signature
       if (context.partial === true) { teardown(); dataSignature = ''; note(container, 'Chart is still being written…'); return }
-      const valid = validateChartCardSpec(rawSpec)
+      const valid = validateChartCard(rawSpec)
       if (!valid.ok) { teardown(); dataSignature = ''; note(container, valid.error, 'alert'); return }
       const spec = rawSpec as ChartCardSpec
       const key = dataKey(spec) + (spec.height ?? '') + context.theme + themeKey + (spec.id ?? '')
@@ -274,8 +286,68 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
       void build(spec, context)
     }
 
+    /** What the span of a range or a mark is called when a host announces it. */
+    const when = (time: number): string => new Date(time).toISOString().slice(0, 16).replace('T', ' ')
+    const noMatch = (reason: string): CardRefResult => ({ ok: false, code: 'ref_no_match', reason })
+    const clearRefs = (chart: Mounted): void => { chart.annotations.setEmphasis(null); chart.annotations.setRangeHighlight(null) }
+
+    // Brings a stretch of time into view when it is not. Only loaded bars can be shown; it never fetches history.
+    const reveal = (chart: Mounted, from: number, to: number): void => {
+      const view = chart.workspace.chart.view
+      const bars = view.getSnapshot().bars
+      const first = bars[0]?.timestamp, last = bars[bars.length - 1]?.timestamp
+      if (first !== undefined && last !== undefined && from >= first && to <= last) return
+      view.seek((from + to) / 2)
+    }
+    const loaded = (chart: Mounted, from: number, to: number): boolean => {
+      const data = chart.workspace.getState().data
+      return data.firstTimestamp !== null && data.lastTimestamp !== null && to >= data.firstTimestamp && from <= data.lastTimestamp
+    }
+
+    /** Words in a message point into this chart (see `ref.ts` in super-protocol). */
+    const answer = (ref: CardRef | null, event: CardRefEvent): CardRefResult => {
+      const chart = current
+      if (chart === null) return { ok: false, code: 'ref_no_match', reason: 'The chart is not shown.' }
+      if (ref === null) { clearRefs(chart); return { ok: true } }
+      if (ref.target !== chart.id) return noMatch(`This card is "${chart.id}", not "${ref.target}".`)
+      const parsed = parseChartRef(ref)
+      if (!parsed.ok) return { ok: false, code: 'ref_invalid', reason: parsed.error }
+      if (event === 'leave') { clearRefs(chart); return { ok: true } }
+      const target = parsed.chart
+      let label: string
+      if (target.key !== undefined) {
+        const span = chart.annotations.getAnnotationSpan(target.key, 'agent')
+        const mark = chart.annotationsByKey.get(target.key)
+        if (span === null || mark === undefined) return noMatch(`There is no mark "${target.key}" on this chart.`)
+        clearRefs(chart)
+        chart.annotations.setEmphasis([target.key], 'agent')
+        if (event === 'activate' && span.status !== 'visible') {
+          if (loaded(chart, span.from, span.to)) reveal(chart, span.from, span.to)
+          else return noMatch('That mark is outside the bars this chart has loaded.')
+        }
+        label = `${mark.text ?? target.key}: ${mark.kind} ${span.low !== undefined && span.low === span.high ? span.low : span.from === span.to ? when(span.from) : `${when(span.from)} to ${when(span.to)}`}`
+      } else if (target.from !== undefined && target.to !== undefined) {
+        if (!loaded(chart, target.from, target.to)) return noMatch('That time range is outside the bars this chart has loaded.')
+        clearRefs(chart)
+        chart.annotations.setRangeHighlight({ from: target.from, to: target.to, ...(target.low !== undefined && target.high !== undefined ? { low: target.low, high: target.high } : {}) })
+        if (event === 'activate') reveal(chart, target.from, target.to)
+        label = `${when(target.from)} to ${when(target.to)}${target.low !== undefined ? `, price ${target.low} to ${target.high}` : ''}`
+      } else {
+        label = `${chart.workspace.getSymbol().ticker} chart`
+      }
+      if (event === 'activate') {
+        // Move focus to the chart and show it, so a keyboard or screen-reader reader lands where the words pointed.
+        container.querySelector<HTMLElement>('[role="group"][tabindex="0"]')?.focus({ preventScroll: true })
+        const reduced = container.ownerDocument.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+        container.scrollIntoView?.({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' })
+      }
+      chart.workspace.chart.requestPaint()
+      return { ok: true, label }
+    }
+
     render(initialSpec, initialContext)
-    return { update: render, destroy () { destroyed = true; teardown() } }
+    const handle = { update: render, ref: answer, destroy () { destroyed = true; teardown() } }
+    return handle
   }
 
   const chartId = { type: 'string', description: 'Which chart; omit for the most recent one on screen.' }
@@ -326,11 +398,11 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     {
       name: 'chart_annotate',
       authority: 'draft',
-      description: 'Mark a chart: level (horizontal price line), zone (price band over a time range) or marker (labelled point). Keys are stable: sending a key again replaces that mark. Returns which keys were applied and which the engine rejected, with a code.',
+      description: 'Mark a chart: level (horizontal price line, one anchor with a price), zone (price band over a time range, two anchors with prices), marker (labelled point, one anchor), trend (line through two priced anchors), ray (a trend line extended to the right), fibonacci (retracement levels between two priced anchors; params.levels is a comma list such as "0,0.5,1") or plan (entry, target and stop: three priced anchors in that order, with the risk-reward ratio). Keys are stable: sending a key again replaces that mark. Returns which keys were applied and which the engine rejected, with a code, and for each applied key a `ref:` link: put it in your message as [words](ref:...) and the reader can hover or focus the words to see that mark light up, or click to jump to it.',
       inputSchema: {
         type: 'object',
         required: ['annotations'],
-        properties: { chartId, replace: { type: 'boolean', description: 'Replace every mark instead of merging by key.' }, annotations: { type: 'array', maxItems: CHART_LIMITS.annotations, items: { type: 'object', required: ['key', 'kind', 'anchors'] } } }
+        properties: { chartId, replace: { type: 'boolean', description: 'Replace every mark instead of merging by key.' }, annotations: { type: 'array', maxItems: CHART_LIMITS.annotations, items: { type: 'object', required: ['key', 'kind', 'anchors'], properties: { key: { type: 'string' }, kind: { enum: ['level', 'zone', 'marker', 'trend', 'ray', 'fibonacci', 'plan'] }, anchors: { type: 'array', maxItems: CHART_LIMITS.anchors, items: { type: 'object', required: ['time'], properties: { time: { type: 'number', description: 'Milliseconds since the epoch.' }, price: { type: 'number' } } } }, text: { type: 'string' }, tone: { enum: ['bull', 'bear', 'neutral', 'accent'] }, color: { type: 'string' }, params: { type: 'object' } } } } }
       },
       run: async (input) => {
         const { chartId: id, annotations, replace } = (input ?? {}) as { chartId?: unknown, annotations?: unknown, replace?: unknown }
@@ -340,7 +412,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
         const result = applyAnnotations(chart, annotations as ChartAnnotation[], replace === true)
         remember(chart)
         changed(chart)
-        return { chartId: chart.id, ...result, total: chart.annotationsByKey.size }
+        return { chartId: chart.id, ...result, refs: refsOf(chart), total: chart.annotationsByKey.size }
       }
     },
     {
@@ -433,7 +505,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
         ...tools.map(tool => ({ id: `chart.${tool.name.replace(/^chart_/, '').replace(/_/g, '-')}`, surface: 'tool' as const, toolName: tool.name }))
       ]
     },
-    cardKinds: [chartCardKind],
+    cardKinds: [widenChartCardKind(chartCardKind)],
     mounts: { [CHART_CARD_KIND]: mount },
     tools
   }
