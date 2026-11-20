@@ -3,9 +3,8 @@ import { ChartWorkspace, SUPER_CHART_COLORS, FONT_SANS } from '@supersolutions/s
 import { EngineAnnotations } from '@supersolutions/super-chart-web/annotations'
 import { symbolKey, type Datafeed as CoreDatafeed, type MarketBar as CoreBar, type Period as CorePeriod, type SymbolInfo as CoreSymbol } from '@supersolutions/super-chart-core'
 import { TECHNICAL_INDICATOR_DEFINITIONS, CLASSIC_INDICATOR_DEFINITIONS } from '@supersolutions/super-chart-core/indicators'
-import { readHostTheme, CHART_CARD_KIND, CHART_LIMITS, chartCardKind, validatePeriod, validateSymbol, type CardMount, type CardMountContext, type ChartIndicator, type ChartType, type ChatPlugin, type Datafeed, type MarketBar, type Period, type SymbolInfo, type PluginTool, type PluginToolAuthority } from '@supersolutions/super-protocol'
+import { readHostTheme, CHART_CARD_KIND, CHART_LIMITS, chartCardKind, validatePeriod, validateSymbol, formatCardRef, parseChartRef, validateChartAnnotations, validateChartCardSpec as validateChartCard, type CardMount, type CardMountContext, type ChartIndicator, type ChartType, type ChatPlugin, type Datafeed, type MarketBar, type Period, type SymbolInfo, type PluginTool, type PluginToolAuthority, type CardRef, type CardRefEvent, type CardRefResult, type ChartAnnotation, type ChartCardSpec } from '@supersolutions/super-protocol'
 import { chartHostLook } from './host-theme'
-import { formatCardRef, parseChartRef, validateChartAnnotations, validateChartCard, widenChartCardKind, type CardRef, type CardRefEvent, type CardRefResult, type ChartAnnotation, type ChartCardSpec } from './protocol-next'
 
 type AuthorizedPluginTool = PluginTool & { authority: PluginToolAuthority }
 
@@ -498,14 +497,14 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     manifest: {
       manifestVersion: 0,
       name: '@supersolutions/super-chart-chat-plugin',
-      version: '0.5.0',
+      version: '0.6.0',
       license: 'GPL-3.0-or-later',
       capabilities: [
         { id: 'chart.card', surface: 'card', cardKind: CHART_CARD_KIND },
         ...tools.map(tool => ({ id: `chart.${tool.name.replace(/^chart_/, '').replace(/_/g, '-')}`, surface: 'tool' as const, toolName: tool.name }))
       ]
     },
-    cardKinds: [widenChartCardKind(chartCardKind)],
+    cardKinds: [chartCardKind],
     mounts: { [CHART_CARD_KIND]: mount },
     tools
   }
