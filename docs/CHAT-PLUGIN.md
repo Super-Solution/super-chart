@@ -132,6 +132,5 @@ do the drawing and are available to any host that uses the web package directly.
 
 ### Protocol 0.3.0
 
-The reference shapes and the four new kinds are in super-protocol 0.3.0, which is not on npm yet, so the plugin carries
-a marked copy in `src/protocol-next.ts` (the same approach as `host-theme.ts`). Delete it and import from the protocol
-once 0.3.0 is published.
+The reference shapes and the four new kinds come from `@supersolutions/super-protocol` 0.3.0, which the plugin
+depends on.
