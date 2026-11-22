@@ -4,7 +4,7 @@
 // `dir` is the short id used by the build; `path` is where the package lives (grouped by role:
 // packages/bindings/<framework>, packages/integrations/<host>).
 export const SCOPE = '@supersolutions'
-export const VERSION = '0.6.0'
+export const VERSION = '0.7.0'
 export const AUTHOR = 'SUPER SOLUTION LABS INC'
 export const LICENSE = 'GPL-3.0-or-later'
 export const REPO = 'Super-Solution/super-chart'
