@@ -1,5 +1,7 @@
 # Saving a workspace
 
+> To keep drawings (or this envelope) on a server, use `DocumentSync` from `@supersolutions/super-chart-core/sync` and the [sync protocol](../../docs/SYNC-PROTOCOL.md): it adds a server-assigned revision, offline retry, a journal and conflict handling. `syncEnvelope` below is the smaller, older illustration of the same idea.
+
 `workspace.exportDocument()` returns one JSON string (chart document version 1: market, candle mode, render options,
 layout, indicators, drawings) that `workspace.restoreDocument(json)` accepts. The chart validates the whole document
 before it changes anything, never stores code, layers, annotations or feed subscriptions, and loads the saved market

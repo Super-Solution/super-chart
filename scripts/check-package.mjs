@@ -89,7 +89,7 @@ if (existsSync(join(root, 'examples'))) {
 }
 
 // Plain-Node import of the entries that must not need a DOM.
-const NODE_SAFE = [['core', ''], ['core', '/native'], ['core', '/indicators'], ['superscript', ''], ['superscript', '/scripts']]
+const NODE_SAFE = [['core', ''], ['core', '/native'], ['core', '/indicators'], ['core', '/sync'], ['superscript', ''], ['superscript', '/scripts']]
 for (const [dir, sub] of NODE_SAFE) {
   const spec = nameOf(dir) + sub
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', `const m = await import(${JSON.stringify(spec)}); if (Object.keys(m).length === 0) throw new Error('no exports')`], { cwd: root, encoding: 'utf8' })

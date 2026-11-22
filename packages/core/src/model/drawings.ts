@@ -527,6 +527,38 @@ export function hitTestDrawingGeometry (
 }
 
 /** Immutable drawing snapshots share unchanged entries; bounded undo contains user edits only. */
+/**
+ * Joins two drawing documents (`DrawingStore.exportJson()`) into one: every drawing of either, and where both have the
+ * same id, this device's. For a conflict between two devices. It cannot tell a drawing deleted on one side apart from one that side never had, so a
+ * drawing removed on one side comes back from the other; a host that must honour deletions keeps its own tombstones or
+ * lets the person choose. Returns `null` when either document is invalid or the result would exceed the drawing limit.
+ */
+export function mergeDrawingDocuments (local: string, remote: string): string | null {
+  const read = (json: string): Drawing[] | null => {
+    try {
+      if (typeof json !== 'string' || json.length > MAX_JSON_LENGTH) return null
+      const document = record(JSON.parse(json), ['version', 'drawings'], 'drawing document')
+      if (document.version !== 1 || !Array.isArray(document.drawings) || document.drawings.length > MAX_DRAWINGS) return null
+      return document.drawings.map(drawing)
+    } catch { return null }
+  }
+  const mine = read(local), theirs = read(remote)
+  if (mine === null || theirs === null) return null
+  const own = new Map(mine.map(item => [item.id, item]))
+  if (own.size !== mine.length) return null
+  const merged: Drawing[] = []
+  const seen = new Set<string>()
+  for (const item of theirs) {
+    if (seen.has(item.id)) return null
+    seen.add(item.id)
+    merged.push(own.get(item.id) ?? item)
+  }
+  for (const item of mine) if (!seen.has(item.id)) merged.push(item)
+  if (merged.length > MAX_DRAWINGS) return null
+  const json = JSON.stringify({ version: 1, drawings: merged })
+  return json.length > MAX_JSON_LENGTH ? null : json
+}
+
 export class DrawingStore {
   private drawings: readonly Drawing[] = Object.freeze([])
   private selectedId: string | null = null

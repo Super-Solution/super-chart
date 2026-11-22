@@ -105,7 +105,9 @@ and [docs/API-LAYERS.md](docs/API-LAYERS.md).
 - Seven incremental built-ins (MA, EMA, BOLL, VOL, MACD, RSI, KDJ); 15 technical and
   19 classic definitions in core's `/indicators`.
 - All 65 drawing tools with selection, editing, lock/hide, bounded undo/redo and
-  validated JSON import/export.
+  validated JSON import/export, a `drawingsChange` event, and optional server sync of
+  the person's drawings (`/sync` in core and web; [protocol](docs/SYNC-PROTOCOL.md),
+  [usage](docs/WORKSPACE-UI.md#saving-drawings-to-a-server)).
 - Abortable market loading/search, cached history, older-page backoff, coalesced live
   updates, replay, period-close countdown and validated workspace JSON restore.
 - PNG snapshots and fullscreen when the browser supports it.
