@@ -15,7 +15,7 @@ export const PACKAGES = [
     dir: 'core', path: 'packages/core', name: `${SCOPE}/super-chart-core`,
     description: 'Renderer-free chart core: market data, loader, indicators, drawings, frame and workspace models. No DOM.',
     deps: [],
-    entries: { '.': ['src/index.ts', 'index'], './native': ['src/native.ts', 'native'], './indicators': ['src/model/indicatorCatalog.ts', 'indicators'] }
+    entries: { '.': ['src/index.ts', 'index'], './native': ['src/native.ts', 'native'], './indicators': ['src/model/indicatorCatalog.ts', 'indicators'], './sync': ['src/sync.ts', 'sync'] }
   },
   {
     dir: 'superscript', path: 'packages/superscript', name: `${SCOPE}/super-chart-superscript`,
@@ -29,7 +29,7 @@ export const PACKAGES = [
     deps: ['core'],
     global: { entry: 'src/index.ts', file: 'super-chart.global', name: 'SuperChart' },
     additionalGlobals: [{ entry: 'src/engine.ts', file: 'super-chart.engine.global', name: 'SuperChartEngine' }],
-    entries: { '.': ['src/index.ts', 'index'], './engine': ['src/engine.ts', 'engine'], './annotations': ['src/annotations.ts', 'annotations'], './overlays': ['src/overlayEntry.ts', 'overlays'] }
+    entries: { '.': ['src/index.ts', 'index'], './engine': ['src/engine.ts', 'engine'], './annotations': ['src/annotations.ts', 'annotations'], './overlays': ['src/overlayEntry.ts', 'overlays'], './sync': ['src/syncEntry.ts', 'sync'] }
   },
   {
     dir: 'react', path: 'packages/bindings/react', name: `${SCOPE}/super-chart-react`,

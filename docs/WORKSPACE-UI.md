@@ -248,6 +248,45 @@ empty market documents no longer accumulate. `getDrawingCacheStats()` reports
 approximate UTF-16 string bytes, symbol count and unacknowledged documents.
 This is not a whole-browser memory measurement.
 
+## Saving drawings to a server
+
+`drawingCache` is local and synchronous. To keep a person's drawings on a server (so they follow the person to another
+device), use the workspace's three small pieces and the sync client in `@supersolutions/super-chart-core/sync`:
+
+- `workspace.on('drawingsChange', e)` fires when the shown market's drawings change: `e.origin` is `'edit'` for the
+  person's own work (draw, move, delete, undo) and `'imported'` for `importDrawings()`. Selection and hover do not fire it.
+  Loading a market, and `restoreDocument()`, do not fire it either.
+- `workspace.exportDrawings()` returns the shown market's drawings as one JSON document. `importDrawings(json)` replaces
+  them; the whole document is checked first, and a bad one changes nothing. Both throw until a market has loaded.
+- `DocumentSync` keeps a document in step with a backend that speaks [the sync protocol](SYNC-PROTOCOL.md): writes after a quiet
+  moment, retries while offline, keeps unsaved edits in a journal you give it (so a reload does not lose them), and
+  never overwrites a newer version: both sides' texts are handed to you as a conflict.
+
+`bindDrawingSync` in `@supersolutions/super-chart-web/sync` connects the two and does nothing else:
+
+```ts
+import { DocumentSync, createHttpTransport, mergeDrawingDocuments } from '@supersolutions/super-chart-core/sync'
+import { bindDrawingSync } from '@supersolutions/super-chart-web/sync'
+
+const sync = new DocumentSync({
+  transport: createHttpTransport({ baseUrl: 'https://api.example.com/v1/docs', headers: async () => ({ authorization: `Bearer ${await token()}` }) }),
+  journal: window.localStorage, namespace: 'my-app',
+  // Without this, a conflict waits for sync.resolve(id, 'local' | 'remote' | mergedText) and `sync.on('conflict', ...)`.
+  conflict: c => (c.remote === null ? 'local' : mergeDrawingDocuments(c.local, c.remote))
+})
+const binding = bindDrawingSync(workspace, sync, { onError: error => reportToUser(error) })
+// ... binding.dispose() when the workspace is destroyed; the sync (and its journal) stays yours.
+```
+
+What it does: each edit is saved under `drawings/<symbol key>`; when a market finishes loading its drawings are pulled and
+shown (never over an edit that has not been saved); a device that already had drawings and finds none on the server uploads
+them as the first version. `mergeDrawingDocuments` keeps both sides' drawings and prefers this device's version of one both
+have; it cannot tell a drawing deleted on the other device from one never made there, so a deletion made elsewhere can
+come back, and a host that must honour deletions asks the person instead (leave `conflict` at its default).
+
+Drawings of a symbol are shared across its periods, as in `drawingCache`. Annotations written by the host (`/annotations`)
+are not drawings and are not synced.
+
 ## Layout, headless mode and slots
 
 ```ts

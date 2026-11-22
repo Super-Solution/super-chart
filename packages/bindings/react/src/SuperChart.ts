@@ -23,12 +23,14 @@ export interface SuperChartProps extends Omit<ChartWorkspaceOptions, 'period'> {
   onLoadResult?: (event: WorkspaceEvents['loadResult']) => void
   onDataChange?: (event: WorkspaceEvents['dataChange']) => void
   onReplayChange?: (event: WorkspaceEvents['replayChange']) => void
+  /** The shown market's drawings changed: `origin` tells the person's own edit from `importDrawings()`. */
+  onDrawingsChange?: (event: WorkspaceEvents['drawingsChange']) => void
   /** The person dragged a `draggable` annotation level. A request only: validate it, then write the new price yourself. */
   onAnnotationIntent?: (event: AnnotationIntentEvent) => void
 }
 
-type Handlers = Pick<SuperChartProps, 'onReady' | 'onDispose' | 'onMarketChange' | 'onLoadState' | 'onLoadResult' | 'onDataChange' | 'onReplayChange' | 'onAnnotationIntent'>
-const EVENTS = [['marketChange', 'onMarketChange'], ['loadState', 'onLoadState'], ['loadResult', 'onLoadResult'], ['dataChange', 'onDataChange'], ['replayChange', 'onReplayChange']] as const
+type Handlers = Pick<SuperChartProps, 'onReady' | 'onDispose' | 'onMarketChange' | 'onLoadState' | 'onLoadResult' | 'onDataChange' | 'onReplayChange' | 'onDrawingsChange' | 'onAnnotationIntent'>
+const EVENTS = [['marketChange', 'onMarketChange'], ['loadState', 'onLoadState'], ['loadResult', 'onLoadResult'], ['dataChange', 'onDataChange'], ['replayChange', 'onReplayChange'], ['drawingsChange', 'onDrawingsChange']] as const
 
 /** The mount-time period: a string is looked up in `periods`, else parsed (`15m`, `1D`, `60`) and labelled as typed. */
 function resolvePeriod (period: Period | string, periods: readonly Period[] | undefined): Period {
@@ -41,14 +43,14 @@ function resolvePeriod (period: Period | string, periods: readonly Period[] | un
 }
 
 function SuperChartImpl (props: SuperChartProps, ref: ForwardedRef<ChartWorkspace | null>): ReactElement {
-  const { className, style, onReady, onDispose, onMarketChange, onLoadState, onLoadResult, onDataChange, onReplayChange, onAnnotationIntent, period, symbol, datafeed, theme, locale, ui } = props
+  const { className, style, onReady, onDispose, onMarketChange, onLoadState, onLoadResult, onDataChange, onReplayChange, onDrawingsChange, onAnnotationIntent, period, symbol, datafeed, theme, locale, ui } = props
   const host = useRef<HTMLDivElement | null>(null)
   const [workspace, setWorkspace] = useState<ChartWorkspace | null>(null)
   // What the mounted chart was built with, so the follow-up effects only act on a real change.
   const built = useRef({ ui: '', market: '' })
   // The latest props, read by the mount effect and the event bridges so they never need to re-run when a callback changes.
   const latest = useRef({ props, handlers: {} as Handlers })
-  latest.current = { props, handlers: { onReady, onDispose, onMarketChange, onLoadState, onLoadResult, onDataChange, onReplayChange, onAnnotationIntent } }
+  latest.current = { props, handlers: { onReady, onDispose, onMarketChange, onLoadState, onLoadResult, onDataChange, onReplayChange, onDrawingsChange, onAnnotationIntent } }
   useImperativeHandle(ref, () => workspace as ChartWorkspace, [workspace])
 
   // Mount: one workspace per datafeed. Strict Mode runs this effect twice in development; the first workspace is
@@ -60,7 +62,7 @@ function SuperChartImpl (props: SuperChartProps, ref: ForwardedRef<ChartWorkspac
     const options: ChartWorkspaceOptions = {
       ...current, period: resolvePeriod(current.period, current.periods)
     }
-    for (const key of ['className', 'style', 'onReady', 'onDispose', 'onMarketChange', 'onLoadState', 'onLoadResult', 'onDataChange', 'onReplayChange', 'onAnnotationIntent'] as const) delete (options as unknown as Record<string, unknown>)[key]
+    for (const key of ['className', 'style', 'onReady', 'onDispose', 'onMarketChange', 'onLoadState', 'onLoadResult', 'onDataChange', 'onReplayChange', 'onDrawingsChange', 'onAnnotationIntent'] as const) delete (options as unknown as Record<string, unknown>)[key]
     built.current = { ui: current.ui === undefined ? '' : JSON.stringify(current.ui), market: `${symbolKey(current.symbol)}|${typeof current.period === 'string' ? current.period : periodKey(current.period)}` }
     const created = new ChartWorkspace(element, options)
     const stops: Array<() => void> = EVENTS.map(([type, handler]) => created.on(type, event => { (latest.current.handlers[handler] as ((value: typeof event) => void) | undefined)?.(event) }))

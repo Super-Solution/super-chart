@@ -35,6 +35,10 @@
     "./indicators": {
       "types": "./dist/indicators.d.ts",
       "import": "./dist/indicators.js"
+    },
+    "./sync": {
+      "types": "./dist/sync.d.ts",
+      "import": "./dist/sync.js"
     }
   },
   "typesVersions": {
@@ -44,6 +48,9 @@
       ],
       "indicators": [
         "./dist/indicators.d.ts"
+      ],
+      "sync": [
+        "./dist/sync.d.ts"
       ]
     }
   },

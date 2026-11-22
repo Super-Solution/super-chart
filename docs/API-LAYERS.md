@@ -27,7 +27,7 @@ saves the person's drawings per market. Everything the chrome does is also a met
 the chrome (`ui: { headless: true }`).
 
 - **Market**: `setMarket`, `setSymbol`, `setPeriod`, `reload`, `cancelLoad`. Same-tick calls share one final request.
-- **State and events**: `getLoadState`, `getState`, `getStatus`, `on('marketChange' | 'loadState' | 'loadResult' | 'dataChange' | 'replayChange')`.
+- **State and events**: `getLoadState`, `getState`, `getStatus`, `on('marketChange' | 'loadState' | 'loadResult' | 'dataChange' | 'replayChange' | 'drawingsChange')`.
 - **Document**: `exportDocument` and `restoreDocument`: one strictly validated JSON string. See
   [the persistence example](../examples/workspace-persistence/README.md) for the save, upgrade, invalidate and sync flow.
 - **Chrome**: `setTheme`, `setLocale`, `setUi` (headless, layout, intervals, parts), `getSlot`, `registerCommand`,

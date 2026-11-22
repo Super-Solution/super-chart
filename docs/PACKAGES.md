@@ -13,9 +13,9 @@ super-chart-chat-plugin ─┴─> super-chart-web ──────┐
 
 | Package | Contents | Runs in |
 | --- | --- | --- |
-| `super-chart-core` | `src/*` market data, loader, series, TA, viewport; `src/model/*` frame, indicators, drawings, price scale, workspace state and persistence, replay, countdown, overlays model; `src/analysis/*` detectors; `src/platform/native` lifecycle | Node, browser, React Native, workers |
+| `super-chart-core` | `src/*` market data, loader, series, TA, viewport; `src/model/*` frame, indicators, drawings, price scale, workspace state and persistence, replay, countdown, overlays model; `src/analysis/*` detectors; `src/platform/native` lifecycle; subpath `/sync`: document sync client, HTTP and in-memory transports (no DOM) | Node, browser, React Native, workers |
 | `super-chart-superscript` | `runtime/*` language, builtins, diagnostics; `ai/*` host-supplied AI helpers; `scripts` bridge from a compiled script to an engine indicator | Node, browser |
-| `super-chart-web` | Canvas renderer, gestures, drawing input, image decode, workspace UI, annotation and overlay layers | browser |
+| `super-chart-web` | Canvas renderer, gestures, drawing input, image decode, workspace UI, annotation and overlay layers; subpath `/sync` binds the workspace's drawings to the core sync client | browser |
 | `super-chart-react` | `SuperChart` component and `useWorkspaceEvent`; a thin binding over the web workspace (React is a peer dependency, `react >= 18`) | browser, server render safe |
 | `super-chart-chat-plugin` | the `super-chart.chart` card and seven agent tools | browser (chat host) |
 

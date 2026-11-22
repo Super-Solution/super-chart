@@ -270,6 +270,7 @@ export class ChartWorkspace {
   private drawingSaveTimer: number | null = null
   private readonly persistentDrawings: boolean
   private lastDrawingList: unknown = null
+  private importingDrawings = false
   private readonly downloads = new Map<number, string>()
   private readonly actions = new WeakMap<HTMLButtonElement, () => unknown>()
   private symbol: SymbolInfo
@@ -988,13 +989,38 @@ export class ChartWorkspace {
     if (this.drawingSymbol !== null) this.drawingDocuments.set(this.drawingSymbol, this.chart.drawings.exportJson())
   }
 
+  /**
+   * The drawings of the shown market as one JSON document (the same text `drawings` holds inside `exportDocument()`),
+   * for a host that saves them on its own, for example through `DocumentSync` in `@supersolutions/super-chart-core/sync`.
+   * Throws until a market has loaded.
+   */
+  exportDrawings (): string {
+    this.assertLive()
+    if (this.drawingSymbol === null) throw new Error('Load a market before saving its drawings')
+    return this.chart.drawings.exportJson()
+  }
+
+  /**
+   * Replaces the drawings of the shown market with a document from `exportDrawings()`. The whole document is checked
+   * first and a bad one changes nothing. Undo history starts over, and `drawingsChange` reports it with `origin: 'imported'`.
+   */
+  importDrawings (json: string): void {
+    this.assertLive()
+    if (this.drawingSymbol === null) throw new Error('Load a market before importing its drawings')
+    this.importingDrawings = true
+    try { this.chart.drawings.importJson(json) } finally { this.importingDrawings = false }
+  }
+
   getDrawingCacheStats (): { symbols: number, bytes: number, unsaved: number } { return this.drawingDocuments.getStats() }
 
   private queueDrawingSave (): void {
     const list = this.chart.drawings.getSnapshot().drawings
     if (list === this.lastDrawingList) return
     this.lastDrawingList = list
-    if (!this.persistentDrawings || this.drawingSymbol === null) return
+    if (this.drawingSymbol === null) return
+    // Listeners are the host's: one that throws must not stop the save below.
+    try { this.events.emit('drawingsChange', { key: this.drawingSymbol, symbol: this.getSymbol(), count: list.length, origin: this.importingDrawings ? 'imported' : 'edit' }) } catch { /* the host's */ }
+    if (!this.persistentDrawings) return
     if (this.drawingSaveTimer !== null) this.win.clearTimeout(this.drawingSaveTimer)
     this.drawingSaveTimer = this.win.setTimeout(() => {
       this.drawingSaveTimer = null

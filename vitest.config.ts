@@ -10,10 +10,12 @@ export default defineConfig({
     alias: [
       { find: /^@supersolutions\/super-chart-core\/native$/, replacement: src('./packages/core/src/native.ts') },
       { find: /^@supersolutions\/super-chart-core\/indicators$/, replacement: src('./packages/core/src/model/indicatorCatalog.ts') },
+      { find: /^@supersolutions\/super-chart-core\/sync$/, replacement: src('./packages/core/src/sync.ts') },
       { find: /^@supersolutions\/super-chart-core$/, replacement: src('./packages/core/src/index.ts') },
       { find: /^@supersolutions\/super-chart-superscript\/scripts$/, replacement: src('./packages/superscript/src/scripts.ts') },
       { find: /^@supersolutions\/super-chart-superscript$/, replacement: src('./packages/superscript/src/index.ts') },
       { find: /^@supersolutions\/super-chart-web\/annotations$/, replacement: src('./packages/bindings/web/src/annotations.ts') },
+      { find: /^@supersolutions\/super-chart-web\/sync$/, replacement: src('./packages/bindings/web/src/syncEntry.ts') },
       { find: /^@supersolutions\/super-chart-web\/overlays$/, replacement: src('./packages/bindings/web/src/overlayEntry.ts') },
       { find: /^@supersolutions\/super-chart-react$/, replacement: src('./packages/bindings/react/src/index.ts') },
       { find: /^@supersolutions\/super-chart-web$/, replacement: src('./packages/bindings/web/src/index.ts') }

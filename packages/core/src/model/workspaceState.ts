@@ -44,6 +44,12 @@ export interface WorkspaceEvents {
   loadResult: WorkspaceLoadResult
   dataChange: { market: WorkspaceMarket, kind: 'reset' | 'prepend' | 'tail', count: number }
   replayChange: WorkspaceReplayState
+  /**
+   * The drawings of the shown market changed. `origin` is `edit` for the person's own work (draw, move, delete, undo) and
+   * `imported` for `importDrawings()`, so a sync that applies a pulled document is not told to save it again. Selection and
+   * hover do not fire it. Read the document with `exportDrawings()`.
+   */
+  drawingsChange: { key: string, symbol: SymbolInfo, count: number, origin: 'edit' | 'imported' }
 }
 
 export function copyWorkspaceMarket (market: WorkspaceMarket): WorkspaceMarket {
@@ -137,7 +143,7 @@ export class WorkspaceEventBus {
   private readonly listeners = new Map<keyof WorkspaceEvents, Set<(event: never) => void>>()
   constructor (private readonly warn: (...args: unknown[]) => void, private readonly schedule: (callback: () => void) => void = queueMicrotask) {}
   on<K extends keyof WorkspaceEvents> (type: K, listener: (event: WorkspaceEvents[K]) => void): () => void {
-    if (!['marketChange', 'loadState', 'loadResult', 'dataChange', 'replayChange'].includes(type)) throw new RangeError('Unknown workspace event')
+    if (!['marketChange', 'loadState', 'loadResult', 'dataChange', 'replayChange', 'drawingsChange'].includes(type)) throw new RangeError('Unknown workspace event')
     if (typeof listener !== 'function') throw new TypeError('Workspace listener must be a function')
     let set = this.listeners.get(type)
     if (set === undefined) { set = new Set(); this.listeners.set(type, set) }

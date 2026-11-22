@@ -29,6 +29,9 @@
       "@supersolutions/super-chart-core/indicators": [
         "packages/core/src/model/indicatorCatalog.ts"
       ],
+      "@supersolutions/super-chart-core/sync": [
+        "packages/core/src/sync.ts"
+      ],
       "@supersolutions/super-chart-superscript": [
         "packages/superscript/src/index.ts"
       ],
@@ -40,6 +43,9 @@
       ],
       "@supersolutions/super-chart-web/annotations": [
         "packages/bindings/web/src/annotations.ts"
+      ],
+      "@supersolutions/super-chart-web/sync": [
+        "packages/bindings/web/src/syncEntry.ts"
       ],
       "@supersolutions/super-chart-web/overlays": [
         "packages/bindings/web/src/overlayEntry.ts"
