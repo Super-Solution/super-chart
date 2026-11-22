@@ -1,0 +1,32 @@
+[package]
+name = "super-chart-quotes"
+version = "0.1.0"
+description = "One price from several markets: two ways to aggregate sources (primary with fallbacks, or a weighted consensus) behind one trait. No network code."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["quotes", "price", "aggregation", "consensus"]
+
+[lib]
+name = "super_chart_quotes"
+
+[lints]
+workspace = true
+
+[features]
+default = ["runtime"]
+# Fetching and sharing: the `QuoteSource` adapter trait, `Instrument` and a single-flight cache. The arithmetic does
+# not need it, and builds without it have no async runtime at all.
+runtime = ["dep:tokio"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", optional = true, default-features = false, features = ["rt", "sync", "time", "macros"] }
+
+[dev-dependencies]
+serde_json = "1"
+tokio = { version = "1", default-features = false, features = ["rt", "sync", "time", "macros", "test-util"] }

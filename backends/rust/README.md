@@ -1,15 +1,16 @@
 # super-chart Rust libraries
 
-A library for the services that integrate Super Chart, in Rust. Unlike the `go/` and `python/` backends it is not
-a technical-analysis kernel (those stay TypeScript, Go and Python for now); it is a server-side piece a product needs
+Libraries for the services that integrate Super Chart, in Rust. Unlike the `go/` and `python/` backends they are not
+technical-analysis kernels (those stay TypeScript, Go and Python for now); they are the server-side pieces a product needs
 around a chart. All code here is GPL-3.0-or-later; a commercial licence is available from SUPER SOLUTION LABS INC
 (contact@supersolution.io).
 
 | Crate | What it is |
 | --- | --- |
 | [`super-chart-docs`](crates/docs) | Saves the drawings and workspaces a chart keeps for a person: the server side of the [sync protocol](../../docs/SYNC-PROTOCOL.md). An `axum` router you embed, a `DocStore` trait with in-memory and Postgres stores, bearer-token authentication (static and signed), per-owner rate limits. |
+| [`super-chart-quotes`](crates/quotes) | One price from several markets: primary-with-fallbacks and a weighted consensus behind one `Aggregator` trait, with a source adapter trait and a single-flight cache. No network code. |
 
-It is built and tested, and not published to crates.io (`publish = false`); a release needs the owner's separate
+Both are built and tested, and neither is published to crates.io (`publish = false`); a release needs the owner's separate
 authorization.
 
 Requires Rust 1.88 or newer (edition 2024).
