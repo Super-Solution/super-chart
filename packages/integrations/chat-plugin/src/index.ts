@@ -45,6 +45,18 @@ const CHART_TYPE_TO_ENGINE: Record<ChartType, { chartType?: string, mode: 'raw' 
   'heikin-ashi': { chartType: 'candles', mode: 'heikin-ashi' }
 }
 
+/**
+ * Where the host shows the card (super-protocol 0.4 `CardMountContext.placement`). Read structurally so a host that
+ * predates placements, which shows every card inline, keeps working.
+ */
+type Placement = 'inline' | 'panel' | 'document'
+const placementOf = (context: CardMountContext): Placement => {
+  const value = (context as { placement?: unknown }).placement
+  return value === 'panel' || value === 'document' ? value : 'inline'
+}
+/** In a document the chart is read, not worked on: no drawing tools or replay footer. */
+const DOCUMENT_PARTS = { drawingBar: false, toolRail: false, drawingToolbar: false, footer: false } as const
+
 const DEFAULT_PERIODS: Period[] = [
   { multiplier: 1, timespan: 'minute', text: '1m' }, { multiplier: 5, timespan: 'minute', text: '5m' },
   { multiplier: 15, timespan: 'minute', text: '15m' }, { multiplier: 1, timespan: 'hour', text: '1h' },
@@ -192,7 +204,12 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
         }
         if (destroyed || mine !== epoch) return
         const host = doc.createElement('div')
-        host.style.cssText = `position:relative;width:100%;height:${spec.height ?? 420}px;overflow:hidden`
+        const placement = placementOf(context)
+        // In the side panel the chart fills the room it is given, with every tool; in the chat and in a document it keeps its card height.
+        host.style.cssText = placement === 'panel'
+          ? 'position:relative;width:100%;flex:1 1 auto;height:100%;min-height:360px;overflow:hidden'
+          : `position:relative;width:100%;height:${spec.height ?? (placement === 'document' ? 360 : 420)}px;overflow:hidden`
+        host.dataset.placement = placement
         const notes = doc.createElement('div')
         notes.setAttribute('role', 'status')
         const hostTheme = readHostTheme(context.hostTheme)
@@ -207,7 +224,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
           period: spec.period,
           periods,
           theme: context.theme,
-          ui: { variables: look.variables },
+          ui: { variables: look.variables, ...(placement === 'document' ? { parts: DOCUMENT_PARTS } : {}) },
           chart: { mode: engine.mode, render: { ...look.render, chartType: engine.chartType as never } }
         })
         for (const definition of [...TECHNICAL_INDICATOR_DEFINITIONS, ...CLASSIC_INDICATOR_DEFINITIONS]) workspace.registerIndicator(definition)
@@ -257,14 +274,15 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
 
     const render = (rawSpec: unknown, context: CardMountContext): void => {
       const themeKey = JSON.stringify(readHostTheme(context.hostTheme))
-      const signature = JSON.stringify([rawSpec, context.theme, themeKey, context.partial === true])
+      const signature = JSON.stringify([rawSpec, context.theme, themeKey, context.partial === true, placementOf(context)])
       if (signature === shown) return
       shown = signature
       if (context.partial === true) { teardown(); dataSignature = ''; note(container, 'Chart is still being written…'); return }
       const valid = validateChartCard(rawSpec)
       if (!valid.ok) { teardown(); dataSignature = ''; note(container, valid.error, 'alert'); return }
       const spec = rawSpec as ChartCardSpec
-      const key = dataKey(spec) + (spec.height ?? '') + context.theme + themeKey + (spec.id ?? '')
+      // Moving between the chat, the panel and a document rebuilds the chart; its indicators and marks come back from `kept`.
+      const key = dataKey(spec) + (spec.height ?? '') + context.theme + themeKey + (spec.id ?? '') + placementOf(context)
       if (current !== null && key === dataSignature) {
         // Same market and data: apply only what changed, keep the viewport and drawings.
         const chart = current
@@ -501,6 +519,8 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
       license: 'GPL-3.0-or-later',
       capabilities: [
         { id: 'chart.card', surface: 'card', cardKind: CHART_CARD_KIND },
+        // A chart someone works with (drawing, replay, indicators) has room for every tool in a side panel.
+        { id: 'chart.panel', surface: 'panel', cardKind: CHART_CARD_KIND },
         ...tools.map(tool => ({ id: `chart.${tool.name.replace(/^chart_/, '').replace(/_/g, '-')}`, surface: 'tool' as const, toolName: tool.name }))
       ]
     },

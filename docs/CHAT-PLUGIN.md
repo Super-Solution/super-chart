@@ -45,6 +45,18 @@ the same market and data updates indicators, annotations and chart type in place
 (viewport and the user's drawings stay); a changed market, data or height remounts.
 One bad indicator is reported under the chart and does not blank it.
 
+## Where the card is shown
+
+A host that shows cards in more than one place (super-protocol 0.4 `CardMountContext.placement`) gets a chart that fits each:
+
+| placement | what the chart does |
+| --- | --- |
+| `inline` (or none) | The chat card as before: `height` (default 420 px), full chrome. |
+| `panel` | Fills the side panel (at least 360 px tall) and ignores `height`: every tool, for drawing and replay. The manifest declares a `panel` capability for `super-chart.chart`. |
+| `document` | Inside an editor document: `height` (default 360 px), no drawing bar, tool rail or replay footer, since a report is read. Print shows the block's alt text. |
+
+Moving a card between places rebuilds the chart; indicators and marks come back the same way they do on a remount. The placement is read structurally, so the plugin still runs on hosts with protocol 0.3.
+
 ## Tools
 
 | Tool | Authority | Does |
