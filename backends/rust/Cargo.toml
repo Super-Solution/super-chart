@@ -1,0 +1,20 @@
+[workspace]
+resolver = "3"
+members = ["crates/docs"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.88"
+license = "GPL-3.0-or-later"
+publish = false
+authors = ["SUPER SOLUTION LABS INC"]
+repository = "https://github.com/Super-Solution/super-chart"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "warn"
+dbg_macro = "deny"
+todo = "deny"
