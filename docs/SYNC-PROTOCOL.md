@@ -128,7 +128,7 @@ origins it allows by name, never `*` together with credentials, and allows the `
 ## A reference
 
 `createMemoryTransport()` in `@supersolutions/super-chart-core/sync` is a complete in-memory implementation of the two
-operations. Super Chart Cloud's Rust service (`chart-docs`) implements this protocol over Postgres.
+operations. The `super-chart-docs` crate in `backends/rust` implements this protocol as an `axum` router over any store, with a Postgres store included.
 
 ## Versioning
 

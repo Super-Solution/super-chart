@@ -13,3 +13,4 @@ __pycache__/
 
 # Explicit local build of the unpublished sibling protocol package
 /.local-deps/
+/backends/rust/target

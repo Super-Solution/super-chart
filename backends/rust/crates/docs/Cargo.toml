@@ -1,0 +1,39 @@
+[package]
+name = "super-chart-docs"
+version = "0.1.0"
+description = "Server side of Super Chart's sync protocol (docs/SYNC-PROTOCOL.md): stores the drawings and workspaces a chart saves for a person, one revision per write. Embed the axum router in your own service."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["chart", "sync", "storage", "axum"]
+
+[lints]
+workspace = true
+
+[lib]
+name = "super_chart_docs"
+
+[features]
+default = ["postgres"]
+# `PgStore`: the Postgres implementation of `DocStore`. Without it the crate needs no database client.
+postgres = ["dep:sqlx"]
+
+[dependencies]
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+base64 = "0.22"
+hmac = "0.12"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+sqlx = { version = "0.8", optional = true, default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "time", "sync"] }
+tower = { version = "0.5", default-features = false, features = ["limit", "util"] }
+tower-http = { version = "0.6", default-features = false, features = ["cors", "timeout", "set-header", "limit"] }
+tracing = "0.1"
+
+[dev-dependencies]
+http-body-util = "0.1"
