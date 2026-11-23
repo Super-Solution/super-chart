@@ -72,6 +72,12 @@ price gutter meets the time axis, takes pointer events only on itself, follows t
 chart's light or dark theme, and is a real focusable link with an accessible name.
 Its DOM is `a.sc-powered`.
 
+The badge shares its row with the time axis, so the chart keeps that row clear of it:
+the first time label (and the crosshair's time tag) never starts left of the badge
+plus a gap of its own inset, 30px from the chart's left edge. A label whose tick sits
+closer to the edge than that is moved right to the clearance instead of running under
+the badge. Hovering the badge opens it over the row for as long as the pointer is on it.
+
 ## The selection toolbar
 
 Selecting a drawing shows a floating toolbar over it, like TradingView's. It is

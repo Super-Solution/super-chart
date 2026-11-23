@@ -1,6 +1,7 @@
 import { nearestChartIndex, derivePrecision, formatBarDate, type FinancialChartModel, type ChartCandlePoint, type EngineRenderFrame, type EngineRenderOptions, type BarDateRequestType } from '@supersolutions/super-chart-core'
 import { paintPriceSeries } from './seriesRenderer'
 import { typicalPrice, halfBarWidth } from './geometry'
+import { timeLabelCentre } from './badge'
 import { colors, withAlpha, CANVAS_FONT, CANVAS_LABEL_FONT } from './tokens'
 
 export type { EngineRenderOptions } from '@supersolutions/super-chart-core'
@@ -351,7 +352,7 @@ export function paintEngineFrame (
       const date = (options.timespan === 'minute' || options.timespan === 'second') && typeof key === 'number' && Number.isFinite(key) && Math.abs(key) <= 8.64e15 ? calendarDate(formatter, key, options.timeZone ?? 'UTC') : null
       const label = typeof key === 'number' ? timeLabel(formatter, key, options, 'xAxis', date === null ? 'HH:mm' : boundaryFormat(date, previousDate)) : String(key)
       const width = Math.min(ctx.measureText(label).width, Math.max(1, g.width - 8))
-      const x = Math.max(4 + width / 2, Math.min(g.width - 4 - width / 2, m.xPositions[index]))
+      const x = timeLabelCentre(m.xPositions[index], width, g.width, 4)
       if (x - width / 2 < labelRight + 8) continue
       ctx.fillText(label, x, Math.min(g.height - 8, g.bottom + 18), width)
       labelRight = x + width / 2
@@ -446,7 +447,7 @@ export function paintEngineCursor (
     if (options.showTimeAxis !== false && hit !== null) {
       const time = timeLabel(timeFormat(options.timeZone ?? 'UTC'), hit.timestamp, options, 'crosshair')
       const timeWidth = Math.min(g.width - 8, ctx.measureText(time).width + 12)
-      const timeX = Math.max(2 + timeWidth / 2, Math.min(g.width - 2 - timeWidth / 2, px))
+      const timeX = timeLabelCentre(px, timeWidth, g.width, 2)
       const timeY = Math.min(g.height - 8, g.bottom + 18)
       ctx.fillStyle = p.tagFill; ctx.fillRect(Math.round(timeX - timeWidth / 2), Math.round(timeY) - 9, Math.round(timeWidth), 18)
       ctx.fillStyle = p.tagText; ctx.textAlign = 'center'
