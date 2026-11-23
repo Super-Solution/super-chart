@@ -7,6 +7,8 @@ import { paintDrawings } from './drawingRenderer'
 import type { EngineLayer } from './layer'
 import { attachPaneInteraction } from './paneInteraction'
 import { DrawingImageRenderer } from './drawingMedia'
+import { snapToBar } from './magnet'
+import { attachPoweredBy, type PoweredByBadge } from './badge'
 
 export interface EngineChartOptions {
   count?: number
@@ -91,7 +93,11 @@ export class EngineChart {
   private readonly unsubscribers: Array<() => void> = []
   private readonly stopGestures: ReturnType<typeof attachEngineGestures>
   private readonly drawingInput: ReturnType<typeof attachDrawingInteraction>
+  private readonly badge: PoweredByBadge
   private drawingMagnet = false
+  /** Control (Command on a Mac) is down: it flips the magnet for as long as it is held. */
+  private modifierHeld = false
+  private activeTool: DrawingType | null = null
   private holdDraw: ResolvedHoldDraw | null
   private holdListener: ((event: HoldDrawEvent) => void) | undefined
   private readonly onInspect?: EngineChartOptions['onInspect']
@@ -108,6 +114,7 @@ export class EngineChart {
   private frame: EngineFrame | null = null
   private frameId = 0
   private cursorX: number | null = null
+  private cursorY: number | null = null
   private width = 0
   private height = 0
   private ratio = 0
@@ -161,6 +168,7 @@ export class EngineChart {
     const context = this.canvas.getContext('2d'), drawingContext = this.drawingCanvas.getContext('2d'), cursorContext = this.cursorCanvas.getContext('2d')
     if (context === null || drawingContext === null || cursorContext === null) { this.view.dispose(); throw new Error('Canvas 2D is unavailable') }
     this.context = context; this.drawingContext = drawingContext; this.cursorContext = cursorContext
+    this.badge = attachPoweredBy(this.root, this.renderOptions.theme)
     host.append(this.root)
     this.unsubscribers.push(this.series.subscribe(change => {
       this.indicators.invalidate(change)
@@ -186,15 +194,30 @@ export class EngineChart {
       cancel: (id: number): void => { this.inputs.delete(id) }
     }
     this.unsubscribers.push(attachPaneInteraction(this.root, () => this.frame, () => this.layout, options => this.setLayout(options), () => this.stopGestures.cancelInput(), this.view, frameScheduler))
+    // Registered before the drawing input so it sees every press and move first; it never stops them.
+    const syncModifier = (held: boolean): void => {
+      if (this.modifierHeld === held) return
+      this.modifierHeld = held
+      if (this.activeTool !== null && this.cursorX !== null) { this.cursorDirty = true; this.schedule() }
+    }
+    for (const type of ['pointermove', 'pointerdown']) {
+      this.root.addEventListener(type, event => { const e = event as PointerEvent; syncModifier(e.ctrlKey || e.metaKey) }, { capture: true, passive: true, signal: this.abort.signal })
+    }
+    for (const type of ['keydown', 'keyup']) {
+      this.doc.addEventListener(type, event => { const e = event as KeyboardEvent; syncModifier(e.ctrlKey || e.metaKey) }, { capture: true, passive: true, signal: this.abort.signal })
+    }
+    this.win.addEventListener('blur', () => { syncModifier(false) }, { signal: this.abort.signal })
     this.drawingInput = attachDrawingInteraction(this.root, this.drawings, () => this.frame, preview => {
       this.preview = preview; this.drawingDirty = true; this.schedule()
     }, options.onToolComplete, () => this.stopGestures.cancelInput(), this.drawingImages, {
       options: () => this.holdDraw,
       onEvent: event => { try { this.holdListener?.(event) } catch (error) { this.win.console.warn('Hold-to-draw listener failed', error) } }
-    }, { magnet: () => this.drawingMagnet })
-    this.stopGestures = attachEngineGestures(this.root, this.view, () => this.frame?.model.geometry ?? null, x => {
-      if (this.cursorX !== x) { this.cursorX = x; this.cursorDirty = true; this.schedule() }
     }, {
+      magnet: () => this.magnetActive(),
+      // A drawing in progress takes the pointer from the gestures, but the crosshair keeps following it.
+      pointer: (x, y) => { this.moveCursor(x, y) }
+    })
+    this.stopGestures = attachEngineGestures(this.root, this.view, () => this.frame?.model.geometry ?? null, (x, y) => { this.moveCursor(x, y ?? null) }, {
       inertia: options.inertia !== false,
       frameScheduler
     })
@@ -308,7 +331,9 @@ export class EngineChart {
 
   /**
    * Magnet: while on, a point you place or drag (not a whole-drawing move) snaps to the open, high, low or close of a
-   * bar within 24 px, so levels and trend lines land on real prices. Off by default.
+   * bar within 24 px, so levels and trend lines land on real prices. Off by default. Holding Control (Command on a Mac)
+   * flips it for as long as it is held: it snaps with the magnet off, and places freely with the magnet on. While a
+   * drawing tool is armed the crosshair shows the point it would snap to; otherwise the crosshair follows the pointer.
    */
   setDrawingMagnet (enabled: boolean): void {
     this.assertLive()
@@ -316,6 +341,7 @@ export class EngineChart {
     this.drawingMagnet = enabled
   }
 
+  /** The toggle you set, not the effective state: Control flips the effective one while held. */
   getDrawingMagnet (): boolean { return this.drawingMagnet }
 
   /** Replace the hold-to-draw progress listener; pass undefined to remove it. */
@@ -329,6 +355,8 @@ export class EngineChart {
     // An unknown name would arm a tool that swallows every pointer gesture and draws nothing.
     if (tool !== null && !(DRAWING_TYPES as readonly string[]).includes(tool)) throw new RangeError(`Unknown drawing tool ${JSON.stringify(tool)}`)
     this.drawingInput.setTool(tool)
+    this.activeTool = tool === 'brush' || tool === 'highlighter' ? null : tool
+    this.cursorDirty = true; this.schedule()
   }
 
   /** Own this layer until removal or chart disposal. It receives only revealed replay data. */
@@ -346,6 +374,7 @@ export class EngineChart {
     this.assertLive()
     const next = { ...this.renderOptions, ...options }
     this.validateRender(next); this.renderOptions = next
+    this.badge.setTheme(next.theme)
     this.paintDirty = true; this.drawingDirty = true; this.cursorDirty = true; this.schedule()
   }
 
@@ -469,7 +498,7 @@ export class EngineChart {
     // Registered custom parameter validators may reject; this is still before
     // render, scale, drawing or viewport mutation.
     this.indicators.replace(configuration.indicators)
-    this.renderOptions = render; this.layout = layout; this.notifyLayout()
+    this.renderOptions = render; this.badge.setTheme(render.theme); this.layout = layout; this.notifyLayout()
     this.drawings.importJson(normalizedDrawings, { recordHistory: false })
     try {
       this.view.setMode(configuration.mode)
@@ -556,7 +585,7 @@ export class EngineChart {
     if (this.disposed) return
     this.disposed = true
     this.abort.abort(); this.resizeObserver.disconnect(); this.unsubscribers.forEach(fn => fn())
-    this.drawingInput.dispose(); this.drawingImages.dispose(); this.stopGestures(); this.view.dispose()
+    this.drawingInput.dispose(); this.badge.dispose(); this.drawingImages.dispose(); this.stopGestures(); this.view.dispose()
     this.dprQuery?.removeEventListener('change', this.pixelRatioChanged)
     if (this.frameId !== 0) this.win.cancelAnimationFrame(this.frameId)
     this.frameId = 0; this.inputs.clear(); this.frame = null; this.preview = null
@@ -572,6 +601,34 @@ export class EngineChart {
   }
 
   private assertLive (): void { if (this.disposed) throw new Error('Chart is disposed') }
+
+  /** The magnet as it acts right now: the toggle, flipped while Control is held. */
+  private magnetActive (): boolean { return this.drawingMagnet !== this.modifierHeld }
+
+  private moveCursor (x: number | null, y: number | null): void {
+    if (this.cursorX === x && this.cursorY === y) return
+    this.cursorX = x; this.cursorY = x === null ? null : y; this.cursorDirty = true; this.schedule()
+  }
+
+  /**
+   * Where the crosshair is drawn: under the pointer, or, while a drawing tool is armed with the magnet in effect, on
+   * the open, high, low or close the next point would land on.
+   */
+  private crosshairPoint (frame: EngineFrame): { x: number, y: number | null } | null {
+    const x = this.cursorX, y = this.cursorY
+    if (x === null) return null
+    if (y === null) return { x, y: null }
+    const price = frame.panes[0]
+    if (this.activeTool !== null && this.magnetActive() && y >= 0 && y <= price.height) {
+      const raw = frame.unproject(x, y)
+      if (raw !== null) {
+        const snapped = snapToBar(frame, { x, y }, raw), at = snapped === raw ? null : frame.project(snapped.timestamp, snapped.price)
+        if (at !== null) return at
+      }
+    }
+    return { x, y }
+  }
+
   private updateReference (bars: readonly MarketBar[]): number | undefined {
     const current = this.series.getDataList()
     return current.length === 0 ? bars[0]?.close : current.length === 1 ? bars.find(bar => bar.timestamp === current[0].timestamp)?.close ?? current[0].close : current[0].close
@@ -711,13 +768,21 @@ export class EngineChart {
     if (this.cursorDirty) {
       this.cursorContext.setTransform(this.canvas.width / this.width, 0, 0, this.canvas.height / this.height, 0, 0)
       this.cursorContext.clearRect(0, 0, this.width, this.height)
-      if (this.cursorX !== null) { for (const [i, pane] of this.frame.panes.entries()) {
+      const crosshair = this.crosshairPoint(this.frame)
+      if (crosshair !== null) { for (const [i, pane] of this.frame.panes.entries()) {
+        const local = crosshair.y === null ? undefined : crosshair.y - pane.top
+        const inside = local !== undefined && local >= 0 && local < pane.height
         this.cursorContext.save(); this.cursorContext.translate(0, pane.top)
-        paintEngineCursor(this.cursorContext, pane.frame, this.cursorX, { ...this.renderOptions, formatPrice: pane.scale.label, showTimeAxis: i === this.frame.panes.length - 1 })
+        paintEngineCursor(this.cursorContext, pane.frame, crosshair.x, {
+          ...this.renderOptions,
+          formatPrice: pane.scale.label,
+          showTimeAxis: i === this.frame.panes.length - 1,
+          ...(local === undefined ? {} : { cursorY: inside ? local : null, cursorPrice: inside ? pane.scale.value(local) : null })
+        })
         this.cursorContext.restore()
       } }
       this.cursorDirty = false; this.counters.cursorPaints++
-      this.onInspect?.(this.cursorX === null ? null : this.frame.inspect(this.cursorX))
+      this.onInspect?.(crosshair === null ? null : this.frame.inspect(crosshair.x))
     }
     if (this.disposed || this.frame === null) return
     this.counters.frames++; this.counters.lastFrameMs = this.win.performance.now() - started

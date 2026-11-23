@@ -33,4 +33,12 @@ export interface EngineRenderOptions {
   /** Internal pane composition can omit repeated time labels. */
   showTimeAxis?: boolean
   formatPrice?: (price: number, precision: number) => string
+  /**
+   * Makes the crosshair follow the pointer on both axes instead of snapping to the bar under it. `cursorY` is the
+   * pointer's height in this pane's own pixels and `cursorPrice` the value there; `null` (or a height outside the plot)
+   * means the pointer is in another pane, so only the vertical line is drawn. Left unset, the crosshair keeps the older
+   * behaviour and sits on the bar's close.
+   */
+  cursorY?: number | null
+  cursorPrice?: number | null
 }
