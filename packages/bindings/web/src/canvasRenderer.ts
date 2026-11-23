@@ -360,7 +360,12 @@ export function paintEngineFrame (
   } finally { ctx.restore() }
 }
 
-/** Draw on a separate cleared cursor layer so pointer moves do not redraw candles. */
+/**
+ * Draw on a separate cleared cursor layer so pointer moves do not redraw candles.
+ *
+ * With `options.cursorY` set the crosshair follows the pointer freely on both axes (the readout and the time tag still
+ * name the bar beside it). Without it the lines sit on the bar's centre and close, as in earlier versions.
+ */
 export function paintEngineCursor (
   ctx: CanvasRenderingContext2D,
   frame: EngineRenderFrame,
@@ -369,15 +374,26 @@ export function paintEngineCursor (
 ): void {
   const m = frame.model, g = m.geometry
   if (!ready(m) || !Number.isFinite(x) || x < g.left || x > g.right) return
+  const free = options.cursorY !== undefined
   const index = nearestChartIndex(m, x), hit = frame.inspectBar !== undefined ? frame.inspectBar(x) : frame.inspect(x)
-  if (index === null || hit === null) return
+  // Free, the lines still follow the pointer over empty time past the last bar; only the bar-bound parts need a bar.
+  if (index === null || (hit === null && !free)) return
   const p = palette(options)
-  const bar = hit.displayBar
-  const typical = typicalPrice(bar)
-  const displayed = options.chartType === 'hlc-area' ? Number.isFinite(typical) ? typical : bar.high / 3 + bar.low / 3 + bar.close / 3 : bar.close
-  const px = m.xPositions[index], py = m.y(displayed)
   const indicator = frame.indicatorPane === true
-  if (!Number.isFinite(px) || (!indicator && !Number.isFinite(py))) return
+  const bar = hit?.displayBar
+  let px: number, py: number, displayed = NaN
+  if (free) {
+    px = x
+    const y = options.cursorY, price = options.cursorPrice
+    py = y !== null && y !== undefined && price !== null && price !== undefined && Number.isFinite(y) && Number.isFinite(price) && y >= g.top && y <= g.bottom ? y : NaN
+    displayed = Number.isFinite(py) ? options.cursorPrice as number : NaN
+  } else {
+    if (bar === undefined) return
+    const typical = typicalPrice(bar)
+    displayed = options.chartType === 'hlc-area' ? Number.isFinite(typical) ? typical : bar.high / 3 + bar.low / 3 + bar.close / 3 : bar.close
+    px = m.xPositions[index]; py = m.y(displayed)
+    if (!Number.isFinite(px) || (!indicator && !Number.isFinite(py))) return
+  }
   const digits = precision(options.pricePrecision ?? frame.pricePrecision ?? derivePrecision(frame.snapshot.bars))
   ctx.save()
   try {
@@ -389,42 +405,45 @@ export function paintEngineCursor (
       clipPlot(ctx, m)
       const cx = Math.round(px) + 0.5, cy = Math.round(py) + 0.5
       ctx.beginPath(); ctx.moveTo(cx, g.top); ctx.lineTo(cx, g.bottom)
-      if (!indicator) { ctx.moveTo(g.left, cy); ctx.lineTo(g.right, cy) }
+      if (free ? Number.isFinite(py) : !indicator) { ctx.moveTo(g.left, cy); ctx.lineTo(g.right, cy) }
       ctx.stroke()
     } finally { ctx.restore() }
     ctx.setLineDash([]); ctx.font = p.font
     ctx.textAlign = 'left'; ctx.textBaseline = 'top'
 
     // Readout: names muted, values in ink, on the canvas colour.
-    const parts: Array<[string, string]> = indicator
-      ? m.plottedSeries.map(series => {
-        // Visible points stay ordered even when warmup/null gaps were filtered.
-        let lo = 0, hi = series.points.length
-        while (lo < hi) { const mid = (lo + hi) >>> 1; if (series.points[mid].index < index) lo = mid + 1; else hi = mid }
-        const point = series.points[lo]?.index === index ? series.points[lo] : undefined
-        return [`${series.source.name ?? series.source.id} `, point === undefined ? '—' : String(Number(point.value.toPrecision(6)))]
-      })
-      : [[hit.mode === 'heikin-ashi' ? 'HA O ' : 'O ', bar.open.toFixed(digits)], ['H ', bar.high.toFixed(digits)], ['L ', bar.low.toFixed(digits)], ['C ', bar.close.toFixed(digits)]]
-    const gap = 10
-    const width = Math.min(g.plotWidth, parts.reduce((sum, [name, value]) => sum + ctx.measureText(name).width + ctx.measureText(value).width + gap, 8))
-    ctx.fillStyle = p.background; ctx.globalAlpha = 0.92
-    ctx.fillRect(g.left, g.top, width, 20); ctx.globalAlpha = 1
-    let cursor = g.left + 4
-    for (const [name, value] of parts) {
-      if (cursor > g.left + width) break
-      ctx.fillStyle = p.text; ctx.fillText(name, cursor, g.top + 4); cursor += ctx.measureText(name).width
-      ctx.fillStyle = p.ink; ctx.fillText(value, cursor, g.top + 4); cursor += ctx.measureText(value).width + gap
+    if (hit !== null && bar !== undefined) {
+      const parts: Array<[string, string]> = indicator
+        ? m.plottedSeries.map(series => {
+          // Visible points stay ordered even when warmup/null gaps were filtered.
+          let lo = 0, hi = series.points.length
+          while (lo < hi) { const mid = (lo + hi) >>> 1; if (series.points[mid].index < index) lo = mid + 1; else hi = mid }
+          const point = series.points[lo]?.index === index ? series.points[lo] : undefined
+          return [`${series.source.name ?? series.source.id} `, point === undefined ? '—' : String(Number(point.value.toPrecision(6)))]
+        })
+        : [[hit.mode === 'heikin-ashi' ? 'HA O ' : 'O ', bar.open.toFixed(digits)], ['H ', bar.high.toFixed(digits)], ['L ', bar.low.toFixed(digits)], ['C ', bar.close.toFixed(digits)]]
+      const gap = 10
+      const width = Math.min(g.plotWidth, parts.reduce((sum, [name, value]) => sum + ctx.measureText(name).width + ctx.measureText(value).width + gap, 8))
+      ctx.fillStyle = p.background; ctx.globalAlpha = 0.92
+      ctx.fillRect(g.left, g.top, width, 20); ctx.globalAlpha = 1
+      let cursor = g.left + 4
+      for (const [name, value] of parts) {
+        if (cursor > g.left + width) break
+        ctx.fillStyle = p.text; ctx.fillText(name, cursor, g.top + 4); cursor += ctx.measureText(name).width
+        ctx.fillStyle = p.ink; ctx.fillText(value, cursor, g.top + 4); cursor += ctx.measureText(value).width + gap
+      }
     }
 
     // Tags are ink fills, so they never read as a market colour.
     ctx.textBaseline = 'middle'
-    if (!indicator) {
+    if (Number.isFinite(py) && (free || !indicator)) {
       const y = Math.round(py)
+      const text = indicator ? String(Number(displayed.toPrecision(6))) : options.formatPrice?.(displayed, digits) ?? displayed.toFixed(digits)
       ctx.fillStyle = p.tagFill; ctx.fillRect(2, y - 9, Math.max(1, g.left - 4), 18)
       ctx.fillStyle = p.tagText; ctx.textAlign = 'right'
-      ctx.fillText(options.formatPrice?.(displayed, digits) ?? displayed.toFixed(digits), g.left - 6, y, Math.max(1, g.left - 10))
+      ctx.fillText(text, g.left - 6, y, Math.max(1, g.left - 10))
     }
-    if (options.showTimeAxis !== false) {
+    if (options.showTimeAxis !== false && hit !== null) {
       const time = timeLabel(timeFormat(options.timeZone ?? 'UTC'), hit.timestamp, options, 'crosshair')
       const timeWidth = Math.min(g.width - 8, ctx.measureText(time).width + 12)
       const timeX = Math.max(2 + timeWidth / 2, Math.min(g.width - 2 - timeWidth / 2, px))

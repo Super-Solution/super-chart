@@ -12,7 +12,8 @@ export function attachEngineGestures (
   element: HTMLElement,
   view: RealtimeView,
   geometry: () => Geometry | null,
-  cursor: (x: number | null) => void,
+  /** Where the pointer is inside the element, in pixels; `null` when it has left or is not inspecting. */
+  cursor: (x: number | null, y?: number) => void,
   options: {
     inertia?: boolean
     reducedMotion?: boolean
@@ -122,9 +123,9 @@ export function attachEngineGestures (
   }
   const flush = (): void => { cancelScheduled(); wheel = null; coast = null; commit() }
   const stop = (): void => { cancelScheduled(); pending = null; wheel = null; coast = null; velocity = 0 }
-  const position = (): { x: number, distance: number } => {
+  const position = (): { x: number, y: number, distance: number } => {
     const iterator = pointers.values(), a = iterator.next().value as Point, b = iterator.next().value as Point | undefined
-    return b === undefined ? { x: a.x, distance: 0 } : { x: (a.x + b.x) / 2, distance: Math.hypot(b.x - a.x, b.y - a.y) }
+    return b === undefined ? { x: a.x, y: a.y, distance: 0 } : { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, distance: Math.hypot(b.x - a.x, b.y - a.y) }
   }
   const rebase = (): void => {
     const frame = readFrame()
@@ -163,7 +164,7 @@ export function attachEngineGestures (
           const current = pointers.get(id)
           if (hold?.id !== id || current === undefined || pointers.size !== 1 || drag === null || !valid(drag)) { cancelHold(); return }
           hold = null; inspection = true; pending = null; velocity = 0
-          view.endNavigation(); cursor(current.x)
+          view.endNavigation(); cursor(current.x, current.y)
         }, 450)
       }
     } else cursor(null)
@@ -171,7 +172,7 @@ export function attachEngineGestures (
   const movePointer = (e: PointerEvent, target: EventTarget | null = e.target): void => {
     const r = bounds(), x = e.clientX - r.left, y = e.clientY - r.top
     if (!pointers.has(e.pointerId)) {
-      if (pointers.size === 0 && !inspection && !editable(target)) cursor(x)
+      if (pointers.size === 0 && !inspection && !editable(target)) cursor(x, y)
       return
     }
     pointers.set(e.pointerId, { x, y })
@@ -179,7 +180,7 @@ export function attachEngineGestures (
       if (Math.hypot(x - hold.point.x, y - hold.point.y) <= 8) return
       cancelHold()
     }
-    if (inspection && pointers.size === 1) { cursor(x); return }
+    if (inspection && pointers.size === 1) { cursor(x, y); return }
     if (drag === null || !valid(drag)) { pending = null; rebase(); return }
     const p = position(), now = eventTime(e)
     const factor = pointers.size === 2 && drag.distance > 1 ? Math.max(1, p.distance) / drag.distance : 1
@@ -194,7 +195,7 @@ export function attachEngineGestures (
       velocity += (instantaneous - velocity) * (1 - Math.exp(-elapsed / 30))
     } else if (pointers.size !== 1) velocity = 0
     sample = { x: p.x, time: now }
-    schedule(); cursor(p.x)
+    schedule(); cursor(p.x, p.y)
   }
   on('pointermove', event => {
     const e = event as PointerEvent, coalesced = e.getCoalescedEvents?.()
@@ -264,7 +265,7 @@ export function attachEngineGestures (
       wheel.target = clampViewport({ i0: wheel.target.i0 + bars, i1: wheel.target.i1 + bars }, frame.length, view.getLimits())
     }
     wheel.lastInput = now
-    schedule(); cursor(x)
+    schedule(); cursor(x, e.clientY - bounds().top)
   }, false)
   on('keydown', event => {
     const e = event as KeyboardEvent

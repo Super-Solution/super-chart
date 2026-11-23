@@ -29,7 +29,7 @@ export function attachDrawingInteraction (
   onInteractionStart?: () => void,
   imageRenderer?: DrawingImageRenderer,
   hold?: { options: () => ResolvedHoldDraw | null, onEvent: (event: HoldDrawEvent) => void },
-  behavior?: { magnet: () => boolean }
+  behavior?: { magnet: () => boolean, pointer?: (x: number, y: number) => void }
 ): { setTool: (tool: DrawingType | null) => void, dispose: () => void } {
   const doc = element.ownerDocument, win = doc.defaultView
   if (win === null) return { setTool: () => {}, dispose: () => {} }
@@ -269,10 +269,12 @@ export function attachDrawingInteraction (
     if (drag === null) {
       if (placement === null || editable(e.target)) return
       const p = point(e), currentFrame = frame(), next = currentFrame === null ? null : anchorAt(currentFrame, p)
+      if (e.pointerType !== 'touch') behavior?.pointer?.(p.x, p.y)
       if (next !== null && anchor(next)) { placement.preview = setPlacementAnchor(placement.preview, placement.nextAnchor, next); onPreview(placement.preview) }
       consume(e); return
     }
     consume(e)
+    if (e.pointerType !== 'touch') { const p = point(e); behavior?.pointer?.(p.x, p.y) }
     if (e.pointerId === drag.pointerId) updatePreview(e)
   })
   on('pointerup', event => {

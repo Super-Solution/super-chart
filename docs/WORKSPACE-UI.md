@@ -29,7 +29,7 @@ Below the groups are two modes and the actions on the selection:
 
 | Control | Does |
 | --- | --- |
-| Magnet | While on, a point you place or drag snaps to the open, high, low or close of a bar within 24 px (`chart.setDrawingMagnet(true)`; off by default). Whole-drawing moves never snap. |
+| Magnet | While on, a point you place or drag snaps to the open, high, low or close of a bar within 24 px (`chart.setDrawingMagnet(true)`; off by default). Whole-drawing moves never snap. Holding **Ctrl** (Command on a Mac) flips it while held: snap with the magnet off, place freely with it on. |
 | Keep drawing | Re-arms the tool after each completed drawing; Escape ends it. Built on `chart.onToolComplete(reason)`, where `reason` is `'completed'` or `'cancelled'`. |
 | Lock / Delete | Act on the selected drawing. |
 | Remove all | Removes every unlocked drawing in one undoable step. |
@@ -44,6 +44,33 @@ element in a slot. The rail's DOM is stable styling surface: `.sc-rail`,
 
 Find the chart element with `.sc-chart`; a bare `[tabindex="0"]` now matches the
 rail's tab stop first.
+
+## The crosshair
+
+The crosshair follows the pointer freely on both axes; it does not jump to the
+nearest candle. Its price tag shows the price under the pointer (in the pane the
+pointer is in; the other panes show only the vertical line), while the OHLC
+readout and the time tag still name the bar beside it.
+
+While a drawing tool is armed and the magnet is in effect (the toggle above, or
+Ctrl held), the crosshair moves to the open, high, low or close the next point
+would land on, so you see where it will snap before you click. It keeps following
+the pointer during the press-drag and click-move-click placements. With no tool
+armed Ctrl does nothing to the crosshair. `getDrawingMagnet()` reports the toggle,
+not the momentary Ctrl state.
+
+## The Powered by Super Chart badge
+
+Every chart carries a small "Powered by Super Chart" badge in its bottom-left
+corner, linking to <https://supersolution.io> (new tab, `rel="noopener"`). It is
+part of the chart itself, so it is there with every layout, with `headless`, and
+without the workspace chrome, and **there is no option to turn it off**.
+
+At rest it is a faint, translucent glass bubble holding the Super Chart mark; hover
+or keyboard focus opens it to show the words. It sits in the empty corner where the
+price gutter meets the time axis, takes pointer events only on itself, follows the
+chart's light or dark theme, and is a real focusable link with an accessible name.
+Its DOM is `a.sc-powered`.
 
 ## The selection toolbar
 
