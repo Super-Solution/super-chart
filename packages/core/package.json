@@ -1,6 +1,6 @@
 {
   "name": "@supersolutions/super-chart-core",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Renderer-free chart core: market data, loader, indicators, drawings, frame and workspace models. No DOM.",
   "license": "GPL-3.0-or-later",
   "type": "module",
