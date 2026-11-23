@@ -5,8 +5,23 @@ import { colors, themeName } from './tokens'
 export const POWERED_BY_URL = 'https://supersolution.io'
 export const POWERED_BY_LABEL = 'Powered by Super Chart'
 
+/** The badge is a 22px circle `BADGE_INSET` from the chart's left and bottom edges. */
+export const BADGE_INSET = 4
+export const BADGE_SIZE = 22
+/** Where the first thing in the time-axis row may start: past the badge, with a gap as wide as its inset. */
+export const BADGE_CLEARANCE = BADGE_INSET * 2 + BADGE_SIZE
+
+/**
+ * Centre of a time-axis label or crosshair time tag: on its own position, kept inside the chart (`margin` from the right
+ * edge and from the left one) and clear of the badge, which sits in the same row at the left. A label wider than the
+ * room keeps its left edge at the clearance.
+ */
+export function timeLabelCentre (position: number, width: number, chartWidth: number, margin: number): number {
+  return Math.max(Math.max(margin, BADGE_CLEARANCE) + width / 2, Math.min(chartWidth - margin - width / 2, position))
+}
+
 const STYLE = `
-.sc-powered{position:absolute;left:4px;bottom:4px;z-index:3;box-sizing:border-box;display:inline-flex;align-items:center;gap:0;height:22px;min-width:22px;max-width:22px;padding:0 3px;overflow:hidden;white-space:nowrap;text-decoration:none;cursor:pointer;pointer-events:auto;touch-action:manipulation;
+.sc-powered{position:absolute;left:${BADGE_INSET}px;bottom:${BADGE_INSET}px;z-index:3;box-sizing:border-box;display:inline-flex;align-items:center;gap:0;height:${BADGE_SIZE}px;min-width:${BADGE_SIZE}px;max-width:${BADGE_SIZE}px;padding:0 3px;overflow:hidden;white-space:nowrap;text-decoration:none;cursor:pointer;pointer-events:auto;touch-action:manipulation;
 border-radius:999px;color:var(--sc-powered-ink);font:500 11px/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:0;text-transform:none;
 background:linear-gradient(135deg,rgba(255,255,255,.34) 0%,rgba(255,255,255,.06) 42%,rgba(255,255,255,.02) 58%,rgba(255,255,255,.18) 100%);
 -webkit-backdrop-filter:blur(6px) saturate(1.4);backdrop-filter:blur(6px) saturate(1.4);
@@ -33,7 +48,7 @@ export interface PoweredByBadge {
  * The "Powered by Super Chart" badge in the chart's bottom-left corner.
  *
  * It belongs to the chart, not to the workspace chrome, so it is there with every layout and with `headless`, and it
- * has no option to turn it off. It sits in the empty corner where the price gutter meets the time axis, takes pointer
+ * has no option to turn it off. It sits in the bottom-left corner, where the price gutter meets the time axis; the time labels start clear of it (`timeLabelCentre`). It takes pointer
  * events only on itself, and opens `supersolution.io` in a new tab. At rest it is a small, faint glass bubble holding the
  * mark; hover or keyboard focus reveals the words.
  */
