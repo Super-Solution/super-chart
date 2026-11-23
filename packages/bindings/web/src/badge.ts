@@ -13,7 +13,7 @@ background:linear-gradient(135deg,rgba(255,255,255,.34) 0%,rgba(255,255,255,.06)
 border:1px solid var(--sc-powered-edge);
 box-shadow:inset 0 1px 0 rgba(255,255,255,.55),inset 0 -1px 0 rgba(255,255,255,.08),0 1px 6px rgba(0,0,0,.14);
 opacity:.55;transition:opacity .18s ease,max-width .22s ease,gap .22s ease,padding .22s ease}
-.sc-powered:hover,.sc-powered:focus-visible{opacity:1;max-width:190px;gap:6px;padding:0 10px 0 3px}
+.sc-powered:hover,.sc-powered:focus-visible{text-decoration:none;opacity:1;max-width:190px;gap:6px;padding:0 10px 0 3px}
 .sc-powered:focus-visible{outline:2px solid var(--sc-powered-focus);outline-offset:2px}
 .sc-powered svg{flex:none;width:16px;height:16px;display:block}
 .sc-powered-text{flex:none}
