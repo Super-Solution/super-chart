@@ -140,6 +140,7 @@ export const WORKSPACE_STYLE = `
 .sc-workspace .sc-icon-only .sc-label,.sc-workspace:not([data-layout=regular]) .sc-drawingbar>.sc-icon-button .sc-label,.sc-workspace:not([data-layout=regular]) .sc-tools-toggle .sc-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .sc-workspace .sc-scalebar{margin-left:auto;padding:0;border:0;min-height:0;background:transparent;gap:4px}
 .sc-workspace .sc-scalebar .sc-button{padding:2px 8px;min-height:24px}
+.sc-workspace .sc-scalebar .sc-select{padding:2px 6px;min-height:24px;max-width:240px;font-size:12px}
 .sc-workspace .sc-palette .sc-search-results{max-height:320px}
 .sc-workspace .sc-palette-group{margin:8px 0 2px;font-size:11px;color:var(--sc-muted,${DARK.muted});text-transform:uppercase;letter-spacing:.04em}
 .sc-workspace .sc-palette-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 8px;border-radius:var(--sc-radius,4px);cursor:pointer}

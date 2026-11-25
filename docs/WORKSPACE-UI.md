@@ -418,9 +418,38 @@ own picker.
 ## Scale bar
 
 Beside the chart-settings panel's percent, log and reverse options, the scale bar
-has **Auto** (return to the automatic price range after a manual range) and
-**UTC** (toggle between UTC and the browser's time zone for axis and crosshair
-labels). Both are also palette commands.
+has **Auto** (return to the automatic price range after a manual range) and a
+**time-zone menu** for the axis and crosshair labels of intraday bars. Both are also
+palette commands.
+
+The menu is a native `<select>` (so the keyboard, type-to-select and screen readers
+work as they do everywhere) with two groups: this device's zone and 14 common
+financial-centre zones first, then every IANA zone the runtime reports
+(`Intl.supportedValuesOf('timeZone')`, about 420 in current browsers), each with its
+UTC offset as of now (`America/New_York (UTC-05:00)`), refreshed whenever the menu
+takes focus so daylight saving reads true. There is no zone database in the package:
+only `Intl`. The default is still `UTC`, and every value that worked before still
+works, because the menu's values are the same IANA ids `render.timeZone` always took
+(`UTC` and the device zone were the two old toggle states; saved workspace documents
+carry the id). A zone the host set that Intl does not list (an alias such as
+`Asia/Calcutta`) is added to the menu so it can be shown.
+
+```ts
+workspace.setTimeZone('Asia/Taipei')   // RangeError with code 'time_zone_unknown' (or 'time_zone_type')
+workspace.getTimeZone()                // 'Asia/Taipei'
+```
+
+Palette: **Time zone: UTC / this device / each common zone** (`view.timezone.<id>`), and
+the earlier `view.timezone` toggle between UTC and the device zone. Day, week, month
+and year bars are unaffected: they read in `SymbolInfo.timezone` (see the time axis).
+The pure pieces are exported from core for hosts and agents: `checkTimeZone(value)`
+returns `{ ok: true, id }` or `{ ok: false, code: 'time_zone_type' | 'time_zone_unknown', hint }`,
+`listTimeZones()`, `localTimeZone()`, `formatUtcOffset(id, at)` and `timeZoneChoices()`.
+
+Limits: offsets in the labels are those of the moment the list was built, not of the
+bars on screen, so a chart looking at last winter's bars shows today's offset in the
+menu while the axis itself uses the offset of each bar. The menu is one flat list of
+IANA ids (no city-name search or localised zone names).
 
 ## Locales and themes
 

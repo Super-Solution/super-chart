@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/promise-function-async -- Load methods validate synchronously and return the shared queue promise without an async wrapper. */
 import { EngineChart, type EngineChartOptions, type EngineConfiguration } from './chart'
-import { ENGINE_CHART_TYPES, DRAWING_TYPES, DERIVED_STYLES, createDerivedSeriesPort, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, parseWorkspaceDocument, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type DerivedSeriesPort, type DerivedStyle, type DerivedStyleOptions, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1 } from '@supersolutions/super-chart-core'
+import { ENGINE_CHART_TYPES, DRAWING_TYPES, DERIVED_STYLES, createDerivedSeriesPort, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, parseWorkspaceDocument, checkTimeZone, timeZoneChoices, localTimeZone, COMMON_TIME_ZONES, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type DerivedSeriesPort, type DerivedStyle, type DerivedStyleOptions, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1 } from '@supersolutions/super-chart-core'
 import { EngineAnnotations, attachAnnotationIntents, type AnnotationIntentEvent, type EngineAnnotationTheme } from './annotations'
 import { themeName } from './tokens'
 import type { HoldDrawEvent } from './holdDraw'
@@ -224,7 +224,8 @@ export class ChartWorkspace {
   private readonly toolsToggle: HTMLButtonElement
   private readonly paletteButton: HTMLButtonElement
   private readonly autoButton: HTMLButtonElement
-  private readonly utcButton: HTMLButtonElement
+  private readonly zoneSelect: HTMLSelectElement
+  private zoneId: string
   private readonly intervalBar: HTMLDivElement
   private readonly intervalField: HTMLLabelElement
   private readonly countdownNode: HTMLSpanElement
@@ -416,9 +417,14 @@ export class ChartWorkspace {
     })
     reverse.setAttribute('aria-pressed', String(this.scale.reversed === true))
     this.autoButton = this.control('scale.auto', () => { this.fitPriceScale(); }, { title: 'scale.auto.title' })
-    this.utcButton = this.control('scale.utc', () => { this.toggleTimeZone(); })
+    this.zoneId = options.chart?.render?.timeZone ?? 'UTC'
+    this.zoneSelect = this.node('select'); this.zoneSelect.className = 'sc-select sc-zone-select'
+    this.bind(() => { const name = this.t('timezone'); this.zoneSelect.setAttribute('aria-label', name); this.zoneSelect.title = name; this.fillTimeZones() })
+    this.listen(this.zoneSelect, 'change', () => { this.run(() => { this.setTimeZone(this.zoneSelect.value) }) })
+    // Offsets are read when the menu is about to open, so a daylight-saving change shows as it is today.
+    this.listen(this.zoneSelect, 'focus', () => { this.fillTimeZones() })
     this.scaleBar = this.row('bar.scale'); this.scaleBar.classList.add('sc-scalebar')
-    this.scaleBar.append(this.autoButton, this.utcButton)
+    this.scaleBar.append(this.autoButton, this.zoneSelect)
     this.syncPresentation = () => {
       const layout = this.chart.getLayoutOptions(), render = this.chart.getRenderOptions()
       this.scale = { ...layout.priceScale }
@@ -426,10 +432,9 @@ export class ChartWorkspace {
       mode.value = this.getPriceMode()
       scale.value = this.scale.mode ?? 'linear'
       reverse.setAttribute('aria-pressed', String(this.scale.reversed === true))
-      const auto = this.scale.range === undefined, utc = (render.timeZone ?? 'UTC') === 'UTC'
+      const auto = this.scale.range === undefined
       this.autoButton.setAttribute('aria-pressed', String(auto))
-      this.utcButton.setAttribute('aria-pressed', String(utc))
-      this.setLabel(this.utcButton, this.t(utc ? 'scale.utc' : 'scale.local'), this.t(utc ? 'scale.local.title' : 'scale.utc.title'))
+      this.showTimeZone(render.timeZone ?? 'UTC')
       // A restored document can carry its own base colours; host marks follow the canvas they sit on.
       ;(this.annotations as EngineAnnotations | undefined)?.setTheme(this.annotationTheme())
     }
@@ -1654,12 +1659,45 @@ export class ChartWorkspace {
     this.syncPresentation()
   }
 
-  private toggleTimeZone (): void {
-    const utc = (this.chart.getRenderOptions().timeZone ?? 'UTC') === 'UTC'
-    let local = 'UTC'
-    try { local = new Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' } catch { /* keep UTC */ }
-    this.run(() => { this.chart.setRenderOptions({ timeZone: utc ? local : 'UTC' }) })
+  /** Time zone of the axis and crosshair labels for intraday bars: an IANA id, `UTC` unless the host or the person chose. */
+  getTimeZone (): string { this.assertLive(); return this.zoneId }
+
+  /**
+   * Show intraday times in an IANA zone (`Asia/Taipei`, `America/New_York`, `UTC`). Day-and-larger bars keep reading
+   * in the symbol's own zone. A name Intl does not know throws a `RangeError` whose `code` is `time_zone_unknown`
+   * (`time_zone_type` for a non-string); the picker offers the zones from `listTimeZones()`.
+   */
+  setTimeZone (timeZone: string): void {
+    this.assertLive()
+    const check = checkTimeZone(timeZone)
+    if (!check.ok) throw Object.assign(new RangeError(check.hint), { code: check.code })
+    this.chart.setRenderOptions({ timeZone: check.id })
+    this.showTimeZone(check.id)
     this.syncPresentation()
+  }
+
+  /** Make the picker read `id`; the list is rebuilt only when the zone is not already the one it shows. */
+  private showTimeZone (id: string): void {
+    this.zoneId = id
+    if (this.zoneSelect.value !== id) { this.zoneSelect.value = id; if (this.zoneSelect.value !== id) this.fillTimeZones() }
+  }
+
+  private toggleTimeZone (): void {
+    this.run(() => { this.setTimeZone(this.zoneId === 'UTC' ? localTimeZone() : 'UTC') })
+  }
+
+  /** The zone picker: this device and the common zones, then all the others, offsets as of now. */
+  private fillTimeZones (): void {
+    const local = localTimeZone(), groups = new Map<string, HTMLOptGroupElement>()
+    for (const choice of timeZoneChoices({ extra: [this.zoneId], local })) {
+      let group = groups.get(choice.group)
+      if (group === undefined) { group = this.node('optgroup'); group.label = this.t(choice.group === 'common' ? 'timezone.common' : 'timezone.all'); groups.set(choice.group, group) }
+      const option = this.node('option'); option.value = choice.id
+      option.textContent = choice.id === 'UTC' ? 'UTC' : `${choice.id} (${choice.id === local ? `${this.t('timezone.device')}, ` : ''}UTC${choice.offset})`
+      group.append(option)
+    }
+    this.zoneSelect.replaceChildren(...groups.values())
+    this.zoneSelect.value = this.zoneId
   }
 
   private renderObjects (): void {
@@ -1747,7 +1785,8 @@ export class ChartWorkspace {
     add('view.fit', t('context.fit'), 'palette.group.view', () => { this.fitPriceScale() })
     add('view.reset', t('context.reset'), 'palette.group.view', () => { this.chart.view.resetViewport() })
     add('view.latest', t('nav.latest.title'), 'palette.group.view', () => { this.chart.view.followLatest() })
-    add('view.timezone', t(((this.chart.getRenderOptions().timeZone ?? 'UTC') === 'UTC') ? 'scale.local.title' : 'scale.utc.title'), 'palette.group.view', () => { this.toggleTimeZone() })
+    add('view.timezone', t(this.zoneId === 'UTC' ? 'scale.local.title' : 'scale.utc.title'), 'palette.group.view', () => { this.toggleTimeZone() })
+    for (const id of new Set([localTimeZone(), ...COMMON_TIME_ZONES])) add(`view.timezone.${id}`, t('palette.timezone', { name: id }), 'palette.group.view', () => { this.setTimeZone(id) }, { keywords: ['time', 'zone', 'timezone', 'utc'], when: () => this.zoneId !== id })
     add('draw.pan', t('palette.tool', { name: t('draw.none') }), 'palette.group.draw', () => { this.chart.setDrawingTool(null); this.setToolValue(null) })
     for (const type of DRAWING_TYPES) add(`draw.${type}`, t('palette.tool', { name: this.toolLabel(type) }), 'palette.group.draw', () => { this.chart.setDrawingTool(type); this.setToolValue(type) }, { keywords: ['draw', type] })
     add('draw.undo', t('draw.undo'), 'palette.group.draw', () => { this.chart.drawings.undo() }, { shortcut: 'Ctrl+Z', when: () => this.chart.drawings.getSnapshot().canUndo })
