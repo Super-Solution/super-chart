@@ -159,9 +159,10 @@ or every upstream option. Indicators use revealed raw OHLCV even when the price
 series displays Heikin-Ashi. The seven base indicators have incremental tail
 paths; optional/script/custom calculations may recompute the revealed history.
 
-Fourteen price render types are available through `ENGINE_CHART_TYPES`: candles,
+Fifteen price render types are available through `ENGINE_CHART_TYPES`: candles,
 hollow-candles, outline-candles, hollow-down-candles, ohlc, volume-bars, columns,
-high-low, line, line-markers, step-line, area, hlc-area and baseline. Heikin-Ashi is
+high-low, line, line-markers, step-line, area, hlc-area, baseline and point-figure
+(the last needs `pointFigureBox` and is normally set by the point and figure price mode). Heikin-Ashi is
 a separate data display mode. Horizontal spacing is category spacing; time gaps
 are not proportional wall-clock gaps. Linear/log/percentage and reversed price
 scales are supported, with optional explicit raw-price bounds.

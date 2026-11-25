@@ -207,9 +207,14 @@ export function projectMarketOverlays (
           rows: Object.freeze(projectedRows),
           totalVolume: total,
           missingVolumeBars: missing,
-          poc: value.poc, vah: value.vah, val: value.val,
-          pocY: priceY(value.poc), vahY: priceY(value.vah), valY: priceY(value.val),
-          startIndex: first, endIndex: last,
+          poc: value.poc,
+          vah: value.vah,
+          val: value.val,
+          pocY: priceY(value.poc),
+          vahY: priceY(value.vah),
+          valY: priceY(value.val),
+          startIndex: first,
+          endIndex: last,
           span: Object.freeze({ left, right })
         })
       }

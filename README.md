@@ -99,7 +99,7 @@ host decides what the new price means. See [docs/WORKSPACE-UI.md](docs/WORKSPACE
 and [docs/API-LAYERS.md](docs/API-LAYERS.md).
 
 - Fourteen price series styles, plus Heikin Ashi display; indicators use raw OHLC.
-- Price-driven styles: Renko, line break, range bars and Kagi (one mark per price move, not per time bar); see [docs/WORKSPACE-UI.md](docs/WORKSPACE-UI.md#price-driven-styles).
+- Price-driven styles: Renko, line break, range bars, Kagi and point and figure (one mark per price move, not per time bar); see [docs/WORKSPACE-UI.md](docs/WORKSPACE-UI.md#price-driven-styles).
 - Linear, logarithmic, percentage and reversed price scales; editable price range.
 - Continuous pan/pinch/wheel zoom, keyboard navigation, optional reduced-motion-aware
   inertia, draggable pane boundaries and price axis.
@@ -162,8 +162,9 @@ bounded evaluator, not a security sandbox or an interruptible worker. Arbitrary
 JavaScript is never enabled by this adapter; do not register the JavaScript
 language adapter of `super-chart-superscript` for untrusted input.
 
-`super-chart-web/overlays` adds visible-range volume profile, fair-value gaps and
-order-block heuristics; `super-chart-web/annotations` adds symbol-scoped level, zone
+`super-chart-web/overlays` adds volume profile (visible range, one per day, or a fixed range), fair-value gaps and
+order-block heuristics, plus an order-book heatmap and a liquidation map that draw data the host passes in (Super Chart
+fetches none); `super-chart-web/annotations` adds symbol-scoped level, zone
 and marker layers separate from user undo.
 
 React Native shares data, calculations, viewport, drawing model and geometry through

@@ -187,7 +187,7 @@ request at a time), so a pan rarely reaches the end of the data. Tune with
 ## Interaction details
 
 - Chart settings contain chart type, price mode (original prices, Heikin Ashi, Renko,
-  line break, range bars, Kagi), scale and axis
+  line break, range bars, Kagi, point and figure), scale and axis
   reversal. Native selects retain keyboard operation. Failed presentation changes
   restore the controls to the actual chart state.
 - Only one settings panel opens at a time. Escape closes it and returns focus to
@@ -467,9 +467,9 @@ the price and writes it back with `setAnnotations`. See
 
 ## Price-driven styles
 
-The price mode control, `setPriceMode(mode, options)` and the command palette offer four styles that make one
-mark per price move instead of one per time bar: `renko`, `line-break`, `range` and `kagi`. Marks are ordinary
-candles (a Renko brick has no wick; Kagi is drawn as a step line), so indicators, volume, drawings, the crosshair and the
+The price mode control, `setPriceMode(mode, options)` and the command palette offer five styles that make one
+mark per price move instead of one per time bar: `renko`, `line-break`, `range`, `kagi` and `point-figure`. Marks are ordinary
+candles (a Renko brick has no wick; Kagi is drawn as a step line; a point and figure column is one bar drawn as X or O boxes), so indicators, volume, drawings, the crosshair and the
 keyboard reading work on them. The time axis is no longer evenly spaced in time.
 
 | Style | Rule |
@@ -478,8 +478,9 @@ keyboard reading work on them. The time axis is no longer evenly spaced in time.
 | Line break | `lines` deep (default 3), closing prices. The first line joins the first two different closes. A close beyond the last line's close extends the trend; a close beyond the high or low of the last `lines` lines reverses it. Every line opens at the previous line's close, reversals included. |
 | Range bars | Every finished bar spans exactly `size`. Inside each source bar the path is open, low, high, close for an up bar and open, high, low, close for a down bar (OHLC cannot say which came first, so this is an approximation; tick data would be exact). The next bar opens at the previous close. The bar still forming is the last one. |
 | Kagi | Fixed reversal amount `size`, closing prices. One bar per vertical line, from the previous turning point to its current end. Line thickness (yang/yin) is not drawn. |
+| Point and figure | Boxes of `size` on a lattice (box k covers `k * size` up to `(k + 1) * size`). A column of X grows upward, a column of O downward; one column is one bar. A move against the column of `reversal` boxes (default 3) from its end starts the next column beside it. `method: 'close'` (default) fills boxes from closes; `method: 'high-low'` uses the highs while X grows and the lows while O grows, and a bar never both extends and reverses a column. The first column goes whichever way price first leaves the first box. It is drawn as X and O glyphs on a box grid (a solid bar when boxes are too small to hold a glyph), and the box height follows the price scale, also a logarithmic one. |
 
-`size` is the brick, the range or the Kagi reversal in price units. Without one it is the 14-bar average true range of
+`size` is the brick, the range, the Kagi reversal or the point and figure box in price units. Without one it is the 14-bar average true range of
 the loaded bars, measured when the mode is chosen or a symbol loads and then kept, so it does not drift with every
 tick. Pass `options.size` to fix it. A source bar that makes more marks than it has milliseconds throws a
 `RangeError` that asks for a larger size, and a size that would make millions of marks is refused.
@@ -488,10 +489,19 @@ Limits, deliberately:
 
 - A style is computed from the history that is loaded. It does not load older pages (older marks depend on every
   bar before them), and the view stays where it is while live ticks arrive: new marks are appended and the forming
-  mark is replaced, with no reset.
+  mark is replaced, with no reset. A tick does not re-derive the history: the adapter keeps each style's state and the
+  state before the last source bar, goes back to it and feeds the changed bar, so a tick costs the same on 5,000 and on
+  500,000 bars (measured about 0.6 ms or less per tick at 100,000 bars, against 5 to 29 ms before). The chart always holds
+  exactly what deriving the whole history from scratch gives; the tests compare the two after every tick of a random run.
+- Prices so large for the size that a level overflows, and a bad bar (non-finite price, repeated or older timestamp) are
+  refused with a `RangeError`; a refused bar never enters the history.
 - Replay needs the real bars: starting it in a price-driven style throws, and a style cannot be chosen during replay.
 - The mode is not part of a saved workspace document.
 - Volume of the source bars is shared out over the marks they made; bars that made no mark yet wait for the next one.
 - The transforms are pure and exported from `@supersolutions/super-chart-core` (`toRenko`, `toLineBreak`,
-  `toRangeBars`, `toKagi`, `deriveBars`, `averageTrueRange`), and `createDerivedSeriesPort` is the adapter the
-  workspace uses between its loader and the chart, for hosts that build their own.
+  `toRangeBars`, `toKagi`, `toPointAndFigure`, `deriveBars`, `averageTrueRange`), `createDerivedBuilder` is the same
+  rules as a state machine fed bar by bar, and `createDerivedSeriesPort` is the adapter the workspace uses between its
+  loader and the chart, for hosts that build their own.
+- The point and figure render type (`chartType: 'point-figure'`) needs `pointFigureBox`, the price height of a box, and is
+  refused without it; the price mode sets both. It is left out of the chart-type select and is not saved in workspace
+  documents, which also keep the chart type that Kagi borrowed (step line) out of the file.

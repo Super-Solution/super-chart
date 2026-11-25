@@ -282,7 +282,10 @@ export function projectLiquidationMap (frame: EngineFrame, rawBars: readonly Mar
     const top = g.top + r * rowHeight, height = Math.max(1, rowHeight - 0.5)
     const longWidth = long[r] / peak * width, shortWidth = short[r] / peak * width
     projected.push(Object.freeze({
-      priceLow: low[r], priceHigh: high[r], long: long[r], short: short[r],
+      priceLow: low[r],
+      priceHigh: high[r],
+      long: long[r],
+      short: short[r],
       longRect: longWidth > 0 ? Object.freeze({ x: g.right - longWidth, y: top, width: longWidth, height }) : null,
       shortRect: shortWidth > 0 ? Object.freeze({ x: g.right - longWidth - shortWidth, y: top, width: shortWidth, height }) : null
     }))

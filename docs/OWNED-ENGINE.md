@@ -44,7 +44,7 @@ imports. No files or consumers in the original monorepo were changed.
 Fourteen series renderings: candles, three hollow/outline variants, OHLC,
 volume-weighted OHLC, columns, high-low, line, line-markers, step-line, area,
 HLC-area and baseline. Heikin Ashi remains a separate synthetic display mode;
-indicators use raw prices. Renko, line break, range bars and Kagi are price-driven
+indicators use raw prices. Renko, line break, range bars, Kagi and point and figure are price-driven
 styles that replace the series with derived marks (see WORKSPACE-UI.md). Columns retain the preceding display-mode close even
 when that candle is offscreen. HLC cursor values follow the plotted typical price.
 
@@ -65,7 +65,10 @@ SC_SMA and SC_PDHL reuse the existing
 owned TA formulas. SC_WMA, SC_HMA, SC_DEMA, SC_TEMA, SC_VWMA and SC_KAMA (price pane, full recompute)
 follow TA-Lib's seeding: DEMA/TEMA start at index `2*(len-1)` / `3*(len-1)`, KAMA at `len` from the
 price at `len - 1`; they match TA-Lib 0.8.3 to about 1e-13 on 500 synthetic bars. They exist in the
-TypeScript core only, not in the Go/Python/Rust indicator servers. Inspection returns the actual registry rows used for plotting,
+TypeScript core only, not in the Go/Python/Rust indicator servers. SC_CVD (separate pane) adds up buy minus sell volume
+from the `buyVolume` field a feed reports on each bar and leaves a bar without it as a gap; SC_CVD_EST estimates the
+split from where the close sits in the bar's range and is named as an estimate. Parameter 1 restarts the total at each
+UTC midnight. Also TypeScript core only. Inspection returns the actual registry rows used for plotting,
 not the differently seeded native reference EMA. Separate instances have distinct
 pane scales by default; an explicit shared `paneId` groups lower indicators.
 Visibility and parameter changes update the owned registry. Custom callbacks are conservatively invalidated by offscreen changes
@@ -95,7 +98,13 @@ statuses. Images accept bounded local PNG/JPEG/WebP bytes; no remote URL or SVG
 is decoded. Bitmap leases protect asynchronous import, and removed resources are
 released without deleting retained drawing history.
 
-VRVP, FVG and order-block overlays reuse the existing owned detection helpers.
+VRVP, FVG and order-block overlays reuse the existing owned detection helpers. The volume profile has three modes:
+`visible` (one profile of the bars in view), `session` (one per calendar day in a chosen IANA time zone, each using all of
+its bars even when part of the day is off screen, at most 60 days at once) and `range` (the bars between two
+timestamps, at most 50,000). The order-book heatmap (`createDepthHeatmapLayer`) and liquidation map
+(`createLiquidationMapLayer`) take ascending depth snapshots and liquidation levels from the host; nothing is fetched or
+invented, malformed input is reported as `invalid-data` and not drawn, and layers paint above the candles so both are
+translucent. Call `chart.requestPaint()` after `setSnapshots` or `setLevels`.
 Volume is distributed across candle price ranges, not derived from trade prints.
 FVG and OB retain their documented window, confirmation and fill/mitigation
 semantics. Zone scans wider than 5,000 bars report `too-wide` and the Web layer
