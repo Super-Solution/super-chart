@@ -1,5 +1,6 @@
 import { WORKSPACE_THEMES } from './theme'
 import { FONT_SANS } from './tokens'
+import { iconMask } from './icons'
 
 /** Without a `theme` option the chrome falls back to the dark preset, the same values `setTheme('dark')` sets. */
 const DARK = WORKSPACE_THEMES.dark.chrome
@@ -8,6 +9,7 @@ const DARK = WORKSPACE_THEMES.dark.chrome
 export const WORKSPACE_STYLE = `
 .sc-workspace{position:relative;display:flex;flex-direction:column;width:100%;height:100%;min-width:0;min-height:280px;box-sizing:border-box;background:var(--sc-background,${DARK.background});color:var(--sc-text,${DARK.text});font:var(--sc-font-size,13px)/1.4 var(--sc-font,${FONT_SANS});color-scheme:var(--sc-color-scheme,${DARK.colorScheme});isolation:isolate}
 .sc-workspace{--sc-search-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-5-5'/%3E%3C/svg%3E")}
+.sc-workspace{--sc-icon-chart:${iconMask('chart')};--sc-icon-indicators:${iconMask('indicators')};--sc-icon-objects:${iconMask('objects')};--sc-icon-more:${iconMask('more')}}
 .sc-workspace *, .sc-workspace *::before, .sc-workspace *::after{box-sizing:border-box}
 .sc-workspace [hidden]{display:none!important}
 .sc-workspace button,.sc-workspace select,.sc-workspace input,.sc-workspace summary{text-transform:none;letter-spacing:normal;word-spacing:normal;text-indent:0;text-shadow:none;font-style:normal;font-family:inherit;-webkit-appearance:none;appearance:none}
@@ -58,6 +60,7 @@ export const WORKSPACE_STYLE = `
 .sc-workspace .sc-body{position:relative;display:flex;flex:1;min-height:160px;min-width:0}
 .sc-workspace .sc-stage{position:relative;flex:1;min-height:160px;min-width:0}
 .sc-workspace .sc-rail{display:flex;flex-direction:column;justify-content:space-between;gap:4px;flex:none;width:var(--sc-rail-width,48px);padding:4px;border-right:1px solid var(--sc-border,${DARK.divider});background:var(--sc-toolbar-background,${DARK.toolbar});overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--sc-border,${DARK.divider}) transparent}
+.sc-workspace .sc-rail{--sc-rail-fade:var(--sc-toolbar-background,${DARK.toolbar});background:linear-gradient(var(--sc-rail-fade) 30%,transparent) top/100% 28px no-repeat local,linear-gradient(transparent,var(--sc-rail-fade) 70%) bottom/100% 28px no-repeat local,radial-gradient(farthest-side at 50% 0,rgba(128,128,128,.45),transparent) top/100% 8px no-repeat scroll,radial-gradient(farthest-side at 50% 100%,rgba(128,128,128,.45),transparent) bottom/100% 8px no-repeat scroll,var(--sc-toolbar-background,${DARK.toolbar})}
 .sc-workspace .sc-rail-list,.sc-workspace .sc-rail-foot{display:flex;flex-direction:column;align-items:center;gap:2px}
 .sc-workspace .sc-rail-foot{padding-top:6px;border-top:1px solid var(--sc-border,${DARK.divider})}
 .sc-workspace .sc-rail-foot:not(:has(*)){display:none}
@@ -140,7 +143,10 @@ export const WORKSPACE_STYLE = `
 .sc-workspace .sc-icon-only .sc-label,.sc-workspace:not([data-layout=regular]) .sc-drawingbar>.sc-icon-button .sc-label,.sc-workspace:not([data-layout=regular]) .sc-tools-toggle .sc-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .sc-workspace .sc-scalebar{margin-left:auto;padding:0;border:0;min-height:0;background:transparent;gap:4px}
 .sc-workspace .sc-scalebar .sc-button{padding:2px 8px;min-height:24px}
-.sc-workspace .sc-scalebar .sc-select{padding:2px 6px;min-height:24px;max-width:240px;font-size:12px}
+.sc-workspace .sc-scalebar .sc-select{padding:2px 6px;min-height:24px;font-size:12px}
+.sc-workspace .sc-zone-select{width:150px;max-width:240px;field-sizing:content}
+.sc-workspace .sc-menu-panel .sc-scalebar{grid-column:1/-1;width:100%;margin:0;gap:8px}
+.sc-workspace .sc-menu-panel .sc-scalebar .sc-select{flex:1;width:auto;max-width:none;field-sizing:fixed}
 .sc-workspace .sc-palette .sc-search-results{max-height:320px}
 .sc-workspace .sc-palette-group{margin:8px 0 2px;font-size:11px;color:var(--sc-muted,${DARK.muted});text-transform:uppercase;letter-spacing:.04em}
 .sc-workspace .sc-palette-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 8px;border-radius:var(--sc-radius,4px);cursor:pointer}
@@ -159,10 +165,28 @@ export const WORKSPACE_STYLE = `
 .sc-workspace[data-layout=compact] .sc-row,.sc-workspace[data-layout=narrow] .sc-row{padding:4px 6px;gap:4px}
 .sc-workspace[data-layout=compact] .sc-marketbar{flex-wrap:nowrap}
 .sc-workspace[data-layout=compact] .sc-intervals{flex:0 1 auto}
-.sc-workspace[data-layout=narrow] .sc-marketbar{flex-wrap:wrap}
-.sc-workspace[data-layout=narrow] .sc-symbol{max-width:110px}
+.sc-workspace[data-layout=narrow] .sc-marketbar{flex-wrap:wrap;gap:2px}
+.sc-workspace[data-layout=narrow] .sc-symbol{display:block;flex:1 1 56px;min-width:44px;max-width:110px;margin-right:0;padding:4px 4px;white-space:nowrap}
+.sc-workspace[data-layout=narrow] .sc-symbol::before{display:inline-block;vertical-align:-3px;margin-right:4px}
+.sc-workspace[data-layout=narrow] .sc-marketbar .sc-select{padding:4px 2px;min-width:0}
+.sc-workspace[data-layout=narrow] .sc-marketbar{container-type:inline-size}
+@container (max-width:340px){.sc-workspace[data-layout=narrow] .sc-symbol::before{display:none}}
+.sc-workspace[data-layout=narrow] .sc-menu[data-icon]>summary{min-width:var(--sc-control-height,32px)}
+.sc-workspace[data-layout=narrow] .sc-tools-toggle{padding:0;min-width:var(--sc-control-height,32px)}
+.sc-workspace .sc-menu-panel .sc-palette-button .sc-label{position:static;width:auto;height:auto;overflow:visible;clip-path:none}
+.sc-workspace .sc-menu-panel .sc-palette-button{width:100%;justify-content:flex-start;padding:4px 10px}
 .sc-workspace[data-layout=narrow] .sc-menu>summary{padding:5px 6px}
-.sc-workspace[data-layout=narrow] .sc-status{min-width:0;flex:1 1 max-content;max-width:100%}
+.sc-workspace[data-layout=narrow] .sc-menu[data-icon]>summary{font-size:0;gap:0;padding:0;justify-content:center;position:relative}
+.sc-workspace[data-layout=narrow] .sc-menu[data-icon]>summary::before{content:'';width:18px;height:18px;background:currentColor;-webkit-mask:var(--sc-icon) center/contain no-repeat;mask:var(--sc-icon) center/contain no-repeat}
+.sc-workspace[data-layout=narrow] .sc-menu[data-icon]>summary::after{display:none}
+.sc-workspace[data-layout=narrow] .sc-menu[data-icon]>summary .sc-count{position:absolute;top:0;right:0;min-width:14px;padding:0 3px;font-size:10px;line-height:14px;text-align:center}
+.sc-workspace[data-layout=narrow] .sc-menu[data-icon=chart]{--sc-icon:var(--sc-icon-chart)}
+.sc-workspace[data-layout=narrow] .sc-menu[data-icon=indicators]{--sc-icon:var(--sc-icon-indicators)}
+.sc-workspace[data-layout=narrow] .sc-menu[data-icon=objects]{--sc-icon:var(--sc-icon-objects)}
+.sc-workspace[data-layout=narrow] .sc-menu[data-icon=more]{--sc-icon:var(--sc-icon-more)}
+.sc-workspace[data-layout=narrow] .sc-status{min-width:0;flex:1 1 auto;max-width:100%}
+.sc-workspace[data-layout=narrow] .sc-footer{gap:4px;min-height:0}
+.sc-workspace[data-layout=narrow] .sc-footer .sc-button{padding:2px 8px;min-height:28px}
 .sc-workspace .sc-dt{position:absolute;left:0;top:0;z-index:7;display:flex;align-items:center;gap:2px;padding:4px;max-width:calc(100% - 8px);border:1px solid var(--sc-panel-border,${DARK.panelBorder});border-radius:var(--sc-panel-radius,8px);background:var(--sc-panel-background,${DARK.panel});box-shadow:var(--sc-panel-shadow,${DARK.panelShadow});color:var(--sc-text,${DARK.text});touch-action:none;will-change:transform}
 .sc-workspace .sc-dt[data-busy=true]{opacity:0;pointer-events:none}
 .sc-workspace .sc-dt-grip{display:flex;align-items:center;justify-content:center;width:16px;height:30px;color:var(--sc-muted,${DARK.muted});cursor:grab}

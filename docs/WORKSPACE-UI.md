@@ -363,13 +363,32 @@ new ChartWorkspace(host, {
 
 - `layout` is a size class for the chrome. `regular` has labelled tools, `compact`
   shows icons and moves secondary actions into a More menu, `narrow` also folds
-  the drawing tools behind a Tools button and shows the intervals as one
-  dropdown. `auto` follows the workspace's own width (`LAYOUT_BREAKPOINTS`:
+  the drawing tools behind a Tools button, shows the intervals as one dropdown
+  and keeps the market bar to one row (see below). `auto` follows the workspace's own width (`LAYOUT_BREAKPOINTS`:
   narrow below 560px, compact below 780px), not the window's. `getLayout()`
   returns the class in effect. With the rail, `compact` also moves undo/redo into
   More; `narrow` has no rail.
 - `intervals: 'select'` renders the period list as a dropdown at any width;
-  `'bar'` keeps buttons; `'auto'` picks the bar unless the layout is `narrow`.
+  `'bar'` keeps buttons; `'auto'` picks the bar unless the layout is `narrow` or the
+  bar does not fit: in `compact` the market bar never wraps, so `auto` looks at the
+  bar after the other parts are placed and uses the dropdown when the buttons would be
+  clipped or scrolled out of sight (`resolveIntervalControl(control, layout, fits)`).
+  Only `'bar'` set by the host can still overflow.
+
+**Phone widths (`narrow`).** The market bar is one row: Tools, the symbol (shortened
+with an ellipsis, its search icon dropped below 340px), the interval dropdown, and
+the Chart, Indicators, Objects and More menus as icons (their names stay as the
+accessible name and tooltip; the Indicators count is a small badge). The command-palette
+button moves into More, and the Auto and time-zone controls move into the Chart menu,
+so the footer keeps only the status, the countdown, Replay and Load older. Measured
+in the demo workspace (740px high, headless Chromium, Playwright): the two bars took
+23.8% of the height at 390px (77 + 99 px) and 28.6% at 320px (113 + 99 px) before;
+they take 10.9% at 390px (44 + 37 px) and 15.3% at 320px (44 + 69 px, where the
+footer still wraps Load older to a second line) now. Below about 330px the symbol
+shows only its first letters; the footer shows the full ticker.
+
+The left tool rail, when it is taller than the chart, shows a soft shadow at the
+edge that has more tools beyond it, so lock, hide and delete are not silently cut off.
 - `headless: true` removes the market bar, drawing bar, footer, status, notice and
   replay controls. Loading, replay, drawings, the command palette (keyboard) and
   the API keep working. `parts` switches off one piece at a time

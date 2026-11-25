@@ -379,8 +379,8 @@ export class ChartWorkspace {
     const toolbar = this.row('bar.chart'), drawingBar = this.row('bar.drawing'), footer = this.row('bar.playback')
     this.toolbar = toolbar; this.drawingBar = drawingBar; this.footer = footer
     toolbar.classList.add('sc-marketbar'); drawingBar.classList.add('sc-drawingbar'); footer.classList.add('sc-footer')
-    const presentation = this.menu('presentation', 'presentation.description'), indicators = this.menu('indicators', 'indicators.manage')
-    const objects = this.menu('objects', 'objects.description'), more = this.menu('more', 'more.description')
+    const presentation = this.menu('presentation', 'presentation.description', 'chart'), indicators = this.menu('indicators', 'indicators.manage', 'indicators')
+    const objects = this.menu('objects', 'objects.description', 'objects'), more = this.menu('more', 'more.description', 'more')
     this.parts = { presentation: presentation.root, indicators: indicators.root, objects: objects.root, more: more.root }
     this.symbolButton = this.node('button'); this.symbolButton.type = 'button'; this.symbolButton.className = 'sc-button sc-symbol'
     this.symbolButton.textContent = this.symbol.ticker
@@ -1629,7 +1629,8 @@ export class ChartWorkspace {
     this.drawingBar.hidden = !show('drawingBar') || (this.layoutClass === 'narrow' && !this.toolsOpen) || (rail && !slotted)
     // Secondary actions (view history, latest, PNG, fullscreen) sit inline when there is room and in the More menu otherwise.
     // With the rail, undo and redo lead the right of the market bar and lock and delete sit at the foot of the rail.
-    const arrangement = `${rail}|${compact}`
+    const narrow = this.layoutClass === 'narrow', paletteInMore = narrow && !this.parts.more.hidden
+    const arrangement = `${rail}|${compact}|${narrow}|${paletteInMore}`
     if (arrangement !== this.arrangement) {
       this.arrangement = arrangement
       const inMenu = this.parts.more.querySelector<HTMLElement>('.sc-menu-panel')!, end = this.slots.get('drawing-end')!
@@ -1642,12 +1643,33 @@ export class ChartWorkspace {
         this.drawingBar.insertBefore(this.history, end); this.drawingBar.insertBefore(this.drawingModes, end); this.drawingBar.insertBefore(this.drawingActions, end)
         if (compact) inMenu.append(this.secondary); else this.drawingBar.insertBefore(this.secondary, end)
       }
+      // A phone's footer keeps the status and the playback buttons; the price-range and time-zone controls join the Chart
+      // settings, and the command-palette button joins More, so the market bar stays one row.
+      if (narrow) this.parts.presentation.querySelector('.sc-menu-panel')!.append(this.scaleBar)
+      else this.footer.insertBefore(this.scaleBar, this.replayButtons.start)
+      if (paletteInMore) inMenu.append(this.paletteButton)
+      else this.toolbar.insertBefore(this.paletteButton, this.slots.get('header-end')!)
     }
+    this.fitIntervals(show('intervals'))
     this.footer.hidden = !show('footer')
     const marketBarEmpty = !show('symbol') && !show('intervals') && !show('presentation') && !show('indicators') && !show('objects') && !show('commands') && !(compact && show('drawingBar')) && !rail &&
       ![this.slots.get('header-start'), this.slots.get('header-end')].some(slot => slot !== undefined && slot.childNodes.length > 0)
     this.toolbar.hidden = headless || marketBarEmpty
     if (headless) this.closeFloating()
+  }
+
+  /**
+   * `auto` intervals show the bar while it fits. In the compact layout the market bar never wraps, so a bar that does not
+   * fit would be clipped or scrolled out of sight: look, and give it the dropdown instead. Measured after the other
+   * parts are placed, and only where the bar is the candidate, so a resize costs one layout read there.
+   */
+  private fitIntervals (shown: boolean): void {
+    if (!shown || this.ui.intervals !== 'auto' || this.layoutClass !== 'compact' || this.root.dataset.intervals !== 'bar') return
+    // The bar shrinks and scrolls itself before the market bar overflows, so both are read.
+    const fits = this.intervalBar.scrollWidth <= this.intervalBar.clientWidth + 1 && this.toolbar.scrollWidth <= this.toolbar.clientWidth + 1
+    const intervals = resolveIntervalControl(this.ui.intervals, this.layoutClass, fits)
+    if (intervals === 'bar') return
+    this.root.dataset.intervals = intervals; this.intervalBar.hidden = true; this.intervalField.hidden = false
   }
 
   private setToolsOpen (open: boolean): void {
@@ -1889,8 +1911,10 @@ export class ChartWorkspace {
     }))
   }
 
-  private menu (nameKey: string, descriptionKey: string): { root: HTMLDetailsElement, summary: HTMLElement, panel: HTMLDivElement } {
+  /** A dropdown of the market bar. `icon` is what the narrow layout shows in place of the name (the text stays for assistive technology). */
+  private menu (nameKey: string, descriptionKey: string, icon?: string): { root: HTMLDetailsElement, summary: HTMLElement, panel: HTMLDivElement } {
     const root = this.node('details'); root.className = 'sc-menu'
+    if (icon !== undefined) root.dataset.icon = icon
     const summary = this.node('summary')
     const panel = this.node('div'); panel.className = 'sc-menu-panel'; panel.setAttribute('role', 'group')
     this.bind(() => {
