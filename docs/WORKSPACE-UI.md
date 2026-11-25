@@ -557,6 +557,26 @@ by the person; the chart emits `start`, `move`, `commit` or `cancel` through
 the price and writes it back with `setAnnotations`. See
 [API-LAYERS.md](API-LAYERS.md) and [TRADE-HEADS.md](TRADE-HEADS.md).
 
+## Event marks
+
+A `Datafeed` with the optional `getMarks(symbol, period, from, to, { signal })` gets earnings dates, dividends,
+splits and headlines drawn on the chart. The workspace asks for the visible range plus one view-width on each side
+after the view has settled, and again when the symbol or interval changes or `refreshMarks()` is called; it never
+polls. Each mark lands on the bar that contains its time and is drawn as one marker through the annotation layer
+(layer `datafeed:marks`, so host annotations are never touched); marks that share a bar read `A · B · C +2`.
+
+* The tooltip opens on hover, and on a tap on touch screens. The Objects menu lists the marks in words, newest first
+  (50 shown, the rest counted), for the keyboard and screen readers; the canvas markers carry only the short label.
+* An "Event marks" switch in the presentation panel and the command palette entry (`Show or hide event marks`) hide
+  them; the choice is the viewer's and is not saved in the workspace document. Both exist only when the feed has `getMarks`.
+* `getMarksState()` returns `status` (`unsupported`, `hidden`, `idle`, `loading`, `ready`, `error`), the counts, the
+  covered range and every rejected mark by stable code (`bad_label`, `duplicate_id`, `out_of_range`, `too_many_on_bar`
+  ...). One faulty mark never hides the others; a failing feed leaves the chart as it was. The codes and the wire
+  shape are in [DATAFEED-HTTP.md](DATAFEED-HTTP.md); `validateMarks` and `placeMarks` are exported from core and run
+  without a DOM.
+* Limits: 10 marks per bar, 1000 per answer; text is plain, never HTML. A host that wants its own look uses annotations
+  directly. There is no filtering by category yet.
+
 ## Price-driven styles
 
 The price mode control, `setPriceMode(mode, options)` and the command palette offer five styles that make one

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/promise-function-async -- Load methods validate synchronously and return the shared queue promise without an async wrapper. */
 import { EngineChart, type EngineChartOptions, type EngineConfiguration } from './chart'
 import { ENGINE_CHART_TYPES, DRAWING_TYPES, DERIVED_STYLES, createDerivedSeriesPort, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, parseWorkspaceDocument, checkTimeZone, timeZoneChoices, localTimeZone, COMMON_TIME_ZONES, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type DerivedSeriesPort, type DerivedStyle, type DerivedStyleOptions, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1 } from '@supersolutions/super-chart-core'
+import { DatafeedMarks, MARKS_LAYER, type WorkspaceMarksState } from './datafeedMarks'
 import { EngineAnnotations, attachAnnotationIntents, type AnnotationIntentEvent, type EngineAnnotationTheme } from './annotations'
 import { themeName } from './tokens'
 import type { HoldDrawEvent } from './holdDraw'
@@ -130,6 +131,8 @@ export interface ChartWorkspaceOptions {
 /** What the price-mode control offers: the real bars, Heikin Ashi, and the price-driven styles. */
 export type WorkspacePriceMode = 'raw' | 'heikin-ashi' | DerivedStyle
 const PRICE_MODES: readonly WorkspacePriceMode[] = Object.freeze(['raw', 'heikin-ashi', ...DERIVED_STYLES] as const)
+/** Event marks listed in the Objects menu; the rest are counted. */
+const MARK_ROWS = 50
 const EMPTY_DRAWINGS = '{"version":1,"drawings":[]}'
 const DEFAULT_PERIODS: readonly Period[] = [
   { multiplier: 1, timespan: 'minute', text: '1m' }, { multiplier: 5, timespan: 'minute', text: '5m' },
@@ -181,6 +184,7 @@ export class ChartWorkspace {
    * person's drawings and undo history, and listed under Overlays in the object tree.
    */
   readonly annotations: EngineAnnotations
+  private marks!: DatafeedMarks
   /** Constructor load outcome; same-tick market changes share its final request. */
   readonly ready: Promise<WorkspaceLoadResult>
   private readonly doc: Document
@@ -225,6 +229,7 @@ export class ChartWorkspace {
   private readonly paletteButton: HTMLButtonElement
   private readonly autoButton: HTMLButtonElement
   private readonly zoneSelect: HTMLSelectElement
+  private marksToggle: HTMLButtonElement | null = null
   private zoneId: string
   private readonly intervalBar: HTMLDivElement
   private readonly intervalField: HTMLLabelElement
@@ -440,6 +445,12 @@ export class ChartWorkspace {
     }
     presentation.panel.classList.add('sc-settings-grid')
     presentation.panel.append(this.field('chartType', chartType), this.field('priceMode', mode), this.field('priceScale', scale), reverse)
+    // Only a feed that can supply marks gets the switch; without getMarks there is nothing to show or hide.
+    if (typeof options.datafeed.getMarks === 'function') {
+      this.marksToggle = this.control('marks.toggle', () => { this.setMarksVisible(!this.marks.visible) }, { title: 'marks.toggle.title' })
+      this.marksToggle.setAttribute('aria-pressed', 'true')
+      presentation.panel.append(this.marksToggle)
+    }
     toolbar.append(this.slots.get('header-start')!, this.toolsToggle, this.symbolButton, this.intervalBar, this.intervalField, presentation.root, indicators.root, objects.root, more.root, this.paletteButton, this.slots.get('header-end')!)
 
     this.indicatorSelect = this.select('indicators.add', [], '')
@@ -727,6 +738,23 @@ export class ChartWorkspace {
       })
       this.unsubscribe.push(this.chart.onFrame(() => { this.drawingToolbar.refresh() }), this.chart.drawings.subscribe(() => { this.drawingToolbar.refresh() }))
       this.unsubscribe.push(attachAnnotationIntents(this.chartHost, this.annotations, event => { for (const listener of [...this.intentListeners]) listener(event) }))
+      this.marks = new DatafeedMarks({
+        feed: this.datafeed,
+        annotations: this.annotations,
+        win: this.win,
+        host: this.chartHost,
+        stage,
+        symbol: () => this.symbol,
+        period: () => this.period,
+        scopeKey: () => symbolKey(this.symbol),
+        pairKey: () => this.requestedPair(),
+        ready: () => this.getStatus().state === 'ready' && this.shownMatches() && this.displayedPair === this.requestedPair() && this.applyError === null,
+        bars: () => this.chart.dataPort.getDataList(),
+        view: () => { const range = this.chart.view.getSnapshot().viewport; return { i0: range.i0, i1: range.i1 } },
+        format: time => this.formatMarkTime(time),
+        changed: () => { this.objectsDirty = true; this.renderObjects() }
+      })
+      this.unsubscribe.push(this.chart.onFrame(() => { this.marks.frame() }), () => { this.marks.dispose() })
     } catch (error) { this.stopFollowingScheme?.(); this.abort.abort(); this.root.remove(); throw error }
     this.loader = this.createLoader()
     this.timedReplay = this.createReplay()
@@ -1048,6 +1076,34 @@ export class ChartWorkspace {
     return () => { this.intentListeners.delete(listener) }
   }
 
+  /**
+   * What the event marks are doing: `unsupported` when the datafeed has no `getMarks`, `hidden`, `idle`, `loading`,
+   * `ready` or `error`, how many marks sit on bars, and every mark left out by its stable code (`validateMarks` and
+   * `placeMarks` in core list them). A failed answer is not retried until the view leaves the window it covered or
+   * `refreshMarks()` is called.
+   */
+  getMarksState (): WorkspaceMarksState { this.assertLive(); return this.marks.getState() }
+
+  /** Asks the datafeed for marks again for the current view (after a new filing or headline, say). */
+  refreshMarks (): void { this.assertLive(); this.marks.refresh() }
+
+  /** Shows or hides the event marks; the choice is the viewer's and is not saved in the workspace document. */
+  setMarksVisible (visible: boolean): void {
+    this.assertLive()
+    if (typeof visible !== 'boolean') throw new TypeError('setMarksVisible needs true or false')
+    this.marks.setEnabled(visible); this.syncMarksControl()
+  }
+
+  private syncMarksControl (): void {
+    this.marksToggle?.setAttribute('aria-pressed', String(this.marks.visible))
+  }
+
+  private formatMarkTime (time: number): string {
+    const dateOnly = ['day', 'week', 'month', 'year'].includes(this.period.timespan)
+    const base: Intl.DateTimeFormatOptions = dateOnly ? { dateStyle: 'medium' } : { dateStyle: 'medium', timeStyle: 'short' }
+    try { return new Intl.DateTimeFormat(this.locale, { ...base, timeZone: dateOnly ? this.symbol.timezone ?? 'UTC' : this.zoneId }).format(time) } catch { return new Date(time).toISOString() }
+  }
+
   /** The annotation layer follows the active preset's base colours, the host's own `render.theme` included. */
   private annotationTheme (): EngineAnnotationTheme {
     return themeName(this.chart.getRenderOptions().theme)
@@ -1183,6 +1239,7 @@ export class ChartWorkspace {
     this.chart.setDrawingTool(null); this.setToolValue(null)
     this.chart.drawings.importJson(EMPTY_DRAWINGS); this.chart.setData([], false)
     this.annotations.setScope(null)
+    this.marks.sync()
     this.holdNote.textContent = ''
     this.notice.textContent = ''; this.updateStatus()
   }
@@ -1266,6 +1323,7 @@ export class ChartWorkspace {
     const key = symbolKey(this.symbol)
     this.annotations.setPricePrecision(this.symbol.pricePrecision === undefined ? undefined : resolvePricePrecision(this.symbol.pricePrecision, this.chart.dataPort.getDataList()))
     this.annotations.setScope(key)
+    this.marks.sync()
     if (this.drawingSymbol === key) return
     this.chart.drawings.importJson(this.drawingDocuments.get(key) ?? EMPTY_DRAWINGS); this.drawingSymbol = key
   }
@@ -1751,14 +1809,30 @@ export class ChartWorkspace {
       [this.t('objects.delete'), () => { this.chart.drawings.remove(drawing.id) }, drawing.locked]
     ], () => { this.chart.drawings.select(drawing.id) }))
     const overlays = this.renderOverlayRows(row)
-    const children = [...section(this.t('objects.drawings'), drawings), ...section(this.t('objects.indicators'), indicators), ...section(this.t('objects.overlays'), overlays)]
+    const children = [...section(this.t('objects.drawings'), drawings), ...section(this.t('objects.indicators'), indicators), ...section(this.t('objects.overlays'), overlays), ...section(this.t('objects.marks'), this.renderMarkRows(row))]
     if (children.length === 0) { const empty = this.node('p'); empty.className = 'sc-hint'; empty.textContent = this.t('objects.none'); children.push(empty) }
     this.objectList.replaceChildren(...children)
   }
 
   /** Host annotations are read-only here: the host owns them, so the tree lists them without edit actions. */
   private renderOverlayRows (row: (name: string, actions: ReadonlyArray<readonly [string, () => void, boolean?]>, select?: () => void) => HTMLElement): HTMLElement[] {
-    return this.annotations.getSnapshot().annotations.map(item => row(item.spec.text === undefined || item.spec.text === '' ? `${item.spec.kind} · ${item.spec.key}` : `${item.spec.kind} · ${item.spec.text}`, []))
+    return this.annotations.getSnapshot().annotations.filter(item => item.layer !== MARKS_LAYER).map(item => row(item.spec.text === undefined || item.spec.text === '' ? `${item.spec.kind} · ${item.spec.key}` : `${item.spec.kind} · ${item.spec.text}`, []))
+  }
+
+  /** The event marks as words, newest first and capped, for the keyboard and screen readers (the canvas markers carry only a label). */
+  private renderMarkRows (row: (name: string, actions: ReadonlyArray<readonly [string, () => void, boolean?]>, select?: () => void) => HTMLElement): HTMLElement[] {
+    if (!this.marks.visible) return []
+    const marks = this.marks.list(), shown = marks.slice(-MARK_ROWS).reverse()
+    // Read-only text, not a disabled button: a disabled control cannot take keyboard focus, and these rows exist to be read.
+    const rows = shown.map(mark => {
+      const text = `${this.formatMarkTime(mark.time)} · ${mark.label}${mark.text === undefined || mark.text === '' ? '' : ` — ${mark.text}`}`
+      const item = row(text, []), label = item.firstElementChild as HTMLElement
+      const note = this.node('div'); note.className = 'sc-mark-row'; note.tabIndex = 0; note.textContent = text
+      label.replaceWith(note)
+      return item
+    })
+    if (marks.length > shown.length) { const more = this.node('p'); more.className = 'sc-hint'; more.textContent = this.t('objects.marks.more', { count: marks.length - shown.length }); rows.push(more) }
+    return rows
   }
 
   private onContextMenu (event: MouseEvent): void {
@@ -1804,6 +1878,7 @@ export class ChartWorkspace {
     for (const name of PRICE_MODES) add(`priceMode.${name}`, t('palette.priceMode', { name: t(name === 'raw' ? 'priceMode.raw' : name === 'heikin-ashi' ? 'priceMode.heikin' : `priceMode.${name}`) }), 'palette.group.chart', () => { this.setPriceMode(name); this.syncPresentation() }, { keywords: ['renko', 'kagi', 'range', 'line break', 'point and figure', 'x o', 'price mode'], when: () => this.getPriceMode() !== name })
     add('chart.heikin', t('palette.heikin'), 'palette.group.chart', () => { this.setPriceMode(this.getPriceMode() === 'heikin-ashi' ? 'raw' : 'heikin-ashi'); this.syncPresentation() })
     add('chart.reverse', t('palette.reverse'), 'palette.group.chart', () => { const current = this.chart.getLayoutOptions().priceScale; this.chart.setLayout({ priceScale: { ...current, reversed: current?.reversed !== true } }); this.syncPresentation() })
+    if (typeof this.datafeed.getMarks === 'function') add('chart.marks', t('palette.marks'), 'palette.group.chart', () => { this.setMarksVisible(!this.marks.visible) }, { keywords: ['events', 'earnings', 'dividend', 'split', 'news'] })
     add('view.fit', t('context.fit'), 'palette.group.view', () => { this.fitPriceScale() })
     add('view.reset', t('context.reset'), 'palette.group.view', () => { this.chart.view.resetViewport() })
     add('view.latest', t('nav.latest.title'), 'palette.group.view', () => { this.chart.view.followLatest() })

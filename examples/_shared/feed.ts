@@ -1,4 +1,4 @@
-import type { Datafeed, HistoryRequest, MarketBar, Period, SymbolInfo } from '@supersolutions/super-chart-core'
+import type { Datafeed, DatafeedMark, HistoryRequest, MarketBar, MarksRequest, Period, SymbolInfo } from '@supersolutions/super-chart-core'
 
 /**
  * The one mock data source every example shares: no network, no credentials, deterministic history and a ticking last
@@ -54,6 +54,29 @@ const delay = async (ms: number, signal?: AbortSignal): Promise<void> => {
   })
 }
 
+const DAY = 86_400_000, MINUTE = 60_000
+/**
+ * Fictional events for `[from, to)`, the same every time: a headline every 53 minutes, a dividend every 30 days, and
+ * every 91 days an earnings date with a guidance note on the same bar (so one bar can carry two marks). It is the shape
+ * a real feed returns for `getMarks`, with nothing real in it.
+ */
+export function exampleMarks (symbol: SymbolInfo, from: number, to: number): DatafeedMark[] {
+  const marks: DatafeedMark[] = []
+  const add = (kind: string, time: number, mark: Omit<DatafeedMark, 'id' | 'time'>): void => { if (time >= from && time < to && marks.length < 900) marks.push({ id: `${symbol.ticker}:${kind}:${time}`, time, ...mark }) }
+  for (let slot = Math.ceil(from / (53 * MINUTE)); slot * 53 * MINUTE < to && marks.length < 900; slot++) {
+    const time = slot * 53 * MINUTE
+    add('news', time, { label: 'N', text: `Headline ${slot} (fictional)`, tone: slot % 5 === 0 ? 'bear' : 'neutral', category: 'news' })
+  }
+  for (let day = Math.floor(from / DAY); day * DAY < to; day++) {
+    if (day % 30 === 5) add('dividend', day * DAY, { label: 'Div 0.24', text: 'Dividend of 0.24 per share (fictional)', tone: 'bull', category: 'dividend' })
+    if (day % 91 === 12) {
+      add('earnings', day * DAY + 13.5 * 3_600_000, { label: 'Earnings', text: 'Quarterly results, beat the estimate (fictional)', tone: 'accent', category: 'earnings' })
+      add('guidance', day * DAY + 13.5 * 3_600_000, { label: 'Guide', text: 'Outlook raised (fictional)', tone: 'accent', category: 'guidance' })
+    }
+  }
+  return marks
+}
+
 export interface ExampleFeed {
   datafeed: Datafeed
   /** Turn the ticking last bar on or off (a quiet chart is easier to draw on). */
@@ -85,6 +108,11 @@ export function createFeed (): ExampleFeed {
       const bars: MarketBar[] = []
       for (let timestamp = start; timestamp <= end; timestamp += step) bars.push(bar(symbol, timestamp, step))
       return { bars, noData: start <= oldest }
+    },
+    async getMarks (symbol, _period, from, to, request?: MarksRequest) {
+      await delay(120, request?.signal)
+      if (symbol.ticker === 'BROKEN') throw new Error('The example feed was asked to fail (this is the BROKEN market)')
+      return symbol.ticker === 'EMPTY' ? [] : exampleMarks(symbol, from, to)
     },
     subscribe (symbol, period, callback) {
       const id = `${symbol.ticker}:${period.text}`, step = stepOf(period)

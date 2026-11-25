@@ -25,6 +25,16 @@ for (const file of readdirSync(dir)) {
 }
 const symbols = JSON.parse(readFileSync(join(dir, 'symbols.json'), 'utf8')).symbols
 
+// Event marks: <TICKER>.marks.json = { "marks": [ { id, time, label, text?, tone?, color?, category? } ] }, `time` epoch ms or ISO-8601.
+const marksByTicker = new Map()
+for (const file of readdirSync(dir)) {
+  const match = /^(.+)\.marks\.json$/.exec(file)
+  if (!match) continue
+  const marks = JSON.parse(readFileSync(join(dir, file), 'utf8')).marks.map(mark => ({ ...mark, time: typeof mark.time === 'number' ? mark.time : Date.parse(mark.time) }))
+  marksByTicker.set(match[1], marks.sort((a, b) => a.time - b.time))
+}
+const MAX_MARKS = 1000
+
 const send = (res, status, body, headers = {}) => {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers })
   res.end(JSON.stringify(body))
@@ -62,6 +72,17 @@ createServer((req, res) => {
     const newest = bars.at(-1)?.timestamp
     const cache = page.length > 0 && newest !== undefined && page.at(-1).timestamp < newest ? 'public, max-age=3600' : 'no-store'
     return send(res, 200, { ticker, period, bars: page, noData }, { 'cache-control': cache })
+  }
+  if (url.pathname === '/v1/marks') {
+    const ticker = url.searchParams.get('ticker')
+    if (!ticker) return fail(res, 400, 'bad_request', 'ticker is required.')
+    if (!symbols.some(s => s.ticker === ticker)) return fail(res, 404, 'unknown_symbol', `No such symbol ${ticker}.`)
+    const from = integer(url.searchParams.get('from'), -Infinity), to = integer(url.searchParams.get('to'), Infinity)
+    if (Number.isNaN(from) || Number.isNaN(to)) return fail(res, 400, 'bad_request', 'from and to are epoch milliseconds.')
+    // A ticker with no file simply has no events: an empty list, not an error.
+    const marks = (marksByTicker.get(ticker) ?? []).filter(mark => mark.time >= from && mark.time < to)
+    if (marks.length > MAX_MARKS) return fail(res, 400, 'bad_request', `More than ${MAX_MARKS} events in that range: ask for a narrower from and to.`)
+    return send(res, 200, { ticker, marks }, { 'cache-control': 'no-store' })
   }
   fail(res, 404, 'not_found', 'Unknown route.')
 }).listen(port, '127.0.0.1', () => console.error(`datafeed example: http://127.0.0.1:${port}  (${series.size} series from ${dir})`))

@@ -92,6 +92,9 @@ export const WORKSPACE_STYLE = `
 .sc-workspace .sc-marketbar>.sc-history+.sc-secondary{padding-left:0}
 @media(hover:none){.sc-workspace .sc-rail-more{opacity:.7}}
 .sc-workspace .sc-chart{position:absolute;inset:0}
+.sc-workspace .sc-mark-tip{position:absolute;z-index:6;max-width:min(320px,calc(100% - 8px));padding:6px 8px;border:1px solid var(--sc-panel-border,${DARK.panelBorder});border-radius:var(--sc-panel-radius,6px);background:var(--sc-panel-background,${DARK.panel});color:var(--sc-text,${DARK.text});box-shadow:var(--sc-panel-shadow,${DARK.panelShadow});font-size:12px;line-height:1.35;pointer-events:none;overflow-wrap:anywhere}
+.sc-workspace .sc-mark-tip-time{color:var(--sc-muted,${DARK.muted});font-size:11px;margin-bottom:2px}
+.sc-workspace .sc-mark-tip-row+.sc-mark-tip-row{margin-top:3px}
 .sc-workspace .sc-stage-status{position:absolute;inset:0;display:grid;place-content:center;padding:24px;color:var(--sc-muted,${DARK.muted});text-align:center;overflow-wrap:anywhere;pointer-events:none}
 .sc-workspace[data-state=error] .sc-stage-status{color:var(--sc-danger,${DARK.danger})}
 .sc-workspace .sc-notice{flex-shrink:0;padding:8px 12px;color:var(--sc-danger,${DARK.danger});background:var(--sc-error-background,${DARK.error});border-bottom:1px solid var(--sc-border,${DARK.divider});overflow-wrap:anywhere}
@@ -160,6 +163,8 @@ export const WORKSPACE_STYLE = `
 .sc-workspace .sc-object-heading{margin:8px 0 2px;font-size:11px;font-weight:600;color:var(--sc-muted,${DARK.muted});text-transform:uppercase;letter-spacing:.04em}
 .sc-workspace .sc-object-row{display:flex;align-items:center;gap:4px}
 .sc-workspace .sc-object-row .sc-button{padding:2px 8px;min-height:24px}
+.sc-workspace .sc-mark-row{flex:1;min-width:0;padding:3px 8px;font-size:12px;line-height:1.35;overflow-wrap:anywhere;color:var(--sc-muted,${DARK.muted});border-radius:4px}
+.sc-workspace .sc-mark-row:focus-visible{outline:2px solid var(--sc-focus,${DARK.focus});outline-offset:-2px}
 .sc-workspace .sc-object-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;text-align:left;border-color:transparent}
 .sc-workspace[data-headless=true] .sc-marketbar,.sc-workspace[data-headless=true] .sc-drawingbar,.sc-workspace[data-headless=true] .sc-footer,.sc-workspace[data-headless=true] .sc-notice,.sc-workspace[data-headless=true] .sc-holdnote,.sc-workspace[data-headless=true] .sc-replay-controls,.sc-workspace[data-headless=true] .sc-stage-status{display:none!important}
 .sc-workspace[data-layout=compact] .sc-row,.sc-workspace[data-layout=narrow] .sc-row{padding:4px 6px;gap:4px}

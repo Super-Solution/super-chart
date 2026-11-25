@@ -30,11 +30,13 @@ export type {
   PriceScaleOptions, PriceScaleMode,
   EngineFrame, EngineLayout, EngineInspection,
   WorkspaceDocumentV1, WorkspaceDocumentOptions, WorkspaceSavedRender,
-  Datafeed, SymbolInfo, Period, Timespan, HistoryRequest, HistoryResult, SearchRequest, DatafeedSubscribeCallback, MarketBar,
+  Datafeed, SymbolInfo, Period, Timespan, HistoryRequest, HistoryResult, SearchRequest, DatafeedSubscribeCallback, MarketBar, DatafeedMark, MarkTone, MarksRequest,
   WorkspaceState, WorkspaceEvents, WorkspaceLoadState, WorkspaceLoadResult, WorkspaceMarket, WorkspaceReplayState
 } from '@supersolutions/super-chart-core'
 
 export type { WorkspaceDrawingStorage, WorkspaceDrawingCacheOptions } from './drawingDocuments'
+export { markSpecs, groupLabel, MARKS_LAYER } from './datafeedMarks'
+export type { WorkspaceMarksState } from './datafeedMarks'
 export { EngineAnnotations, ENGINE_ANNOTATION_LIMITS, ANNOTATION_TEMPLATE_LIMITS, BUILT_IN_ANNOTATION_TEMPLATES, DEFAULT_FIBONACCI_LEVELS } from './annotations'
 export type {
   EngineAnnotationSpec, EngineAnnotationKind, EngineAnnotationTone, EngineAnnotationAnchor, EngineAnnotationRange, EngineAnnotationSpan, EngineAnnotationSnapshot, EngineProjectedAnnotation, EngineSetAnnotationsResult,

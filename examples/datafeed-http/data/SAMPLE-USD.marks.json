@@ -1,0 +1,10 @@
+{
+  "marks": [
+    { "id": "SAMPLE-USD:listing:2026-08-03", "time": "2026-08-03T00:00:00Z", "label": "Listed", "text": "First trading day on EXAMPLE (fictional)", "tone": "accent", "category": "listing" },
+    { "id": "SAMPLE-USD:dividend:2026-09-05", "time": "2026-09-05T00:00:00Z", "label": "Div 0.24", "text": "Dividend of 0.24 per unit (fictional)", "tone": "bull", "category": "dividend" },
+    { "id": "SAMPLE-USD:split:2026-09-21", "time": "2026-09-21T00:00:00Z", "label": "2:1", "text": "Two-for-one split, prices are not adjusted in this sample (fictional)", "tone": "neutral", "category": "split" },
+    { "id": "SAMPLE-USD:earnings:2026-10-22", "time": "2026-10-22T13:30:00Z", "label": "Earnings", "text": "Quarterly results, below the estimate (fictional)", "tone": "bear", "category": "earnings" },
+    { "id": "SAMPLE-USD:guidance:2026-10-22", "time": "2026-10-22T13:30:00Z", "label": "Guide", "text": "Outlook lowered (fictional)", "tone": "bear", "category": "guidance" },
+    { "id": "SAMPLE-USD:news:2026-10-27", "time": "2026-10-27T09:12:00Z", "label": "News", "text": "Partnership announced (fictional)", "tone": "bull", "category": "news" }
+  ]
+}

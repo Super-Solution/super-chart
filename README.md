@@ -99,6 +99,7 @@ host decides what the new price means. See [docs/WORKSPACE-UI.md](docs/WORKSPACE
 and [docs/API-LAYERS.md](docs/API-LAYERS.md).
 
 - Fourteen price series styles, plus Heikin Ashi display; indicators use raw OHLC.
+- Event marks: a datafeed with the optional `getMarks` gets earnings, dividends, splits and headlines drawn on the bars (one marker per bar, tooltip, an Objects list, stable rejection codes); see [docs/WORKSPACE-UI.md](docs/WORKSPACE-UI.md#event-marks) and [docs/DATAFEED-HTTP.md](docs/DATAFEED-HTTP.md).
 - Price-driven styles: Renko, line break, range bars, Kagi and point and figure (one mark per price move, not per time bar); see [docs/WORKSPACE-UI.md](docs/WORKSPACE-UI.md#price-driven-styles).
 - Linear, logarithmic, percentage and reversed price scales; editable price range.
 - Continuous pan/pinch/wheel zoom, keyboard navigation, optional reduced-motion-aware
