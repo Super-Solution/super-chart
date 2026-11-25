@@ -1,6 +1,6 @@
 {
   "name": "@supersolutions/super-chart-superscript",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "SuperScript language runtime, AI helpers and the script-to-indicator bridge for Super Chart. Runs in plain Node.",
   "license": "GPL-3.0-or-later",
   "type": "module",
@@ -47,7 +47,7 @@
     "tag": "latest"
   },
   "dependencies": {
-    "@supersolutions/super-chart-core": "0.9.1"
+    "@supersolutions/super-chart-core": "0.10.0"
   },
   "author": "SUPER SOLUTION LABS INC"
 }
