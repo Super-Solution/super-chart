@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { RealtimeSeries } from './realtimeSeries'
 import { createDerivedSeriesPort } from './derivedPort'
-import { averageTrueRange, deriveBars, toKagi, toLineBreak, toRangeBars, toRenko, type DerivedStyle } from './derivedSeries'
+import { averageTrueRange, deriveBars, toKagi, toLineBreak, toPointAndFigure, toRangeBars, toRenko, type DerivedStyle } from './derivedSeries'
 import type { MarketBar } from './types'
 
 /*
@@ -543,9 +543,191 @@ describe('Kagi by hand', () => {
   })
 })
 
+
+/*
+ * Point and figure. Two 25-bar random walks on a 0.25 price grid (exact in binary floating point). Expected columns come from
+ * a separate implementation in exact rational arithmetic that fills explicit boxes one price at a time, for both the
+ * close method and the high-low method.
+ */
+const P = {
+  size: 1.25, reversal: 2,
+  bars: [
+    [165, 174, 163.75, 173.5],
+    [173.5, 175, 171.75, 174.25],
+    [174.25, 184.5, 174.25, 182],
+    [182, 182, 180, 182],
+    [182, 183.5, 171.75, 174],
+    [174, 174.25, 173, 174.25],
+    [174.25, 177.25, 169.5, 171.25],
+    [171.25, 172, 167.75, 170.5],
+    [170.5, 173.5, 164.75, 167],
+    [167, 178.25, 165.5, 176.5],
+    [176.5, 181.25, 175.75, 180.5],
+    [180.5, 181, 170.75, 172.25],
+    [172.25, 172.25, 165.5, 166],
+    [166, 168.25, 156.5, 158.25],
+    [158.25, 158.25, 151.25, 154],
+    [154, 164.5, 151, 161.75],
+    [161.75, 163.5, 156.25, 157],
+    [157, 160, 155.5, 156.25],
+    [156.25, 163.75, 155.75, 163.25],
+    [163.25, 165.25, 159.5, 159.75],
+    [159.75, 164.75, 159, 164.5],
+    [164.5, 164.5, 155.75, 157.25],
+    [157.25, 159.75, 153.25, 154.25],
+    [154.25, 160.75, 152.75, 158.25],
+    [158.25, 158.25, 150.25, 153]
+  ] as Array<[number, number, number, number]>,
+  close: [
+    [172.5, 182.5, 172.5, 182.5],
+    [181.25, 181.25, 166.25, 166.25],
+    [167.5, 181.25, 167.5, 181.25],
+    [180, 180, 153.75, 153.75],
+    [155, 162.5, 155, 162.5],
+    [161.25, 161.25, 156.25, 156.25],
+    [157.5, 163.75, 157.5, 163.75],
+    [162.5, 162.5, 158.75, 158.75],
+    [160, 165, 160, 165],
+    [163.75, 163.75, 153.75, 153.75],
+    [155, 158.75, 155, 158.75],
+    [157.5, 157.5, 152.5, 152.5]
+  ],
+  closeStart: [1, 4, 9, 11, 15, 16, 18, 19, 20, 21, 23, 24],
+  highLow: [
+    [165, 185, 165, 185],
+    [183.75, 183.75, 171.25, 171.25],
+    [172.5, 177.5, 172.5, 177.5],
+    [176.25, 176.25, 163.75, 163.75],
+    [165, 182.5, 165, 182.5],
+    [181.25, 181.25, 150, 150],
+    [151.25, 163.75, 151.25, 163.75],
+    [162.5, 162.5, 155, 155],
+    [156.25, 166.25, 156.25, 166.25],
+    [165, 165, 152.5, 152.5],
+    [153.75, 161.25, 153.75, 161.25],
+    [160, 160, 150, 150]
+  ],
+  highLowStart: [0, 3, 5, 7, 9, 11, 16, 17, 18, 20, 23, 24]
+}
+const Q = {
+  size: 1.0, reversal: 3,
+  bars: [
+    [53, 58.75, 51, 56.5],
+    [56.5, 59.25, 55.25, 58.75],
+    [58.75, 62.25, 58.25, 60.25],
+    [60.25, 62.75, 59.25, 61.5],
+    [61.5, 69.25, 61, 68.75],
+    [68.75, 69.25, 63.25, 63.75],
+    [63.75, 66, 54.25, 57.25],
+    [57.25, 57.75, 50, 51],
+    [51, 59.25, 48.75, 57],
+    [57, 59, 48.25, 50],
+    [50, 54.75, 48, 53],
+    [53, 55.75, 43.25, 43.25],
+    [43.25, 44.75, 40.25, 40.75],
+    [40.75, 43.75, 38.25, 38.25],
+    [38.25, 39.5, 35, 35.75],
+    [35.75, 37.5, 26.25, 28.5],
+    [28.5, 32.25, 27.25, 30.75],
+    [30.75, 38.75, 30.75, 35.75],
+    [35.75, 38.25, 32.75, 32.75],
+    [32.75, 39, 32, 37],
+    [37, 39.25, 27.5, 28],
+    [28, 28.25, 23.25, 24.25],
+    [24.25, 27.25, 15.5, 16.75],
+    [16.75, 18, 7, 9.5],
+    [9.5, 11, 0.25, 2]
+  ] as Array<[number, number, number, number]>,
+  close: [
+    [56, 69, 56, 69],
+    [68, 68, 51, 51],
+    [52, 58, 52, 58],
+    [57, 57, 50, 50],
+    [51, 54, 51, 54],
+    [53, 53, 28, 28],
+    [29, 36, 29, 36],
+    [35, 35, 32, 32],
+    [33, 38, 33, 38],
+    [37, 37, 2, 2]
+  ],
+  closeStart: [1, 5, 8, 9, 10, 11, 17, 18, 19, 20],
+  highLow: [
+    [53, 63, 53, 63],
+    [62, 62, 59, 59],
+    [60, 70, 60, 70],
+    [69, 69, 48, 48],
+    [49, 60, 49, 60],
+    [59, 59, 26, 26],
+    [27, 39, 27, 39],
+    [38, 38, 32, 32],
+    [33, 40, 33, 40],
+    [39, 39, 0, 0]
+  ],
+  highLowStart: [0, 3, 4, 5, 9, 10, 16, 18, 19, 20]
+}
+
+describe('point and figure against the exact-arithmetic reference', () => {
+  for (const [name, fixture] of [['p', P], ['q', Q]] as const) {
+    it(`fixture ${name}: close method and high-low method give the reference columns, timed at the bar that started each`, () => {
+      const bars = toBars(fixture.bars)
+      const byClose = toPointAndFigure(bars, { size: fixture.size, reversal: fixture.reversal })
+      closeTo(flat(byClose), fixture.close as Array<[number, number, number, number]>)
+      expect(byClose.map(bar => bar.timestamp)).toEqual(fixture.closeStart.map(i => T0 + i * DAY))
+      const byRange = toPointAndFigure(bars, { size: fixture.size, reversal: fixture.reversal, method: 'high-low' })
+      closeTo(flat(byRange), fixture.highLow as Array<[number, number, number, number]>)
+      expect(byRange.map(bar => bar.timestamp)).toEqual(fixture.highLowStart.map(i => T0 + i * DAY))
+    })
+  }
+})
+
+describe('point and figure by hand', () => {
+  const walk = closes([10.5, 11.2, 13.1, 12.0, 10.2, 9.5, 11.9, 12.1])
+  it('grows a column of X while price makes new boxes, turns after the reversal and grows the column of O', () => {
+    // Column 1: X in boxes 10-13. 12.0 is not 3 boxes below the top (13), 10.2 is: column 2, O from box 12 down to 9.
+    // 11.9 is only 2 boxes above the bottom (9); 12.1 is 3: column 3, X from box 10 to 12.
+    closeTo(flat(toPointAndFigure(walk, { size: 1 })), [[10, 14, 10, 14], [13, 13, 9, 9], [10, 13, 10, 13]])
+  })
+  it('a smaller reversal turns sooner, a larger one later', () => {
+    closeTo(flat(toPointAndFigure(closes([10.5, 13.2, 11.9, 12.5, 10.1]), { size: 1, reversal: 2 })), [[10, 14, 10, 14], [13, 13, 10, 10]])
+    // With 3 boxes needed, 11.9 (two below the top box 13) and 10.1 (box 10, three below) differ: only the second turns.
+    closeTo(flat(toPointAndFigure(closes([10.5, 13.2, 11.9, 12.5, 10.1]), { size: 1, reversal: 3 })), [[10, 14, 10, 14], [13, 13, 10, 10]])
+    closeTo(flat(toPointAndFigure(closes([10.5, 13.2, 11.9, 12.5, 10.1]), { size: 1, reversal: 4 })), [[10, 14, 10, 14]])
+  })
+  it('draws nothing until price leaves the first box, and the first column may go down', () => {
+    expect(toPointAndFigure(closes([10.1, 10.9, 10.4]), { size: 1 })).toEqual([])
+    closeTo(flat(toPointAndFigure(closes([10.5, 9.8, 8.2]), { size: 1 })), [[11, 11, 8, 8]])
+  })
+  it('the high-low method uses highs while X grows and lows while O grows, and extending beats reversing', () => {
+    const bars: MarketBar[] = [
+      { timestamp: T0, open: 10.5, high: 10.9, low: 10.1, close: 10.5 },
+      { timestamp: T0 + DAY, open: 10.5, high: 12.5, low: 10.5, close: 11 },
+      // High reaches box 14 and low box 10: the bar extends the column of X; it does not also reverse it.
+      { timestamp: T0 + 2 * DAY, open: 11, high: 14.2, low: 10.1, close: 12 },
+      { timestamp: T0 + 3 * DAY, open: 12, high: 12.5, low: 10.9, close: 11 }
+    ]
+    closeTo(flat(toPointAndFigure(bars, { size: 1, method: 'high-low' })), [[10, 15, 10, 15], [14, 14, 10, 10]])
+    // Closes alone: 11 then 12 grow the column to box 12, and 11 later is nowhere near a reversal.
+    closeTo(flat(toPointAndFigure(bars, { size: 1 })), [[10, 13, 10, 13]])
+  })
+  it('lands exactly on a box edge without float noise, on a size that is not exact in binary', () => {
+    const size = 0.1
+    const prices = Array.from({ length: 40 }, (_, i) => i * size)
+    const out = toPointAndFigure(closes(prices), { size })
+    expect(out.length).toBe(1)
+    expect(out[0].close).toBeCloseTo(4, 9)
+  })
+  it('refuses unusable input visibly', () => {
+    expect(() => toPointAndFigure(closes([1, 2]), { size: 1, reversal: 0 })).toThrow(RangeError)
+    expect(() => toPointAndFigure(closes([1, 2]), { size: 1, reversal: 2.5 })).toThrow(RangeError)
+    expect(() => toPointAndFigure(closes([1, 2]), { size: 1, method: 'open' as never })).toThrow(RangeError)
+    expect(() => toPointAndFigure(closes([1, 2]), { size: 0 })).toThrow(RangeError)
+    expect(toPointAndFigure([], { size: 1 })).toEqual([])
+  })
+})
+
 describe('input handling', () => {
   it('returns an empty list for no bars and rejects unusable input visibly', () => {
-    for (const style of ['renko', 'line-break', 'range', 'kagi'] as DerivedStyle[]) expect(deriveBars(style, [], { size: 1 })).toEqual([])
+    for (const style of ['renko', 'line-break', 'range', 'kagi', 'point-figure'] as DerivedStyle[]) expect(deriveBars(style, [], { size: 1 })).toEqual([])
     expect(() => toRenko(closes([10, 11]), { size: 0 })).toThrow(RangeError)
     expect(() => toRenko(closes([10, 11]), { size: Number.NaN })).toThrow(RangeError)
     expect(() => toLineBreak(closes([10, 11]), { lines: 0 })).toThrow(RangeError)
@@ -582,7 +764,7 @@ describe('createDerivedSeriesPort', () => {
     })
   }
 
-  for (const style of ['renko', 'line-break', 'range', 'kagi'] as DerivedStyle[]) {
+  for (const style of ['renko', 'line-break', 'range', 'kagi', 'point-figure'] as DerivedStyle[]) {
     it(`${style}: the chart always holds a fresh derivation and live ticks never reset it`, () => {
       const series = new RealtimeSeries({ referenceIndicators: false })
       const port = createDerivedSeriesPort(series)

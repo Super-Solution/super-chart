@@ -188,8 +188,8 @@ export class ChartWorkspace {
   private loader: DataLoader
   /** Between the loader and the chart: shows the feed as Renko, line break, range bars or Kagi when asked. */
   private readonly derived!: DerivedSeriesPort
-  /** Chart type to bring back when Kagi (drawn as a step line) is left. */
-  private typeBeforeKagi: EngineChartType | null = null
+  /** Chart type to bring back when a style drawn with its own chart type (Kagi as a step line, point and figure) is left. */
+  private typeBeforeStyle: EngineChartType | null = null
   private timedReplay: TimedReplay
   private readonly countdown: BarCountdown
   private readonly loaderOptions: ChartWorkspaceOptions['loader']
@@ -397,7 +397,7 @@ export class ChartWorkspace {
       if (period !== undefined) void this.setPeriod(period)
     }))
     this.syncPeriodControls()
-    const chartType = this.select('chartType', ENGINE_CHART_TYPES.map(type => [type, () => this.t(`chartType.${type}`)] as const), options.chart?.render?.chartType ?? 'candles')
+    const chartType = this.select('chartType', ENGINE_CHART_TYPES.filter(type => type !== 'point-figure').map(type => [type, () => this.t(`chartType.${type}`)] as const), options.chart?.render?.chartType ?? 'candles')
     this.listen(chartType, 'change', () => { this.run(() => { this.chart.setRenderOptions({ chartType: chartType.value as EngineChartType }); }); this.syncPresentation() })
     const mode = this.select('candles', PRICE_MODES.map(name => [name, () => this.t(name === 'raw' ? 'priceMode.raw' : name === 'heikin-ashi' ? 'priceMode.heikin' : `priceMode.${name}`)] as const), options.chart?.mode ?? 'raw')
     this.listen(mode, 'change', () => { this.run(() => { this.setPriceMode(mode.value as WorkspacePriceMode); }); this.syncPresentation() })
@@ -420,7 +420,7 @@ export class ChartWorkspace {
     this.syncPresentation = () => {
       const layout = this.chart.getLayoutOptions(), render = this.chart.getRenderOptions()
       this.scale = { ...layout.priceScale }
-      chartType.value = render.chartType ?? 'candles'
+      chartType.value = render.chartType === 'point-figure' ? this.typeBeforeStyle ?? 'candles' : render.chartType ?? 'candles'
       mode.value = this.getPriceMode()
       scale.value = this.scale.mode ?? 'linear'
       reverse.setAttribute('aria-pressed', String(this.scale.reversed === true))
@@ -699,7 +699,11 @@ export class ChartWorkspace {
         },
         onHoldDraw: event => { this.showHoldDraw(event); options.chart?.onHoldDraw?.(event) }
       })
-      this.derived = createDerivedSeriesPort(this.chart.dataPort)
+      this.derived = createDerivedSeriesPort(this.chart.dataPort, () => {
+        // New history changes the measured default size: the point and figure boxes follow it.
+        const size = this.derived.getStyle()?.size
+        if (this.chart.getRenderOptions().chartType === 'point-figure' && size !== null && size !== undefined) this.chart.setRenderOptions({ pointFigureBox: size })
+      })
       this.annotations = new EngineAnnotations({ symbol: null, theme: this.annotationTheme(), onChange: () => { this.chart.requestPaint(); this.objectsDirty = true; this.renderObjects() } })
       this.chart.addLayer(this.annotations)
       this.drawingToolbar = new DrawingToolbar({
@@ -762,24 +766,27 @@ export class ChartWorkspace {
       // Leave Heikin Ashi first: the style reads the real bars.
       this.chart.view.setMode('raw')
       this.derived.setStyle(mode, options)
-      if (mode === 'kagi' && this.typeBeforeKagi === null) {
-        const type = this.chart.getRenderOptions().chartType ?? 'candles'
-        this.typeBeforeKagi = type; this.chart.setRenderOptions({ chartType: 'step-line' })
-      } else if (mode !== 'kagi') this.leaveKagi()
+      const own = mode === 'kagi' ? 'step-line' : mode === 'point-figure' ? 'point-figure' : null
+      if (own !== null) {
+        if (this.typeBeforeStyle === null) this.typeBeforeStyle = this.chart.getRenderOptions().chartType ?? 'candles'
+        // The box height lets the renderer count the boxes of a column; it is the size the port settled on.
+        this.chart.setRenderOptions({ chartType: own, pointFigureBox: this.derived.getStyle()?.size ?? undefined })
+      } else this.leaveStyleType()
       return
     }
     this.derived.setStyle(null)
-    this.leaveKagi()
+    this.leaveStyleType()
     this.chart.view.setMode(mode)
   }
 
   getPriceMode (): WorkspacePriceMode { this.assertLive(); return this.derived.getStyle()?.style ?? this.chart.view.getSnapshot().mode }
 
-  private leaveKagi (): void {
-    if (this.typeBeforeKagi === null) return
-    const back = this.typeBeforeKagi
-    this.typeBeforeKagi = null
-    if (this.chart.getRenderOptions().chartType === 'step-line') this.chart.setRenderOptions({ chartType: back })
+  private leaveStyleType (): void {
+    if (this.typeBeforeStyle === null) return
+    const back = this.typeBeforeStyle
+    this.typeBeforeStyle = null
+    const current = this.chart.getRenderOptions().chartType
+    if (current === 'step-line' || current === 'point-figure') this.chart.setRenderOptions({ chartType: back, pointFigureBox: undefined })
   }
 
   getSymbol (): SymbolInfo { return { ...this.symbol } }
@@ -1711,9 +1718,10 @@ export class ChartWorkspace {
     add('workspace.reload', t('palette.reload'), 'palette.group.general', () => { void this.reload() })
     for (const name of listWorkspaceThemes()) add(`theme.${name}`, t('palette.theme', { name: t(`theme.${name}`) }), 'palette.group.general', () => { this.setTheme(name) }, { keywords: ['theme', 'dark', 'light'], when: () => this.themeName !== name })
     for (const period of this.periods) add(`interval.${periodKey(period)}`, t('palette.interval', { name: period.text }), 'palette.group.interval', () => { void this.setPeriod(period) }, { keywords: ['interval', 'timeframe', 'period'], when: () => periodKey(period) !== periodKey(this.period) })
-    for (const type of ENGINE_CHART_TYPES) add(`chartType.${type}`, t('palette.chartType', { name: t(`chartType.${type}`) }), 'palette.group.chart', () => { this.chart.setRenderOptions({ chartType: type }); this.syncPresentation() })
+    // Point and figure belongs to the price mode (it needs a box size), so it is not offered as a plain chart type.
+    for (const type of ENGINE_CHART_TYPES.filter(type => type !== 'point-figure')) add(`chartType.${type}`, t('palette.chartType', { name: t(`chartType.${type}`) }), 'palette.group.chart', () => { this.chart.setRenderOptions({ chartType: type }); this.syncPresentation() })
     for (const mode of ['linear', 'log', 'percentage'] as const) add(`scale.${mode}`, t('palette.scale', { name: t(`priceScale.${mode}`) }), 'palette.group.chart', () => { this.chart.setLayout({ priceScale: { ...this.chart.getLayoutOptions().priceScale, mode } }); this.syncPresentation() })
-    for (const name of PRICE_MODES) add(`priceMode.${name}`, t('palette.priceMode', { name: t(name === 'raw' ? 'priceMode.raw' : name === 'heikin-ashi' ? 'priceMode.heikin' : `priceMode.${name}`) }), 'palette.group.chart', () => { this.setPriceMode(name); this.syncPresentation() }, { keywords: ['renko', 'kagi', 'range', 'line break', 'price mode'], when: () => this.getPriceMode() !== name })
+    for (const name of PRICE_MODES) add(`priceMode.${name}`, t('palette.priceMode', { name: t(name === 'raw' ? 'priceMode.raw' : name === 'heikin-ashi' ? 'priceMode.heikin' : `priceMode.${name}`) }), 'palette.group.chart', () => { this.setPriceMode(name); this.syncPresentation() }, { keywords: ['renko', 'kagi', 'range', 'line break', 'point and figure', 'x o', 'price mode'], when: () => this.getPriceMode() !== name })
     add('chart.heikin', t('palette.heikin'), 'palette.group.chart', () => { this.setPriceMode(this.getPriceMode() === 'heikin-ashi' ? 'raw' : 'heikin-ashi'); this.syncPresentation() })
     add('chart.reverse', t('palette.reverse'), 'palette.group.chart', () => { const current = this.chart.getLayoutOptions().priceScale; this.chart.setLayout({ priceScale: { ...current, reversed: current?.reversed !== true } }); this.syncPresentation() })
     add('view.fit', t('context.fit'), 'palette.group.view', () => { this.fitPriceScale() })

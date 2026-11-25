@@ -64,6 +64,60 @@ function drawBaseline (
   ctx.beginPath(); ctx.moveTo(model.geometry.left, baseY); ctx.lineTo(model.geometry.right, baseY); ctx.stroke()
 }
 
+/** A column holds at most this many boxes before the glyphs give way to a solid bar: the page must stay responsive. */
+const MAX_GLYPHS = 20_000
+
+/**
+ * Point and figure: each candle is one column. An X column (close above open) is drawn in the up colour with crosses,
+ * an O column in the down colour with rings. Boxes are counted from the column's price span, so the height of a box
+ * follows the price scale (also a logarithmic one). When a box is too small to hold a glyph the column is drawn as
+ * one solid bar so the chart still reads.
+ */
+function paintPointFigure (
+  ctx: CanvasRenderingContext2D, model: FinancialChartModel, candles: readonly ChartCandlePoint[], box: number,
+  half: number, up: string, down: string, gridColor: string
+): void {
+  const width = half * 2
+  // Box grid across the plot when the boxes are big enough to be told apart.
+  const firstBox = Math.floor(model.min / box), lastBox = Math.ceil(model.max / box)
+  const probe = Math.abs(model.y((firstBox + 1) * box) - model.y(firstBox * box))
+  if (probe >= 6 && lastBox - firstBox <= 600) {
+    ctx.strokeStyle = gridColor; ctx.globalAlpha = 0.5; ctx.lineWidth = 1; ctx.beginPath()
+    for (let k = firstBox; k <= lastBox; k++) {
+      const y = Math.round(model.y(k * box)) + 0.5
+      if (Number.isFinite(y)) { ctx.moveTo(model.geometry.left, y); ctx.lineTo(model.geometry.right, y) }
+    }
+    ctx.stroke(); ctx.globalAlpha = 1
+  }
+  let glyphs = 0
+  for (const candle of candles) {
+    if (!Number.isFinite(candle.x)) continue
+    const rising = candle.c >= candle.o, low = Math.min(candle.o, candle.c)
+    const count = Math.max(1, Math.round(Math.abs(candle.c - candle.o) / box))
+    const color = rising ? up : down
+    const base = Math.round(low / box)
+    const yTop = model.y((base + count) * box), yBottom = model.y(base * box)
+    if (!Number.isFinite(yTop) || !Number.isFinite(yBottom)) continue
+    const cell = Math.abs(yBottom - yTop) / count
+    if (cell < 5 || width < 5 || glyphs + count > MAX_GLYPHS) {
+      ctx.fillStyle = color; ctx.globalAlpha = 0.85
+      ctx.fillRect(candle.x - Math.max(0.5, half * 0.6), Math.min(yTop, yBottom), Math.max(1, half * 1.2), Math.max(1, Math.abs(yBottom - yTop)))
+      ctx.globalAlpha = 1
+      continue
+    }
+    glyphs += count
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.beginPath()
+    const r = Math.min(width, cell) * 0.36
+    for (let k = 0; k < count; k++) {
+      const top = model.y((base + k + 1) * box), bottom = model.y((base + k) * box)
+      const cy = (top + bottom) / 2
+      if (rising) { ctx.moveTo(candle.x - r, cy - r); ctx.lineTo(candle.x + r, cy + r); ctx.moveTo(candle.x - r, cy + r); ctx.lineTo(candle.x + r, cy - r) }
+      else { ctx.moveTo(candle.x + r, cy); ctx.ellipse(candle.x, cy, r, r, 0, 0, Math.PI * 2) }
+    }
+    ctx.stroke()
+  }
+}
+
 /** Extended price-series types only. The caller owns plot clipping and paints indicators separately. */
 export function paintPriceSeries (
   ctx: CanvasRenderingContext2D,
@@ -183,6 +237,12 @@ export function paintPriceSeries (
             ctx.fill()
           }
         }
+        break
+      }
+      case 'point-figure': {
+        const box = options.pointFigureBox
+        if (box === undefined || !(box > 0) || !Number.isFinite(box)) return false
+        paintPointFigure(ctx, model, candles, box, half, up, down, options.grid ?? theme.line)
         break
       }
       case 'baseline': {

@@ -33,7 +33,11 @@ function sameBar (a: MarketBar, b: MarketBar): boolean {
   return a.timestamp === b.timestamp && a.open === b.open && a.high === b.high && a.low === b.low && a.close === b.close && a.volume === b.volume
 }
 
-export function createDerivedSeriesPort (target: ChartDataPort): DerivedSeriesPort {
+/**
+ * `onSizeChange` is called after the port has measured a new default size (new history was loaded while a style is on),
+ * so a caller that draws from the size, like the point and figure boxes, can follow it.
+ */
+export function createDerivedSeriesPort (target: ChartDataPort, onSizeChange?: () => void): DerivedSeriesPort {
   let style: DerivedStyle | null = null
   let options: DerivedStyleOptions = {}
   let size: number | null = null
@@ -43,7 +47,7 @@ export function createDerivedSeriesPort (target: ChartDataPort): DerivedSeriesPo
   let shown: MarketBar[] = []
 
   const resolve = (): DerivedStyleOptions => ({ ...options, size: options.size ?? size ?? undefined })
-  const measure = (): void => { size = options.size ?? (raw.length === 0 ? null : averageTrueRange(raw)) }
+  const measure = (): void => { const before = size; size = options.size ?? (raw.length === 0 ? null : averageTrueRange(raw)); if (size !== before) onSizeChange?.() }
   const derive = (): MarketBar[] => {
     if (style === null || raw.length === 0) return []
     return deriveBars(style, raw, resolve())

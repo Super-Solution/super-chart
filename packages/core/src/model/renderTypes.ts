@@ -12,7 +12,9 @@ export const ENGINE_RENDER_THEMES: readonly EngineRenderTheme[] = Object.freeze(
 export const ENGINE_CHART_TYPES = [
   'candles', 'hollow-candles', 'outline-candles', 'hollow-down-candles',
   'ohlc', 'volume-bars', 'columns', 'high-low',
-  'line', 'line-markers', 'step-line', 'area', 'hlc-area', 'baseline'
+  'line', 'line-markers', 'step-line', 'area', 'hlc-area', 'baseline',
+  /** Columns of X and O for the point and figure price mode; needs `pointFigureBox`, otherwise it paints candles. */
+  'point-figure'
 ] as const
 export type EngineChartType = typeof ENGINE_CHART_TYPES[number]
 
@@ -20,6 +22,8 @@ export interface EngineRenderOptions {
   chartType?: EngineChartType
   /** Explicit dense-candle paint aggregation; raw prices and inspection stay unchanged. */
   candleDensity?: 'raw' | 'pixel-envelope'
+  /** Point and figure only: the price height of one box, so a column's boxes can be counted. Set by the price mode. */
+  pointFigureBox?: number
   /** Baseline chart reference price; defaults to the first visible close. */
   baseline?: number
   /** Selects the Super Chart light or dark palette; the single colours below override it. Default dark. */

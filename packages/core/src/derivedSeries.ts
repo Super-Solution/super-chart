@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
- * Price-driven chart styles: Renko, line break, range bars and Kagi.
+ * Price-driven chart styles: Renko, line break, range bars, Kagi and point and figure.
  *
  * These styles do not draw one mark per time bar. Each mark is made when price moves enough, so the number of marks
  * differs from the number of source bars and the time axis stops being evenly spaced. The functions here are pure:
@@ -19,8 +19,8 @@
  */
 import type { MarketBar } from './types'
 
-export type DerivedStyle = 'renko' | 'line-break' | 'range' | 'kagi'
-export const DERIVED_STYLES: readonly DerivedStyle[] = Object.freeze(['renko', 'line-break', 'range', 'kagi'] as const)
+export type DerivedStyle = 'renko' | 'line-break' | 'range' | 'kagi' | 'point-figure'
+export const DERIVED_STYLES: readonly DerivedStyle[] = Object.freeze(['renko', 'line-break', 'range', 'kagi', 'point-figure'] as const)
 
 export interface DerivedStyleOptions {
   /**
@@ -30,6 +30,10 @@ export interface DerivedStyleOptions {
   size?: number
   /** Line break only: how many previous lines a close must break to reverse. Default 3. */
   lines?: number
+  /** Point and figure only: boxes a move against the column must cover to start the next column. Default 3. */
+  reversal?: number
+  /** Point and figure only: which prices fill boxes, the closes (default) or each bar's high and low. */
+  method?: 'close' | 'high-low'
 }
 
 /** One mark before it gets its time: `source` is the index of the source bar that made it. */
@@ -257,6 +261,60 @@ export function toKagi (bars: readonly MarketBar[], options: DerivedStyleOptions
   return realise(bars, marks)
 }
 
+/**
+ * Point and figure. Prices fall into boxes of `size` on a lattice (box k covers k * size up to (k + 1) * size). A column
+ * of X fills boxes upward, a column of O downward, and every column is one output bar: an X column opens at the
+ * bottom edge of its lowest box and closes at the top edge of its highest box, an O column the other way round.
+ * While price keeps making a new box in the column's direction the column grows. A move against it of `reversal`
+ * boxes (default 3) from the column's end starts the next column, in the next box beside the old one: an X column
+ * ending in box T is followed by an O column from T - 1 downward, an O column ending in box B by an X column from
+ * B + 1 upward. The first column starts in the box of the first price and goes whichever way price first leaves it.
+ *
+ * `method: 'close'` (default) fills boxes from the closes. `method: 'high-low'` uses each bar's high while a column
+ * of X grows and its low while a column of O grows; a bar never both extends and reverses a column (extending wins),
+ * and a first bar that leaves its box both ways goes the way the bar closed. A column takes the time of the source
+ * bar that started it, so the column still forming keeps its time as it grows. The volume of the bars inside a
+ * column is carried to the column that follows it.
+ */
+export function toPointAndFigure (bars: readonly MarketBar[], options: DerivedStyleOptions = {}): MarketBar[] {
+  assertSource(bars)
+  const reversal = options.reversal ?? 3
+  if (!Number.isSafeInteger(reversal) || reversal < 1) throw new RangeError('reversal must be a positive integer')
+  const method = options.method ?? 'close'
+  if (method !== 'close' && method !== 'high-low') throw new RangeError("method must be 'close' or 'high-low'")
+  if (bars.length === 0) return []
+  const size = sizeOf(bars, options)
+  const box = (price: number): number => Math.floor(price / size + EPS)
+  const marks: Mark[] = []
+  // `direction`: 1 = column of X, -1 = column of O, 0 = no column yet. `top` and `bottom` are box numbers.
+  let direction = 0, top = 0, bottom = 0, startSource = 0
+  const anchor = box(method === 'close' ? bars[0].close : bars[0].open)
+  const flush = (): void => {
+    if (direction === 0) return
+    const rising = direction === 1, low = bottom * size, high = (top + 1) * size
+    push(marks, { source: startSource, open: rising ? low : high, high, low, close: rising ? high : low })
+  }
+  for (let s = 0; s < bars.length; s++) {
+    const bar = bars[s]
+    const hi = box(method === 'close' ? bar.close : bar.high), lo = box(method === 'close' ? bar.close : bar.low)
+    if (direction === 0) {
+      const goesUp = hi >= anchor + 1, goesDown = lo <= anchor - 1
+      if (!goesUp && !goesDown) continue
+      if (goesUp && (!goesDown || bar.close >= bar.open)) { direction = 1; bottom = anchor; top = hi }
+      else { direction = -1; top = anchor; bottom = lo }
+      startSource = s
+      continue
+    }
+    if (direction === 1) {
+      if (hi >= top + 1) top = hi
+      else if (lo <= top - reversal) { flush(); direction = -1; const end = top - 1; bottom = lo; top = end; startSource = s }
+    } else if (lo <= bottom - 1) bottom = lo
+    else if (hi >= bottom + reversal) { flush(); direction = 1; const start = bottom + 1; top = hi; bottom = start; startSource = s }
+  }
+  flush()
+  return realise(bars, marks)
+}
+
 /** Dispatch by style name. */
 export function deriveBars (style: DerivedStyle, bars: readonly MarketBar[], options: DerivedStyleOptions = {}): MarketBar[] {
   switch (style) {
@@ -264,6 +322,7 @@ export function deriveBars (style: DerivedStyle, bars: readonly MarketBar[], opt
     case 'line-break': return toLineBreak(bars, options)
     case 'range': return toRangeBars(bars, options)
     case 'kagi': return toKagi(bars, options)
+    case 'point-figure': return toPointAndFigure(bars, options)
     default: throw new TypeError('Unknown price-driven style')
   }
 }
