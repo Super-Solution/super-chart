@@ -689,7 +689,7 @@ export class ChartWorkspace {
             volume: text.volume === '' ? '' : this.t('a11y.barVolume', { volume: text.volume })
           })
         },
-        render: { ...(options.theme === undefined ? {} : getWorkspaceTheme(options.theme)?.render), ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone },
+        render: { ...(options.theme === undefined ? {} : getWorkspaceTheme(options.theme)?.render), ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone, locale: this.locale },
         onToolComplete: reason => {
           const again = reason === 'completed' && this.stayInDrawing ? this.lastTool : null
           this.setToolValue(null)
@@ -930,7 +930,7 @@ export class ChartWorkspace {
     this.assertLive()
     const state = this.getLoadState()
     if (state.loaded === null || !['ready', 'empty'].includes(state.status)) throw new Error('Load a market before saving its workspace')
-    const { formatPrice, showTimeAxis, timespan, symbolTimezone, pointFigureBox, ...render } = this.chart.getRenderOptions()
+    const { formatPrice, showTimeAxis, timespan, symbolTimezone, pointFigureBox, locale, ...render } = this.chart.getRenderOptions()
     // A price-driven style is not saved, so neither is the chart type it borrowed (step line for Kagi, X/O for point and figure).
     if (this.typeBeforeStyle !== null && (render.chartType === 'step-line' || render.chartType === 'point-figure')) render.chartType = this.typeBeforeStyle
     const document: WorkspaceDocumentV1 = {
@@ -969,7 +969,7 @@ export class ChartWorkspace {
       if (this.disposed) return { status: 'disposed' }
       if (generation !== this.restoreGeneration) return { status: 'superseded', by: this.market() }
       const configuration: EngineConfiguration = {
-        render: { ...document.render, formatPrice: this.chart.getRenderOptions().formatPrice, timespan: period.timespan, symbolTimezone: document.symbol.timezone },
+        render: { ...document.render, formatPrice: this.chart.getRenderOptions().formatPrice, timespan: period.timespan, symbolTimezone: document.symbol.timezone, locale: this.locale },
         layout: document.layout,
         mode: document.mode ?? 'raw',
         indicators: document.indicators,
@@ -1458,6 +1458,7 @@ export class ChartWorkspace {
     if (typeof locale !== 'string' || locale.trim() === '') throw new TypeError('A locale tag is required')
     this.locale = resolveLocale(locale); this.tr = createTranslator(this.locale)
     this.root.lang = this.locale
+    this.chart.setRenderOptions({ locale: this.locale })
     for (const apply of this.bindings) apply()
     this.buildToolOptions(); this.syncPeriodControls(); this.refreshIndicatorsUi(); this.updateDrawingControls(); this.syncPresentation()
     this.fullscreenSync(); this.objectsDirty = true; this.renderObjects(); this.palette.applyText(); this.contextMenu.close(false)

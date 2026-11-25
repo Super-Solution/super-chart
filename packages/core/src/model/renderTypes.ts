@@ -38,6 +38,8 @@ export interface EngineRenderOptions {
   pricePrecision?: number
   /** Viewer/display IANA timezone, used for intraday bars. Default UTC. */
   timeZone?: string
+  /** BCP 47 tag for the month and day names on the time axis (`zh-TW`, `de`). Default `en`. The workspace passes its own locale. */
+  locale?: string
   /** Actual feed period; day-and-larger labels represent market sessions. */
   timespan?: Timespan
   /** SymbolInfo.timezone for daily/weekly/monthly/yearly session dates; default UTC. */
