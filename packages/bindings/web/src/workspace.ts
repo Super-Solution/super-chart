@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/promise-function-async -- Load methods validate synchronously and return the shared queue promise without an async wrapper. */
 import { EngineChart, type EngineChartOptions, type EngineConfiguration } from './chart'
-import { ENGINE_CHART_TYPES, DRAWING_TYPES, DERIVED_STYLES, createDerivedSeriesPort, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, compileSymbolSession, sessionBarClose, sessionKindAt, parseWorkspaceDocument, checkTimeZone, timeZoneChoices, localTimeZone, COMMON_TIME_ZONES, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type DerivedSeriesPort, type DerivedStyle, type DerivedStyleOptions, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1, type SessionIssue, type TradingSession } from '@supersolutions/super-chart-core'
+import { ENGINE_CHART_TYPES, DRAWING_TYPES, DERIVED_STYLES, createDerivedSeriesPort, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, compileSymbolSession, sessionBarClose, sessionKindAt, parseWorkspaceDocument, checkTimeZone, formatUtcOffset, timeZoneChoices, localTimeZone, COMMON_TIME_ZONES, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type DerivedSeriesPort, type DerivedStyle, type DerivedStyleOptions, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1, type SessionIssue, type TradingSession } from '@supersolutions/super-chart-core'
 import { DatafeedMarks, MARKS_LAYER, type WorkspaceMarksState } from './datafeedMarks'
 import { EngineAnnotations, attachAnnotationIntents, type AnnotationIntentEvent, type EngineAnnotationTheme } from './annotations'
 import { themeName } from './tokens'
@@ -236,6 +236,7 @@ export class ChartWorkspace {
   private readonly paletteButton: HTMLButtonElement
   private readonly autoButton: HTMLButtonElement
   private readonly zoneSelect: HTMLSelectElement
+  private zoneListFull = false
   private marksToggle: HTMLButtonElement | null = null
   private zoneId: string
   private readonly intervalBar: HTMLDivElement
@@ -431,10 +432,12 @@ export class ChartWorkspace {
     this.autoButton = this.control('scale.auto', () => { this.fitPriceScale(); }, { title: 'scale.auto.title' })
     this.zoneId = options.chart?.render?.timeZone ?? 'UTC'
     this.zoneSelect = this.node('select'); this.zoneSelect.className = 'sc-select sc-zone-select'
-    this.bind(() => { const name = this.t('timezone'); this.zoneSelect.setAttribute('aria-label', name); this.zoneSelect.title = name; this.fillTimeZones() })
+    this.bind(() => { const name = this.t('timezone'); this.zoneSelect.setAttribute('aria-label', name); this.zoneSelect.title = name; this.fillTimeZones(this.zoneListFull) })
     this.listen(this.zoneSelect, 'change', () => { this.run(() => { this.setTimeZone(this.zoneSelect.value) }) })
-    // Offsets are read when the menu is about to open, so a daylight-saving change shows as it is today.
-    this.listen(this.zoneSelect, 'focus', () => { this.fillTimeZones() })
+    // The full list (about 420 options) is built when the menu is about to open, not at mount: until then the picker holds
+    // only the zone in use. Offsets are read at that moment too, so a daylight-saving change shows as it is today.
+    this.listen(this.zoneSelect, 'focus', () => { this.fillTimeZones(true) })
+    this.listen(this.zoneSelect, 'pointerdown', () => { if (!this.zoneListFull) this.fillTimeZones(true) })
     this.scaleBar = this.row('bar.scale'); this.scaleBar.classList.add('sc-scalebar')
     this.scaleBar.append(this.autoButton, this.zoneSelect)
     this.syncPresentation = () => {
@@ -1792,7 +1795,7 @@ export class ChartWorkspace {
   /** Make the picker read `id`; the list is rebuilt only when the zone is not already the one it shows. */
   private showTimeZone (id: string): void {
     this.zoneId = id
-    if (this.zoneSelect.value !== id) { this.zoneSelect.value = id; if (this.zoneSelect.value !== id) this.fillTimeZones() }
+    if (this.zoneSelect.value !== id) { this.zoneSelect.value = id; if (this.zoneSelect.value !== id) this.fillTimeZones(this.zoneListFull) }
   }
 
   private toggleTimeZone (): void {
@@ -1800,9 +1803,11 @@ export class ChartWorkspace {
   }
 
   /** The zone picker: this device and the common zones, then all the others, offsets as of now. */
-  private fillTimeZones (): void {
+  private fillTimeZones (full: boolean): void {
+    this.zoneListFull = full
     const local = localTimeZone(), groups = new Map<string, HTMLOptGroupElement>()
-    for (const choice of timeZoneChoices({ extra: [this.zoneId], local })) {
+    const choices = full ? timeZoneChoices({ extra: [this.zoneId], local }) : [{ id: this.zoneId, offset: formatUtcOffset(this.zoneId, Date.now()), group: 'common' as const }]
+    for (const choice of choices) {
       let group = groups.get(choice.group)
       if (group === undefined) { group = this.node('optgroup'); group.label = this.t(choice.group === 'common' ? 'timezone.common' : 'timezone.all'); groups.set(choice.group, group) }
       const option = this.node('option'); option.value = choice.id
