@@ -12,7 +12,8 @@ export const TECHNICAL_INDICATOR_NAMES = Object.freeze([
   'SC_RSI', 'SC_MACD', 'SC_SMA',
   'SC_ATR', 'SC_ATR_BANDS', 'SC_KELTNER', 'SC_DONCHIAN', 'SC_VWAP',
   'SC_STOCH', 'SC_STOCHRSI', 'SC_MFI', 'SC_BBP', 'SC_SUPERTREND', 'SC_ICHIMOKU', 'SC_PDHL',
-  'SC_WMA', 'SC_HMA', 'SC_DEMA', 'SC_TEMA', 'SC_VWMA', 'SC_KAMA'
+  'SC_WMA', 'SC_HMA', 'SC_DEMA', 'SC_TEMA', 'SC_VWMA', 'SC_KAMA',
+  'SC_CVD', 'SC_CVD_EST'
 ] as const)
 
 export type TechnicalIndicatorName = typeof TECHNICAL_INDICATOR_NAMES[number]
@@ -38,7 +39,7 @@ function lines (...entries: Array<readonly [string, string]>): readonly Indicato
   return Object.freeze(entries.map(([key, title]) => Object.freeze({ key, title, type: 'line' as const })))
 }
 
-type ParameterKind = 'period' | 'positive' | 'anchor' | 'offset' | 'range'
+type ParameterKind = 'period' | 'positive' | 'anchor' | 'offset' | 'range' | 'reset'
 
 /** Missing values use the existing SC defaults; invalid explicit values fail instead of silently changing the requested calculation. */
 function parameters (name: string, supplied: readonly number[], defaults: readonly number[], kinds: readonly ParameterKind[]): readonly number[] {
@@ -59,6 +60,9 @@ function parameters (name: string, supplied: readonly number[], defaults: readon
       case 'offset': break // A fixed offset in minutes, matching the existing SC_VWAP calculation.
       case 'range':
         if (value !== 0 && value !== 1) throw new RangeError('SC_PDHL period must be 0 (day) or 1 (week)')
+        break
+      case 'reset':
+        if (value !== 0 && value !== 1) throw new RangeError(`${name} reset must be 0 (never) or 1 (every UTC day)`)
         break
     }
     return value
@@ -97,6 +101,26 @@ function define (
     figures,
     calculate: compute
   })
+}
+
+/**
+ * Running total of per-bar volume delta. A bar whose delta is unknown (null) is left out of the total and drawn as a gap, so
+ * missing data is visible instead of silently counted as zero. With `daily`, the total restarts at each UTC midnight.
+ */
+function cumulate (bars: readonly MarketBar[], delta: Series, daily: boolean): Series {
+  const out: Series = new Array(bars.length)
+  let total = 0, day = NaN
+  for (let i = 0; i < bars.length; i++) {
+    if (daily) {
+      const today = Math.floor(bars[i].timestamp / DAY_MS)
+      if (today !== day) { day = today; total = 0 }
+    }
+    const value = delta[i]
+    if (value === null) { out[i] = null; continue }
+    total += value
+    out[i] = total
+  }
+  return out
 }
 
 const bands = lines(['basis', 'Basis'], ['upper', 'Upper'], ['lower', 'Lower'])
@@ -269,6 +293,27 @@ export const TECHNICAL_INDICATOR_DEFINITIONS: readonly IndicatorDefinition[] = O
   define('SC_KAMA', [10, 2, 30], ['period', 'period', 'period'], 'price', lines(['kama', 'KAMA']), (bars, p) => {
     if (p[1] >= p[2]) throw new RangeError('SC_KAMA fast period must be shorter than the slow period')
     return rows(['kama'], [kama(priceSeries(bars, 'close'), p[0], p[1], p[2])])
+  }),
+  define('SC_CVD', [0], ['reset'], 'separate', lines(['cvd', 'CVD']), (bars, p) => {
+    // Exact: the feed reports how much of each bar's volume was bought by market orders (`buyVolume`).
+    const delta: Series = new Array(bars.length)
+    for (let i = 0; i < bars.length; i++) {
+      const volume = bars[i].volume, buy = bars[i].buyVolume
+      const known = typeof volume === 'number' && typeof buy === 'number' && Number.isFinite(volume) && Number.isFinite(buy) && volume >= 0 && buy >= 0 && buy <= volume
+      delta[i] = known ? 2 * (buy as number) - (volume as number) : null
+    }
+    return rows(['cvd'], [cumulate(bars, delta, p[0] === 1)])
+  }),
+  define('SC_CVD_EST', [0], ['reset'], 'separate', lines(['cvd', 'CVD (estimate)']), (bars, p) => {
+    // Estimate for feeds without trade direction: each bar's volume is split by where the close sits in the bar's range.
+    // It is a bar-level approximation, not the real buy/sell split; use SC_CVD when the feed reports `buyVolume`.
+    const delta: Series = new Array(bars.length)
+    for (let i = 0; i < bars.length; i++) {
+      const { high, low, close, volume } = bars[i]
+      const known = typeof volume === 'number' && Number.isFinite(volume) && volume >= 0 && Number.isFinite(high) && Number.isFinite(low) && Number.isFinite(close)
+      delta[i] = !known ? null : high > low ? (volume as number) * (2 * close - high - low) / (high - low) : 0
+    }
+    return rows(['cvd'], [cumulate(bars, delta, p[0] === 1)])
   }),
   define('SC_PDHL', [0], ['range'], 'price', lines(['high', 'Previous High'], ['low', 'Previous Low']), (bars, p) => {
     const range = previousRangeHighLow(bars, p[0] === 1 ? 'week' : 'day', 'UTC')
