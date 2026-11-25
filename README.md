@@ -99,6 +99,7 @@ host decides what the new price means. See [docs/WORKSPACE-UI.md](docs/WORKSPACE
 and [docs/API-LAYERS.md](docs/API-LAYERS.md).
 
 - Fourteen price series styles, plus Heikin Ashi display; indicators use raw OHLC.
+- Price-driven styles: Renko, line break, range bars and Kagi (one mark per price move, not per time bar); see [docs/WORKSPACE-UI.md](docs/WORKSPACE-UI.md#price-driven-styles).
 - Linear, logarithmic, percentage and reversed price scales; editable price range.
 - Continuous pan/pinch/wheel zoom, keyboard navigation, optional reduced-motion-aware
   inertia, draggable pane boundaries and price axis.
