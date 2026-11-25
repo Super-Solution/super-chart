@@ -44,6 +44,16 @@ CALLS = {
     "bbPercent": lambda a: ta.bb_percent(a["src"], a["len"], a["mult"]),
     "sar": lambda a: ta.sar(a["high"], a["low"], a["start"], a["inc"], a["max"]),
     "keltner": lambda a: ta.keltner(a["high"], a["low"], a["close"], a["len"], a["mult"], a["atrLen"]),
+    "aroon": lambda a: ta.aroon(a["high"], a["low"], a["len"]),
+    "cmf": lambda a: ta.cmf(a["high"], a["low"], a["close"], a["volume"], a["len"]),
+    "adl": lambda a: ta.adl(a["high"], a["low"], a["close"], a["volume"]),
+    "forceIndex": lambda a: ta.force_index(a["close"], a["volume"], a["len"]),
+    "vortex": lambda a: ta.vortex(a["high"], a["low"], a["close"], a["len"]),
+    "tsi": lambda a: ta.tsi(a["src"], a["long"], a["short"], a["signal"]),
+    "ultimate": lambda a: ta.ultimate(a["high"], a["low"], a["close"], a["fast"], a["mid"], a["slow"]),
+    "zigzag": lambda a: ta.zigzag(a["high"], a["low"], a["deviation"]),
+    "pivotPoints": lambda a: ta.pivot_points(a["high"], a["low"], a["close"], a["periods"], a["kind"]),
+    "chandelier": lambda a: ta.chandelier(a["high"], a["low"], a["close"], a["len"], a["mult"]),
 }
 
 

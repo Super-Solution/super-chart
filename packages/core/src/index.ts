@@ -4,7 +4,8 @@ import {
   bollinger, highest, lowest, linreg, correlation, change, mom, roc,
   crossover, crossunder, cross, cum, barssince, valuewhen, pivot, trueRange,
   atr, obv, vwap, cci, mfi, stochK, sar, stoch, stochRsi, bbPercent,
-  keltner, donchian, atrBands, supertrend, ichimoku, anchoredVwap
+  keltner, donchian, atrBands, supertrend, ichimoku, anchoredVwap,
+  aroon, adl, cmf, forceIndex, vortex, tsi, ultimate, zigzag, pivotPoints, chandelier, periodBucket
 } from './ta'
 export type { MarketBar } from './types'
 /** Explicit named functions keep generated declarations independent of module namespaces. */
@@ -52,7 +53,18 @@ export const ta = Object.freeze({
   atrBands,
   supertrend,
   ichimoku,
-  anchoredVwap
+  anchoredVwap,
+  aroon,
+  adl,
+  cmf,
+  forceIndex,
+  vortex,
+  tsi,
+  ultimate,
+  zigzag,
+  pivotPoints,
+  chandelier,
+  periodBucket
 })
 export type { Series } from './ta'
 export * from './series'

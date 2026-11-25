@@ -82,6 +82,29 @@ explicit in the module. Owned SAR includes Wilder's prior-two-extrema clamp;
 the older shared-core SAR is unchanged. The catalogs provide 47 names in total.
 SC_PDHL is a latest-period UTC reference, not a historical backtesting series.
 
+Ten more optional names arrived in 0.13, each an owned kernel in `packages/core/src/ta.ts` with a SuperScript builtin
+and, except Pivot Points, an entry in both indicator servers (see [INDICATORS-SERVER.md](INDICATORS-SERVER.md)):
+
+| Name | Pane | Formula and conventions |
+| --- | --- | --- |
+| SC_AROON (14) | separate | Up/Down = `100 * (len - bars since the high/low) / len` over the last `len + 1` bars, as TradingView; the newest bar wins a tie |
+| SC_CMF (20) | separate | money flow volume over volume, summed over the window; money flow multiplier is `((C - L) - (H - C)) / (H - L)`, 0 on a bar with no range; null where the window has no volume |
+| SC_ADL | separate | running total of money flow volume; a bar missing a price adds nothing |
+| SC_FORCE (13) | separate | EMA of `(close - previous close) * volume`, SMA-seeded like every EMA here |
+| SC_VORTEX (14) | separate | VI+ and VI-: summed `|H - previous L|` and `|L - previous H|` over summed true range |
+| SC_TSI (25, 13, 13) | separate | `100 * EMA(EMA(change, long), short) / EMA(EMA(|change|, long), short)` and an EMA signal; null on a flat stretch |
+| SC_ULTIMATE (7, 14, 28) | separate | buying pressure over true range for three windows, weighted 4:2:1, scaled 0..100; the first bar is null |
+| SC_ZIGZAG (5) | price | percentage reversal on highs and lows; straight legs between pivots, the last leg ending at the latest extreme |
+| SC_PIVOTS (anchor 0, offset 0, kind 0) | price | classic (`kind` 0) or Fibonacci (`kind` 1) levels PP, R1-R3, S1-S3 from the previous completed period; `anchor` 0 day, 1 week (Sunday to Saturday, UTC), 2 month, 3 quarter, 4 year; `offset` shifts the edges by fixed minutes |
+| SC_CHANDELIER (22, 3) | price | highest high minus `mult` ATR (long exit) and lowest low plus `mult` ATR (short exit); plain levels, no ratchet |
+
+Limits stated plainly. SC_ZIGZAG **repaints**: a pivot is only known after price reverses, so earlier legs move as bars
+arrive and the line is not a historical signal; it is a drawing aid and must not be backtested. SC_PIVOTS buckets by fixed
+UTC offset like SC_VWAP, with no exchange sessions or daylight-saving rules, so an equity's "day" is the UTC day unless
+`offset` says otherwise; its first period has no levels, and the line renderer joins one period's level to the next with a
+slanted segment at each boundary. Aroon, vortex, TSI and the ultimate oscillator are conventions, not claims of
+bit-identity with any one vendor; the conformance file pins ours. All ten recompute the whole series on a tail edit.
+
 All 65 former drawing tools are retained through owned models and geometry:
 lines/channels/pitchforks, geometric shapes, Fibonacci/Gann/waves, price/time
 measurements, text, positions, anchored VWAP/profiles, local images and freehand

@@ -149,7 +149,9 @@ The optional packs provide 34 more definitions (41 total):
 
 - Technical: SC_RSI, SC_MACD, SC_SMA, SC_ATR, SC_ATR_BANDS, SC_KELTNER,
   SC_DONCHIAN, SC_VWAP, SC_STOCH, SC_STOCHRSI, SC_MFI, SC_BBP,
-  SC_SUPERTREND, SC_ICHIMOKU, SC_PDHL.
+  SC_SUPERTREND, SC_ICHIMOKU, SC_PDHL. Later releases add more names to the optional technical pack (0.13 adds
+  SC_AROON, SC_CMF, SC_ADL, SC_FORCE, SC_VORTEX, SC_TSI, SC_ULTIMATE, SC_ZIGZAG, SC_PIVOTS and SC_CHANDELIER;
+  see [OWNED-ENGINE.md](OWNED-ENGINE.md)); `TECHNICAL_INDICATOR_NAMES` is the current list.
 - Classic: CCI, DMI, CR, PSY, DMA, TRIX, OBV, VR, WR, MTM, EMV, ROC,
   PVT, AO, SAR, BIAS, BRAR, SMA, BBI.
 

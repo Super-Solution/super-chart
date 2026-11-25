@@ -39,7 +39,7 @@ that package published. No npm publication or workflow was triggered here.
 * **No HTTP surface for the kernels.** The Go and Python ports existed only as libraries, so a service that
   wanted indicators without Node had to write its own server and its own input mapping.
 * **Stale documentation about scope.** The Go and Python package comments still said they held ten kernels
-  (`sum` .. `atr`); both hold the 33 pinned by the conformance data. `backends/` READMEs did not say how to run
+  (`sum` .. `atr`); both held the 33 pinned by the conformance data then (43 since 0.13). `backends/` READMEs did not say how to run
   anything beyond the tests.
 * **Stale package name in a user-facing error.** `runScript()` in `@supersolutions/super-chart-superscript`
   told users a language "is not enabled on @super-solution/super-chart/superscript", an entry that no longer

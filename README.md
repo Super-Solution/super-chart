@@ -103,7 +103,7 @@ and [docs/API-LAYERS.md](docs/API-LAYERS.md).
 - Linear, logarithmic, percentage and reversed price scales; editable price range.
 - Continuous pan/pinch/wheel zoom, keyboard navigation, optional reduced-motion-aware
   inertia, draggable pane boundaries and price axis.
-- Seven incremental built-ins (MA, EMA, BOLL, VOL, MACD, RSI, KDJ); 21 technical (including the WMA, HMA, DEMA, TEMA, VWMA and KAMA moving averages) and
+- Seven incremental built-ins (MA, EMA, BOLL, VOL, MACD, RSI, KDJ); 33 technical (the WMA, HMA, DEMA, TEMA, VWMA and KAMA moving averages, CVD, and Aroon, CMF, ADL, Force Index, Vortex, TSI, Ultimate, ZigZag, Pivot Points and Chandelier Exit) and
   19 classic definitions in core's `/indicators`.
 - All 65 drawing tools with selection, editing, lock/hide, bounded undo/redo and
   validated JSON import/export, a `drawingsChange` event, and optional server sync of

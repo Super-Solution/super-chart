@@ -482,3 +482,173 @@ describe('anchoredVwap', () => {
     expect(vwap[2]).toBeCloseTo(10, 10)
   })
 })
+
+// Hand-computed expectations for the 0.13 indicators; the conformance file pins the same kernels across languages.
+describe('aroon', () => {
+  it('scores the bars since the high and the low over len + 1 bars', () => {
+    const { up, down } = ta.aroon([1, 3, 2, 5, 4], [5, 4, 6, 2, 3], 2)
+    expect(up).toEqual([null, null, 50, 100, 50])
+    expect(down).toEqual([null, null, 50, 100, 50])
+  })
+  it('takes the most recent bar on a tie, and an unusable length gives nulls', () => {
+    expect(ta.aroon([5, 5, 3], [1, 1, 1], 2).up[2]).toBe(50)
+    expect(ta.aroon([5, 5, 3], [1, 1, 1], 0).up).toEqual([null, null, null])
+    expect(ta.aroon([5, 5, 3], [1, 1, 1], 1.5).down).toEqual([null, null, null])
+  })
+  it('restarts the window after a gap', () => {
+    expect(ta.aroon([1, 2, null, 3, 4], [1, 2, null, 3, 4], 1).up).toEqual([null, 100, null, null, 100])
+  })
+})
+
+describe('money flow: adl and cmf', () => {
+  const high = [10, 10, 10, 5], low = [8, 8, 8, 5], close = [10, 8, 10, 5], volume = [100, 100, 300, 70]
+  it('adl adds volume at the high, subtracts it at the low and ignores a bar with no range', () => {
+    expect(ta.adl(high, low, close, volume)).toEqual([100, 0, 300, 300])
+  })
+  it('adl leaves a bar missing a price as a gap that adds nothing', () => {
+    expect(ta.adl([10, 10, 10], [8, null, 8], [10, 9, 10], [100, 100, 100])).toEqual([100, null, 200])
+  })
+  it('cmf is money flow volume over volume across the window', () => {
+    const result = ta.cmf(high, low, close, volume, 2)
+    expect(result[0]).toBeNull()
+    expect(result[1]).toBeCloseTo(0, 12)
+    expect(result[2]).toBeCloseTo(0.5, 12)
+  })
+  it('cmf is null where the window holds no volume', () => {
+    expect(ta.cmf(high, low, close, [0, 0, 0, 0], 2)).toEqual([null, null, null, null])
+  })
+})
+
+describe('forceIndex', () => {
+  it('is the EMA of the close change times volume', () => {
+    expect(ta.forceIndex([10, 12, 11], [5, 10, 20], 1)).toEqual([null, 20, -20])
+    const two = ta.forceIndex([10, 12, 11, 13], [5, 10, 20, 10], 2)
+    // EMA(2) seeds on the mean of 20 and -20, then (2 * 20 + 1 * 0) / 3.
+    expect(two.slice(0, 3)).toEqual([null, null, 0])
+    expect(two[3]).toBeCloseTo(40 / 3, 12)
+  })
+})
+
+describe('vortex', () => {
+  const high = [10, 12, 11], low = [8, 9, 8], close = [9, 11, 9]
+  it('divides the summed vortex movement by the summed true range', () => {
+    const { plus, minus } = ta.vortex(high, low, close, 1)
+    expect(plus[0]).toBeNull()
+    expect(plus[1]).toBeCloseTo(4 / 3, 12)
+    expect(minus[1]).toBeCloseTo(1 / 3, 12)
+    expect(plus[2]).toBeCloseTo(2 / 3, 12)
+    expect(minus[2]).toBeCloseTo(4 / 3, 12)
+  })
+  it('is null on a flat market, which has no true range', () => {
+    const flat = Array(10).fill(5)
+    expect(ta.vortex(flat, flat, flat, 3).plus.every(v => v === null)).toBe(true)
+  })
+})
+
+describe('tsi', () => {
+  it('is 100 on a steady climb and -100 on a steady fall', () => {
+    const up = Array.from({ length: 80 }, (_, i) => 10 + i)
+    const climb = ta.tsi(up, 5, 3, 2)
+    expect(climb.tsi.at(-1)).toBeCloseTo(100, 10)
+    expect(climb.signal.at(-1)).toBeCloseTo(100, 10)
+    expect(ta.tsi(up.map(x => 200 - x), 5, 3, 2).tsi.at(-1)).toBeCloseTo(-100, 10)
+  })
+  it('is null where nothing moved', () => {
+    expect(ta.tsi(Array(40).fill(7), 5, 3, 2).tsi.every(v => v === null)).toBe(true)
+  })
+})
+
+describe('ultimate', () => {
+  it('with three windows of one bar is buying pressure over true range', () => {
+    const result = ta.ultimate([10, 12], [8, 9], [9, 11], 1, 1, 1)
+    expect(result[0]).toBeNull()
+    // floor = min(low 9, previous close 9) = 9, ceiling = max(high 12, 9) = 12: pressure 2 over range 3.
+    expect(result[1]).toBeCloseTo(200 / 3, 12)
+  })
+  it('stays between 0 and 100', () => {
+    const rand = rng(7)
+    const close = Array.from({ length: 200 }, () => 100 + rand() * 20)
+    const result = ta.ultimate(close.map(c => c + rand() * 3), close.map(c => c - rand() * 3), close)
+    const values = result.filter((v): v is number => v !== null)
+    expect(values.length).toBe(200 - 28)
+    expect(Math.min(...values)).toBeGreaterThanOrEqual(0)
+    expect(Math.max(...values)).toBeLessThanOrEqual(100)
+  })
+})
+
+describe('zigzag', () => {
+  const path = [100, 104, 108, 112, 120, 118, 100, 95, 90, 100, 104]
+  it('confirms a pivot when price reverses by the deviation and draws straight legs between pivots', () => {
+    const { line, pivot } = ta.zigzag(path, path, 10)
+    expect(pivot).toEqual([100, null, null, null, 120, null, null, null, 90, null, null])
+    expect(line).toEqual([100, 105, 110, 115, 120, 112.5, 105, 97.5, 90, 97, 104])
+  })
+  it('ends the last leg at the latest extreme, not at the last bar', () => {
+    const { line } = ta.zigzag([...path, 103, 102], [...path, 103, 102], 10)
+    expect(line.slice(-3)).toEqual([104, null, null])
+  })
+  it('finds nothing in a flat market or with an unusable deviation', () => {
+    expect(ta.zigzag([5, 5, 5], [5, 5, 5], 5).line).toEqual([null, null, null])
+    expect(ta.zigzag(path, path, 0).line.every(v => v === null)).toBe(true)
+    expect(ta.zigzag(path, path, -3).pivot.every(v => v === null)).toBe(true)
+  })
+  it('repaints: an earlier leg changes when a later bar reverses', () => {
+    const climb = [100, 104, 108, 112, 120]
+    const before = ta.zigzag(climb, climb, 10).line
+    const after = ta.zigzag([...climb, 121], [...climb, 121], 10).line
+    // The leg to the top was 100 -> 120; a higher top at the next bar redraws it as 100 -> 121.
+    expect(before[1]).toBe(105)
+    expect(after[1]).toBeCloseTo(104.2, 12)
+  })
+})
+
+describe('pivotPoints', () => {
+  const high = [12, 11, 20], low = [8, 6, 1], close = [10, 9, 15], periods = [1, 1, 2]
+  it('classic levels come from the previous period high, low and last close', () => {
+    // Period 1: H 12, L 6, C 9, so PP = 9 and the range is 6.
+    const r = ta.pivotPoints(high, low, close, periods, 0)
+    expect(r.pp).toEqual([null, null, 9])
+    expect([r.r1[2], r.r2[2], r.r3[2], r.s1[2], r.s2[2], r.s3[2]]).toEqual([12, 15, 18, 6, 3, 0])
+  })
+  it('fibonacci levels use 0.382, 0.618 and 1.0 of the range', () => {
+    const r = ta.pivotPoints(high, low, close, periods, 1)
+    expect(r.pp[2]).toBe(9)
+    expect(r.r1[2]).toBeCloseTo(9 + 0.382 * 6, 12)
+    expect(r.r2[2]).toBeCloseTo(9 + 0.618 * 6, 12)
+    expect(r.r3[2]).toBe(15)
+    expect(r.s3[2]).toBe(3)
+  })
+  it('uses no bar of its own period, so the levels are known at the open', () => {
+    const r = ta.pivotPoints([12, 11, 99], [8, 6, -99], [10, 9, 50], periods, 0)
+    expect(r.pp[2]).toBe(9)
+  })
+  it('gives a bar with no period key no levels, and an unknown kind none at all', () => {
+    expect(ta.pivotPoints(high, low, close, [1, 1, null], 0).pp).toEqual([null, null, null])
+    expect(ta.pivotPoints(high, low, close, periods, 2).pp).toEqual([null, null, null])
+  })
+})
+
+describe('chandelier', () => {
+  it('hangs the exit mult ATRs from the highest high and the lowest low', () => {
+    const { long, short } = ta.chandelier([10, 12, 11], [8, 9, 8], [9, 11, 9], 2, 1)
+    expect(long).toEqual([null, 9.5, 9.25])
+    expect(short).toEqual([null, 10.5, 10.75])
+  })
+})
+
+describe('periodBucket', () => {
+  const at = (...parts: [number, number, number, number?, number?]): number => Date.UTC(...parts)
+  it('buckets by day, Sunday-to-Saturday week, month, quarter and year', () => {
+    // 2024-01-07 is a Sunday: it opens a week that runs through Saturday the 13th.
+    expect(ta.periodBucket(at(2024, 0, 7), 1)).toBe(ta.periodBucket(at(2024, 0, 13, 23, 59), 1))
+    expect(ta.periodBucket(at(2024, 0, 6, 23, 59), 1)).not.toBe(ta.periodBucket(at(2024, 0, 7), 1))
+    expect(ta.periodBucket(at(2024, 0, 2, 3), 0)).toBe(ta.periodBucket(at(2024, 0, 2, 22), 0))
+    expect(ta.periodBucket(at(2024, 4, 9), 2)).toBe(202404)
+    expect(ta.periodBucket(at(2024, 4, 9), 3)).toBe(20241)
+    expect(ta.periodBucket(at(2024, 4, 9), 4)).toBe(2024)
+  })
+  it('shifts the edges by a fixed offset in minutes and rejects an unusable timestamp', () => {
+    expect(ta.periodBucket(at(2024, 0, 2, 23, 30), 0, 60)).toBe(ta.periodBucket(at(2024, 0, 3, 0, 30), 0))
+    expect(ta.periodBucket(Number.NaN, 0)).toBeNull()
+  })
+})

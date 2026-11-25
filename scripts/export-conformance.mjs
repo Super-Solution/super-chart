@@ -163,6 +163,58 @@ for (const [len, mult, atrLen] of [[20, 2, 10], [5, 1.5, 5], [3, 1, 2]]) {
   add('keltner', { ...candles(70, true), len, mult, atrLen }, a => ta.keltner(a.high, a.low, a.close, a.len, a.mult, a.atrLen), 1e-9)
 }
 
+// ---- third batch (0.13): volume flow, trend, momentum and reference levels ------------------------
+for (const gaps of [false, true]) {
+  for (const len of [1, 2, 5, 14, 25]) {
+    const n = 80
+    add('aroon', { ...candles(n, gaps), len }, a => ta.aroon(a.high, a.low, a.len))
+    add('cmf', { ...candles(n, gaps), volume: volume(n), len }, a => ta.cmf(a.high, a.low, a.close, a.volume, a.len), 1e-9)
+    add('forceIndex', { close: walk(n, gaps), volume: volume(n), len }, a => ta.forceIndex(a.close, a.volume, a.len), 1e-9)
+    add('vortex', { ...candles(n, gaps), len }, a => ta.vortex(a.high, a.low, a.close, a.len), 1e-9)
+  }
+  add('adl', { ...candles(70, gaps), volume: volume(70) }, a => ta.adl(a.high, a.low, a.close, a.volume), 1e-9)
+  for (const [long, short, signal] of [[25, 13, 13], [5, 3, 2], [8, 4, 1], [3, 3, 3]]) {
+    add('tsi', { src: walk(140, gaps), long, short, signal }, a => ta.tsi(a.src, a.long, a.short, a.signal), 1e-9)
+  }
+  for (const [fast, mid, slow] of [[7, 14, 28], [2, 3, 5], [1, 4, 9]]) {
+    add('ultimate', { ...candles(90, gaps), fast, mid, slow }, a => ta.ultimate(a.high, a.low, a.close, a.fast, a.mid, a.slow), 1e-9)
+  }
+  for (const deviation of [0.5, 2, 5, 10]) {
+    add('zigzag', { ...candles(240, gaps), deviation }, a => ta.zigzag(a.high, a.low, a.deviation), 1e-9)
+  }
+  for (const [len, mult] of [[22, 3], [5, 1.5], [1, 2]]) {
+    add('chandelier', { ...candles(80, gaps), len, mult }, a => ta.chandelier(a.high, a.low, a.close, a.len, a.mult), 1e-9)
+  }
+  for (const kind of [0, 1]) for (const size of [5, 12]) {
+    const c = candles(70, gaps)
+    // Period keys that step every `size` bars; a key that is null leaves its bar without levels.
+    const periods = Array.from({ length: 70 }, (_, i) => gaps && i % 23 === 22 ? null : Math.floor(i / size))
+    add('pivotPoints', { ...c, periods, kind }, a => ta.pivotPoints(a.high, a.low, a.close, a.periods, a.kind), 1e-9)
+  }
+}
+for (const fn of ['aroon', 'vortex']) for (const len of [0, -1, 2.5]) add(fn, { ...candles(30, false), len }, a => ta[fn](a.high, a.low, ...(fn === 'vortex' ? [a.close] : []), a.len))
+for (const len of [0, 2.5]) {
+  add('cmf', { ...candles(30, false), volume: volume(30), len }, a => ta.cmf(a.high, a.low, a.close, a.volume, a.len))
+  add('forceIndex', { close: walk(30, false), volume: volume(30), len }, a => ta.forceIndex(a.close, a.volume, a.len))
+}
+add('aroon', { high: [], low: [], len: 5 }, a => ta.aroon(a.high, a.low, a.len))
+add('zigzag', { high: [], low: [], deviation: 5 }, a => ta.zigzag(a.high, a.low, a.deviation))
+add('zigzag', { high: [10, 10, 10, 10], low: [10, 10, 10, 10], deviation: 5 }, a => ta.zigzag(a.high, a.low, a.deviation))
+add('zigzag', { high: [10, 11], low: [9, 10], deviation: 0 }, a => ta.zigzag(a.high, a.low, a.deviation))
+// A flat market has no range and no volume movement: money flow, vortex and the ultimate oscillator hit their zero guards.
+add('cmf', { high: Array(30).fill(5), low: Array(30).fill(5), close: Array(30).fill(5), volume: Array(30).fill(100), len: 5 }, a => ta.cmf(a.high, a.low, a.close, a.volume, a.len))
+add('cmf', { ...candles(30, false), volume: Array(30).fill(0), len: 5 }, a => ta.cmf(a.high, a.low, a.close, a.volume, a.len))
+add('vortex', { high: Array(30).fill(5), low: Array(30).fill(5), close: Array(30).fill(5), len: 5 }, a => ta.vortex(a.high, a.low, a.close, a.len))
+add('ultimate', { high: Array(60).fill(5), low: Array(60).fill(5), close: Array(60).fill(5), fast: 7, mid: 14, slow: 28 }, a => ta.ultimate(a.high, a.low, a.close, a.fast, a.mid, a.slow))
+add('tsi', { src: Array(60).fill(5), long: 5, short: 3, signal: 2 }, a => ta.tsi(a.src, a.long, a.short, a.signal))
+// A ladder up, down and up again gives zigzag three clean legs; the same ladder with tied highs hits aroon's tie rule.
+const ladder = [...Array.from({ length: 12 }, (_, i) => 100 + i * 3), ...Array.from({ length: 12 }, (_, i) => 133 - i * 4), ...Array.from({ length: 12 }, (_, i) => 89 + i * 5)]
+add('zigzag', { high: ladder.map(x => x + 1), low: ladder.map(x => x - 1), deviation: 5 }, a => ta.zigzag(a.high, a.low, a.deviation), 1e-9)
+add('aroon', { high: [5, 7, 7, 3, 7, 2, 2, 2, 9, 1], low: [4, 6, 6, 2, 6, 1, 1, 1, 8, 0], len: 3 }, a => ta.aroon(a.high, a.low, a.len))
+add('pivotPoints', { high: [], low: [], close: [], periods: [], kind: 0 }, a => ta.pivotPoints(a.high, a.low, a.close, a.periods, a.kind))
+add('pivotPoints', { ...candles(20, false), periods: Array(20).fill(7), kind: 0 }, a => ta.pivotPoints(a.high, a.low, a.close, a.periods, a.kind))
+add('pivotPoints', { ...candles(20, false), periods: Array.from({ length: 20 }, (_, i) => Math.floor(i / 5)), kind: 2 }, a => ta.pivotPoints(a.high, a.low, a.close, a.periods, a.kind))
+
 const text = `${JSON.stringify({
   version: 1,
   note: 'Generated by scripts/export-conformance.mjs from packages/core/src/ta.ts. Series hold numbers or null. Compare each value with abs(got - want) <= tolerance * max(1, abs(want)); null must match null.',

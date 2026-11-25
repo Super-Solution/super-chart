@@ -3,7 +3,7 @@
 """Technical-analysis kernels for Super Chart, in Python.
 
 Ports of packages/core/src/ta.ts. This module holds sum, sma, ema, rma, rsi, macd, stdev, bollinger, true_range
-and atr; the package exports all 33 kernels listed in conformance/README.md.
+and atr; the package exports all 43 kernels listed in conformance/README.md (the 0.13 ones are in flow.py).
 A series is a list of float-or-None. Windows restart after a None, results are None until a window is
 ready, and an unusable length (not a positive integer) gives all None, exactly like the reference.
 conformance/indicators.v1.json is the shared test data.
