@@ -102,6 +102,23 @@ describe('order-book heatmap', () => {
   })
 })
 
+describe('very small charts and short histories', () => {
+  it('draw something sensible, or nothing, and never throw', () => {
+    for (const height of [60, 120]) {
+      const frame = frameOf(bars(), height), list = bars()
+      const heat = projectDepthHeatmap(frame, list, [snap(0, [[103.5, 10], [101, 5]])])
+      expect(['ready', 'empty']).toContain(heat.status)
+      if (heat.status === 'ready') expect(heat.rows).toBeGreaterThanOrEqual(1)
+      const map = projectLiquidationMap(frame, list, [{ price: 103, long: 1 }, { price: 106, short: 2 }])
+      expect(['ready', 'empty']).toContain(map.status)
+    }
+    // One bar only.
+    const one = bars().slice(0, 1), frame = frameOf(one)
+    expect(() => projectDepthHeatmap(frame, one, [snap(0, [[100, 1]])])).not.toThrow()
+    expect(() => projectLiquidationMap(frame, one, [{ price: 100, long: 1 }])).not.toThrow()
+  })
+})
+
 describe('liquidation map', () => {
   it('sums the levels in each row and sizes the bars against the largest row', () => {
     const frame = frameOf(), list = bars()

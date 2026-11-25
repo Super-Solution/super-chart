@@ -725,6 +725,49 @@ describe('point and figure by hand', () => {
   })
 })
 
+describe('hostile input', () => {
+  const styles: DerivedStyle[] = ['renko', 'line-break', 'range', 'kagi', 'point-figure']
+  it('either refuses with a RangeError or returns clean marks, for any mix of odd bars and sizes', () => {
+    let state = 99
+    const next = (): number => { state = (state * 1664525 + 1013904223) % 4294967296; return state / 4294967296 }
+    const odd = [NaN, Infinity, -Infinity, 0, -5, 1e-300, 1e300, 5e-324, Number.MAX_VALUE]
+    let refused = 0, drawn = 0
+    for (let round = 0; round < 120; round++) {
+      const n = Math.floor(next() * 40)
+      let clock = T0, price = 50
+      const bars: MarketBar[] = Array.from({ length: n }, () => {
+        clock += next() < 0.05 ? 0 : 1 + Math.floor(next() * 3_600_000)
+        const open = price, close = next() < 0.04 ? odd[Math.floor(next() * odd.length)] : Math.max(0.01, open + (next() - 0.5) * 8)
+        price = Number.isFinite(close) ? close : price
+        return { timestamp: clock, open, high: Math.max(open, close || 0) + next(), low: Math.min(open, close || 0) - next(), close, volume: next() < 0.2 ? undefined : next() * 100 }
+      })
+      const sizes = [undefined, 0.5, 5, 1e12, -1, 0, NaN, Infinity]
+      for (const style of styles) {
+        const size = sizes[Math.floor(next() * sizes.length)]
+        try {
+          const out = deriveBars(style, bars, { size, lines: next() < 0.2 ? 0 : undefined, reversal: next() < 0.2 ? 2.5 : undefined })
+          drawn++
+          let previous = -Infinity
+          for (const bar of out) {
+            expect(bar.timestamp).toBeGreaterThan(previous); previous = bar.timestamp
+            for (const key of ['open', 'high', 'low', 'close'] as const) expect(Number.isFinite(bar[key]), `${style} size ${String(size)} ${key}=${String(bar[key])}`).toBe(true)
+            expect(bar.low).toBeLessThanOrEqual(Math.min(bar.open, bar.close) + 1e-9 * Math.max(1, Math.abs(bar.low)))
+            expect(bar.high).toBeGreaterThanOrEqual(Math.max(bar.open, bar.close) - 1e-9 * Math.max(1, Math.abs(bar.high)))
+            if (bar.volume !== undefined) { expect(Number.isFinite(bar.volume), `${style} volume=${String(bar.volume)}`).toBe(true); expect(bar.volume).toBeGreaterThanOrEqual(0) }
+          }
+        } catch (error) {
+          // The only acceptable failure is a visible, typed refusal.
+          expect(error, `${style} size ${String(size)}`).toBeInstanceOf(RangeError)
+          refused++
+        }
+      }
+    }
+    // The run must have exercised both outcomes, or it proves nothing.
+    expect(refused).toBeGreaterThan(50)
+    expect(drawn).toBeGreaterThan(50)
+  })
+})
+
 describe('input handling', () => {
   it('returns an empty list for no bars and rejects unusable input visibly', () => {
     for (const style of ['renko', 'line-break', 'range', 'kagi', 'point-figure'] as DerivedStyle[]) expect(deriveBars(style, [], { size: 1 })).toEqual([])
@@ -797,6 +840,60 @@ describe('createDerivedSeriesPort', () => {
       // Back to no style: the chart holds the real bars again.
       port.setStyle(null)
       expect(series.getDataList().length).toBe(raw.length)
+    })
+  }
+
+  for (const style of ['renko', 'line-break', 'range', 'kagi', 'point-figure'] as DerivedStyle[]) {
+    it(`${style}: after any mix of ticks, new bars, batches, repeats and stale bars the chart equals a fresh derivation`, () => {
+      for (const [seed, size] of [[3, 0.4], [11, 3]] as const) {
+        let state = seed
+        const next = (): number => { state = (state * 1664525 + 1013904223) % 4294967296; return state / 4294967296 }
+        const series = new RealtimeSeries({ referenceIndicators: false })
+        const port = createDerivedSeriesPort(series)
+        const raw = walk(150, seed)
+        port.applyNewData(raw.map(bar => ({ ...bar })), false)
+        port.setStyle(style, style === 'line-break' ? {} : { size })
+        const options = style === 'line-break' ? {} : { size }
+        const check = (label: string): void => {
+          const want = deriveBars(style, raw, options), got = series.getDataList()
+          expect(got.length, label).toBe(want.length)
+          got.forEach((bar, i) => { for (const key of ['timestamp', 'open', 'high', 'low', 'close', 'volume']) expect(bar[key], `${label} ${key}[${i}]`).toBeCloseTo(want[i][key] as number, 9) })
+        }
+        const merge = (bar: MarketBar): void => {
+          const last = raw[raw.length - 1]
+          if (bar.timestamp < last.timestamp) return
+          if (bar.timestamp === last.timestamp) raw[raw.length - 1] = { ...bar }; else raw.push({ ...bar })
+        }
+        const moved = (bar: MarketBar, by: number): MarketBar => {
+          const close = Math.max(1, bar.close + by)
+          return { ...bar, close, high: Math.max(bar.high, close), low: Math.min(bar.low, close), volume: (bar.volume ?? 0) + Math.floor(next() * 20) }
+        }
+        check('start')
+        let clock = raw[raw.length - 1].timestamp
+        for (let op = 0; op < 45; op++) {
+          const kind = next(), last = raw[raw.length - 1]
+          if (kind < 0.45) {
+            const bar = moved(last, (next() - 0.5) * 5); merge(bar); port.updateData({ ...bar })
+          } else if (kind < 0.7) {
+            clock += 60_000 * (1 + Math.floor(next() * 4))
+            const open = last.close, bar = moved({ timestamp: clock, open, high: open, low: open, close: open, volume: 50 }, (next() - 0.5) * 6)
+            merge(bar); port.updateData({ ...bar })
+          } else if (kind < 0.9) {
+            // A batch: a repeat of the last bar, a stale bar, then one to three new bars.
+            const batch: MarketBar[] = [moved(last, (next() - 0.5) * 4), { ...raw[Math.max(0, raw.length - 3)] }]
+            for (let k = 0, n = 1 + Math.floor(next() * 3); k < n; k++) {
+              clock += 60_000 * (1 + Math.floor(next() * 3))
+              const previous = batch.length > 2 ? batch[batch.length - 1] : batch[0], open = previous.close
+              batch.push(moved({ timestamp: clock, open, high: open, low: open, close: open, volume: 40 }, (next() - 0.5) * 6))
+            }
+            batch.forEach(merge); port.updateDataBatch(batch.map(bar => ({ ...bar })))
+          } else {
+            // A bad bar is refused and leaves the port working.
+            expect(() => { port.updateData({ ...last, timestamp: clock + 60_000, close: NaN }) }).toThrow(RangeError)
+          }
+          check(`op ${op}`)
+        }
+      }
     })
   }
 
