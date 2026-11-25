@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/promise-function-async -- Load methods validate synchronously and return the shared queue promise without an async wrapper. */
 import { EngineChart, type EngineChartOptions, type EngineConfiguration } from './chart'
-import { ENGINE_CHART_TYPES, DRAWING_TYPES, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, parseWorkspaceDocument, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1 } from '@supersolutions/super-chart-core'
+import { ENGINE_CHART_TYPES, DRAWING_TYPES, DERIVED_STYLES, createDerivedSeriesPort, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, parseWorkspaceDocument, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type DerivedSeriesPort, type DerivedStyle, type DerivedStyleOptions, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1 } from '@supersolutions/super-chart-core'
 import { EngineAnnotations, attachAnnotationIntents, type AnnotationIntentEvent, type EngineAnnotationTheme } from './annotations'
 import { themeName } from './tokens'
 import type { HoldDrawEvent } from './holdDraw'
@@ -126,6 +126,9 @@ export interface ChartWorkspaceOptions {
   countdown?: { enabled?: boolean, closeTimestamp?: (market: WorkspaceMarket, lastBar: MarketBar) => number | null }
 }
 
+/** What the price-mode control offers: the real bars, Heikin Ashi, and the price-driven styles. */
+export type WorkspacePriceMode = 'raw' | 'heikin-ashi' | DerivedStyle
+const PRICE_MODES: readonly WorkspacePriceMode[] = Object.freeze(['raw', 'heikin-ashi', ...DERIVED_STYLES] as const)
 const EMPTY_DRAWINGS = '{"version":1,"drawings":[]}'
 const DEFAULT_PERIODS: readonly Period[] = [
   { multiplier: 1, timespan: 'minute', text: '1m' }, { multiplier: 5, timespan: 'minute', text: '5m' },
@@ -183,6 +186,10 @@ export class ChartWorkspace {
   private readonly win: Window & typeof globalThis
   private readonly abort: AbortController
   private loader: DataLoader
+  /** Between the loader and the chart: shows the feed as Renko, line break, range bars or Kagi when asked. */
+  private readonly derived!: DerivedSeriesPort
+  /** Chart type to bring back when Kagi (drawn as a step line) is left. */
+  private typeBeforeKagi: EngineChartType | null = null
   private timedReplay: TimedReplay
   private readonly countdown: BarCountdown
   private readonly loaderOptions: ChartWorkspaceOptions['loader']
@@ -392,8 +399,8 @@ export class ChartWorkspace {
     this.syncPeriodControls()
     const chartType = this.select('chartType', ENGINE_CHART_TYPES.map(type => [type, () => this.t(`chartType.${type}`)] as const), options.chart?.render?.chartType ?? 'candles')
     this.listen(chartType, 'change', () => { this.run(() => { this.chart.setRenderOptions({ chartType: chartType.value as EngineChartType }); }); this.syncPresentation() })
-    const mode = this.select('candles', [['raw', () => this.t('priceMode.raw')], ['heikin-ashi', () => this.t('priceMode.heikin')]], options.chart?.mode ?? 'raw')
-    this.listen(mode, 'change', () => { this.run(() => { this.chart.view.setMode(mode.value as 'raw' | 'heikin-ashi'); }); this.syncPresentation() })
+    const mode = this.select('candles', PRICE_MODES.map(name => [name, () => this.t(name === 'raw' ? 'priceMode.raw' : name === 'heikin-ashi' ? 'priceMode.heikin' : `priceMode.${name}`)] as const), options.chart?.mode ?? 'raw')
+    this.listen(mode, 'change', () => { this.run(() => { this.setPriceMode(mode.value as WorkspacePriceMode); }); this.syncPresentation() })
     const scale = this.select('priceScale', [['linear', () => this.t('priceScale.linear')], ['log', () => this.t('priceScale.log')], ['percentage', () => this.t('priceScale.percentage')]], this.scale.mode ?? 'linear')
     this.listen(scale, 'change', () => {
       const next = { ...this.chart.getLayoutOptions().priceScale, mode: scale.value as PriceScaleOptions['mode'] }
@@ -414,7 +421,7 @@ export class ChartWorkspace {
       const layout = this.chart.getLayoutOptions(), render = this.chart.getRenderOptions()
       this.scale = { ...layout.priceScale }
       chartType.value = render.chartType ?? 'candles'
-      mode.value = this.chart.view.getSnapshot().mode
+      mode.value = this.getPriceMode()
       scale.value = this.scale.mode ?? 'linear'
       reverse.setAttribute('aria-pressed', String(this.scale.reversed === true))
       const auto = this.scale.range === undefined, utc = (render.timeZone ?? 'UTC') === 'UTC'
@@ -692,6 +699,7 @@ export class ChartWorkspace {
         },
         onHoldDraw: event => { this.showHoldDraw(event); options.chart?.onHoldDraw?.(event) }
       })
+      this.derived = createDerivedSeriesPort(this.chart.dataPort)
       this.annotations = new EngineAnnotations({ symbol: null, theme: this.annotationTheme(), onChange: () => { this.chart.requestPaint(); this.objectsDirty = true; this.renderObjects() } })
       this.chart.addLayer(this.annotations)
       this.drawingToolbar = new DrawingToolbar({
@@ -735,6 +743,43 @@ export class ChartWorkspace {
     this.resizeObserver = new this.win.ResizeObserver(() => { this.applyUi(); })
     this.resizeObserver.observe(this.root)
     refreshIndicators(); this.updateDrawingControls(); this.syncPresentation(); this.ready = this.request()
+  }
+
+  /**
+   * How prices are shown: the real bars (`raw`), Heikin Ashi, or a price-driven style (`renko`, `line-break`, `range`,
+   * `kagi`) that makes one mark per price move instead of one per time bar. `options.size` is the price distance of a
+   * brick, range or Kagi reversal (default: the average true range of the loaded bars, measured when the mode is
+   * chosen or a symbol loads) and `options.lines` the line-break depth (default 3). Price-driven styles use the history
+   * that is loaded, do not load older pages, and are not available during replay. Indicators and drawings work on the
+   * marks. The mode is not part of a saved workspace document.
+   */
+  setPriceMode (mode: WorkspacePriceMode, options: DerivedStyleOptions = {}): void {
+    this.assertLive()
+    if (!PRICE_MODES.includes(mode)) throw new TypeError('Unknown price mode')
+    const derived = mode !== 'raw' && mode !== 'heikin-ashi'
+    if (derived && this.loader.replaying) throw new Error(this.t('style.replayActive'))
+    if (derived) {
+      // Leave Heikin Ashi first: the style reads the real bars.
+      this.chart.view.setMode('raw')
+      this.derived.setStyle(mode, options)
+      if (mode === 'kagi' && this.typeBeforeKagi === null) {
+        const type = this.chart.getRenderOptions().chartType ?? 'candles'
+        this.typeBeforeKagi = type; this.chart.setRenderOptions({ chartType: 'step-line' })
+      } else if (mode !== 'kagi') this.leaveKagi()
+      return
+    }
+    this.derived.setStyle(null)
+    this.leaveKagi()
+    this.chart.view.setMode(mode)
+  }
+
+  getPriceMode (): WorkspacePriceMode { this.assertLive(); return this.derived.getStyle()?.style ?? this.chart.view.getSnapshot().mode }
+
+  private leaveKagi (): void {
+    if (this.typeBeforeKagi === null) return
+    const back = this.typeBeforeKagi
+    this.typeBeforeKagi = null
+    if (this.chart.getRenderOptions().chartType === 'step-line') this.chart.setRenderOptions({ chartType: back })
   }
 
   getSymbol (): SymbolInfo { return { ...this.symbol } }
@@ -856,6 +901,7 @@ export class ChartWorkspace {
   startReplay (at?: number): boolean {
     this.assertLive()
     if (at !== undefined && (!Number.isSafeInteger(at) || at < 0)) throw new RangeError('Replay index must be a nonnegative safe integer')
+    if (this.derived.getStyle() !== null) throw new Error(this.t('replay.rawStyle'))
     const started = this.timedReplay.start({ index: at }); this.updateReplay(); return started
   }
 
@@ -866,7 +912,7 @@ export class ChartWorkspace {
     this.timedReplay.step(delta); this.updateReplay(); return this.getReplayState()
   }
 
-  startReplayAt (timestamp: number): boolean { this.assertLive(); return this.timedReplay.startByTimestamp(timestamp) }
+  startReplayAt (timestamp: number): boolean { this.assertLive(); if (this.derived.getStyle() !== null) throw new Error(this.t('replay.rawStyle')); return this.timedReplay.startByTimestamp(timestamp) }
   playReplay (speed?: number): boolean { this.assertLive(); if (this.doc.hidden) return false; return this.timedReplay.play(speed) }
   pauseReplay (): void { this.assertLive(); this.timedReplay.pause() }
   setReplaySpeed (speed: number): void { this.assertLive(); this.timedReplay.setSpeed(speed) }
@@ -1137,7 +1183,7 @@ export class ChartWorkspace {
   }
 
   private dataPort (): ChartDataPort {
-    const port = this.chart.dataPort
+    const port = this.derived
     const apply = (change: () => void, kind: 'reset' | 'prepend' | 'tail', initial = false): void => {
       if (this.disposed || this.waitingStart || (!(initial && this.loader.status.state === 'loading') && !this.shownMatches())) return
       try {
@@ -1153,7 +1199,10 @@ export class ChartWorkspace {
     const reset = (bars: MarketBar[], more?: boolean, normalized = false): void => { apply(() => {
       const restoring = this.pendingRestore
       if (restoring !== null && !restoring.applied && restoring.generation === this.restoreGeneration && restoring.key === this.requestedPair()) {
-        this.chart.restoreConfiguration(restoring.configuration, { bars, more }); restoring.applied = true
+        // With a price-driven style on, the chart must get the derived bars, not these real ones.
+        if (this.derived.getStyle() === null) this.chart.restoreConfiguration(restoring.configuration, { bars, more })
+        else { this.chart.restoreConfiguration(restoring.configuration); port.applyNewData(bars, more) }
+        restoring.applied = true
         this.drawingSymbol = symbolKey(this.symbol)
       } else if (normalized) port.applyNormalizedData!(bars, more)
       else port.applyNewData(bars, more)
@@ -1664,7 +1713,8 @@ export class ChartWorkspace {
     for (const period of this.periods) add(`interval.${periodKey(period)}`, t('palette.interval', { name: period.text }), 'palette.group.interval', () => { void this.setPeriod(period) }, { keywords: ['interval', 'timeframe', 'period'], when: () => periodKey(period) !== periodKey(this.period) })
     for (const type of ENGINE_CHART_TYPES) add(`chartType.${type}`, t('palette.chartType', { name: t(`chartType.${type}`) }), 'palette.group.chart', () => { this.chart.setRenderOptions({ chartType: type }); this.syncPresentation() })
     for (const mode of ['linear', 'log', 'percentage'] as const) add(`scale.${mode}`, t('palette.scale', { name: t(`priceScale.${mode}`) }), 'palette.group.chart', () => { this.chart.setLayout({ priceScale: { ...this.chart.getLayoutOptions().priceScale, mode } }); this.syncPresentation() })
-    add('chart.heikin', t('palette.heikin'), 'palette.group.chart', () => { this.chart.view.setMode(this.chart.view.getSnapshot().mode === 'raw' ? 'heikin-ashi' : 'raw'); this.syncPresentation() })
+    for (const name of PRICE_MODES) add(`priceMode.${name}`, t('palette.priceMode', { name: t(name === 'raw' ? 'priceMode.raw' : name === 'heikin-ashi' ? 'priceMode.heikin' : `priceMode.${name}`) }), 'palette.group.chart', () => { this.setPriceMode(name); this.syncPresentation() }, { keywords: ['renko', 'kagi', 'range', 'line break', 'price mode'], when: () => this.getPriceMode() !== name })
+    add('chart.heikin', t('palette.heikin'), 'palette.group.chart', () => { this.setPriceMode(this.getPriceMode() === 'heikin-ashi' ? 'raw' : 'heikin-ashi'); this.syncPresentation() })
     add('chart.reverse', t('palette.reverse'), 'palette.group.chart', () => { const current = this.chart.getLayoutOptions().priceScale; this.chart.setLayout({ priceScale: { ...current, reversed: current?.reversed !== true } }); this.syncPresentation() })
     add('view.fit', t('context.fit'), 'palette.group.view', () => { this.fitPriceScale() })
     add('view.reset', t('context.reset'), 'palette.group.view', () => { this.chart.view.resetViewport() })

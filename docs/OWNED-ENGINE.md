@@ -44,7 +44,8 @@ imports. No files or consumers in the original monorepo were changed.
 Fourteen series renderings: candles, three hollow/outline variants, OHLC,
 volume-weighted OHLC, columns, high-low, line, line-markers, step-line, area,
 HLC-area and baseline. Heikin Ashi remains a separate synthetic display mode;
-indicators use raw prices. Columns retain the preceding display-mode close even
+indicators use raw prices. Renko, line break, range bars and Kagi are price-driven
+styles that replace the series with derived marks (see WORKSPACE-UI.md). Columns retain the preceding display-mode close even
 when that candle is offscreen. HLC cursor values follow the plotted typical price.
 
 Linear, logarithmic, percentage and reversed price axes share reversible
