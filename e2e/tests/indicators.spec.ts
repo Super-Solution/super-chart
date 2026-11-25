@@ -8,6 +8,10 @@ test('removing a configured MA leaves a host-added BOLL intact (SC-114)', async 
     const { pro, container } = H.mount({ chart: { chart: { indicators: [{ name: 'MA' }] } } })
     const chart = await H.ready(pro)
     chart.addIndicator({ name: 'BOLL' })
+    // The editor rows are built when the Indicators menu opens (lazy by design), so open it first.
+    const menu = [...container.querySelectorAll('details')].find(item => item.querySelector('summary')?.textContent?.includes('Indicators'))!
+    menu.open = true
+    await H.sleep(50)
     ;[...container.querySelectorAll('button')].find(button => button.getAttribute('aria-label')?.startsWith('Remove MA'))!.click()
     return chart.listIndicators().map((item: any) => item.name)
   })

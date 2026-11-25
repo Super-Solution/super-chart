@@ -18,7 +18,7 @@ test('script lines and MA remain present whichever is created first (SC-002, SC-
       let frame: any
       chart.addLayer({ update: (value: any) => { frame = value }, paint: () => {} })
       await H.sleep(80)
-      const values = frame.inspect(frame.model.geometry.right).indicators
+      const values = frame.inspect(frame.model.xPositions[frame.model.xPositions.length - 1]).indicators
       out.push({ script: Object.values(values[scriptId]).filter(Number.isFinite).length, ma: Object.values(values[maId]).filter(Number.isFinite).length })
     }
     return out
@@ -40,7 +40,7 @@ test('a histogram grows from zero while a line remains available (SC-157, SC-156
     let frame: any
     chart.addLayer({ update: (value: any) => { frame = value }, paint: () => {} })
     await H.sleep(80)
-    const pane = frame.panes.find((item: any) => item.id === `indicator:${attachment.id}`), row = frame.inspect(frame.model.geometry.right).indicators[attachment.id]
+    const pane = frame.panes.find((item: any) => item.id === `indicator:${attachment.id}`), row = frame.inspect(frame.model.xPositions[frame.model.xPositions.length - 1]).indicators[attachment.id]
     return { base: script.definition.figures[0].base, zeroOnPane: pane.scale.y(0) >= pane.frame.model.geometry.top && pane.scale.y(0) <= pane.frame.model.geometry.bottom,
       histogram: row.p0, half: row.p1 }
   })
@@ -83,7 +83,7 @@ test('script indicators retain their pane and receive symbol changes (SC-164, SC
     const before = chart.listIndicators().find((item: any) => item.id === attachment.id)
     await pro.setSymbol({ ticker: 'NEXT', pricePrecision: 5 })
     await H.sleep(80)
-    return { before, after: chart.listIndicators().find((item: any) => item.id === attachment.id), value: frame.inspect(frame.model.geometry.right).indicators[attachment.id].p0, close: pro.getBars().at(-1).close }
+    return { before, after: chart.listIndicators().find((item: any) => item.id === attachment.id), value: frame.inspect(frame.model.xPositions[frame.model.xPositions.length - 1]).indicators[attachment.id].p0, close: pro.getBars().at(-1).close }
   })
   expect(state.after).toEqual(state.before)
   expect(state.value).toBe(state.close)
@@ -101,7 +101,7 @@ test('script inputs change an indicator in place and invalid source leaves it al
     chart.addLayer({ update: (value: any) => { frame = value }, paint: () => {} })
     await H.sleep(80)
     const bars = pro.getBars(), mean = (n: number) => bars.slice(-n).reduce((sum: number, bar: any) => sum + bar.close, 0) / n
-    const read = () => frame.inspect(frame.model.geometry.right).indicators[attachment.id].p0
+    const read = () => frame.inspect(frame.model.xPositions[frame.model.xPositions.length - 1]).indicators[attachment.id].p0
     const d3 = [chart.listIndicators().find((item: any) => item.id === attachment.id).params, read(), mean(3)]
     let invalid = 'none'
     try { createEngineScriptIndicator({ name: 'E2E_LEN', source: 'plot(nope)' }) } catch (error) { invalid = (error as Error).name }
@@ -176,7 +176,7 @@ test('SupWallet StudioChart scripts run on the owned chart (SC-002)', async ({ p
     let frame: any
     chart.addLayer({ update: (value: any) => { frame = value }, paint: () => {} })
     await H.sleep(80)
-    const row = frame.inspect(frame.model.geometry.right).indicators
+    const row = frame.inspect(frame.model.xPositions[frame.model.xPositions.length - 1]).indicators
     return { first: Object.values(row[first.id]), second: Object.values(row[second.id]) }
   })
   expect(result.first.filter(Number.isFinite).length).toBe(2)

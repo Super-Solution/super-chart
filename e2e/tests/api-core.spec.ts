@@ -91,10 +91,10 @@ test('a rejecting searchSymbols shows an error row with Retry, not an endless sp
     ;(window as any).__searchFeed = { setOk: () => { reject = false } }
   })
   await page.locator('#search-reject').getByRole('button', { name: 'SUPER-USDT', exact: true }).click()
-  const input = page.locator('#search-reject [role=dialog] input')
+  const input = page.locator('#search-reject [role=dialog][aria-label="Find a symbol"] input')
   await input.fill('anything')
   await input.dispatchEvent('change')
-  const dialog = page.locator('#search-reject [role=dialog]')
+  const dialog = page.locator('#search-reject [role=dialog][aria-label="Find a symbol"]')
   const retryButton = dialog.getByRole('button', { name: 'Retry search', exact: true })
   await expect(retryButton).toBeVisible()
   expect(await pageErrors(page)).toEqual([])

@@ -42,7 +42,7 @@ test('keyboard navigation pans older, zooms out and follows the newest bar', asy
     const zoomed = chart.view.getSnapshot().viewport
     key('Home')
     const latest = chart.view.getSnapshot()
-    return { moved: before.i0 - older.i0, zoomedOut: zoomed.i1 - zoomed.i0 > older.i1 - older.i0, atEnd: latest.viewport.i1 === latest.length - 1 }
+    return { moved: before.i0 - older.i0, zoomedOut: zoomed.i1 - zoomed.i0 > older.i1 - older.i0, atEnd: latest.viewport.i1 === latest.length - 1 + 12 }
   })
   expect(state.moved).toBeGreaterThan(0)
   expect(state.zoomedOut).toBe(true)
@@ -74,10 +74,13 @@ test('the follow-latest button returns from older history to the newest bar', as
     const { pro, container } = H.mount()
     const chart = await H.ready(pro)
     chart.view.pan(-100)
-    ;[...container.querySelectorAll('button')].find(button => button.textContent === 'Follow latest')!.click()
+    const away = chart.view.getSnapshot().viewport.i1
+    ;[...container.querySelectorAll('button')].find(button => button.getAttribute('aria-label') === 'Latest')!.click()
     const snapshot = chart.view.getSnapshot()
-    return { atLatest: snapshot.viewport.i1 === snapshot.length - 1 }
+    // Following the newest bar keeps the 12 bars of right padding the chart options default to.
+    return { atLatest: snapshot.viewport.i1 === snapshot.length - 1 + 12, moved: away < snapshot.viewport.i1 }
   })
+  expect(state.moved).toBe(true)
   expect(state.atLatest).toBe(true)
   expect(await pageErrors(page)).toEqual([])
 })
@@ -116,7 +119,7 @@ test('symbol search selects the second result by keyboard and Escape closes the 
   })
   const host = page.locator('#search')
   await host.getByRole('button', { name: 'SUPER-USDT', exact: true }).click()
-  const input = host.locator('[role=dialog] input')
+  const input = host.locator('[role=dialog][aria-label="Find a symbol"] input')
   await expect(input).toBeFocused()
   await host.getByRole('button', { name: 'SECOND', exact: true }).waitFor()
   // Native focus starts in the input, so the first Down focuses row one.
@@ -124,10 +127,10 @@ test('symbol search selects the second result by keyboard and Escape closes the 
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('Enter')
   expect(await page.evaluate(() => (window as any).pro.getSymbol().ticker)).toBe('SECOND')
-  await expect(host.locator('[role=dialog]')).toBeHidden()
+  await expect(host.locator('[role=dialog][aria-label="Find a symbol"]')).toBeHidden()
   await host.getByRole('button', { name: 'SECOND', exact: true }).click()
-  await host.locator('[role=dialog] input').press('Escape')
-  await expect(host.locator('[role=dialog]')).toBeHidden()
+  await host.locator('[role=dialog][aria-label="Find a symbol"] input').press('Escape')
+  await expect(host.locator('[role=dialog][aria-label="Find a symbol"]')).toBeHidden()
   expect(await pageErrors(page)).toEqual([])
 })
 
@@ -140,7 +143,7 @@ test('type-to-search opens from the focused chart and continues typing in the in
     ;(container.querySelector('.sc-chart [tabindex="0"]') as HTMLElement).focus()
   })
   await page.keyboard.type('et')
-  const input = page.locator('#typing [role=dialog] input')
+  const input = page.locator('#typing [role=dialog][aria-label="Find a symbol"] input')
   const opened = await input.evaluate(element => document.activeElement === element && (element as HTMLInputElement).value === 'et')
   expect(opened).toBe(true)
   expect(await pageErrors(page)).toEqual([])
@@ -201,5 +204,26 @@ test('bar countdown ticks, survives clearing drawings and hides during replay', 
   expect(state.textChanged).toBe(true)
   expect(state.survivedWipe).toBe(true)
   expect(state.hiddenDuringReplay).toBe(true)
+  expect(await pageErrors(page)).toEqual([])
+})
+
+test('the time-zone list is built when the picker is focused, not at mount, and picking a zone applies it', async ({ page }) => {
+  await openHarness(page)
+  const state = await page.evaluate(async () => {
+    const { H } = window as any
+    const { pro, container } = H.mount()
+    await H.ready(pro)
+    const select = container.querySelector('select.sc-zone-select') as HTMLSelectElement
+    const mounted = select.options.length
+    select.focus()
+    const focused = select.options.length
+    select.value = 'Asia/Tokyo'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+    return { mounted, focused, value: select.value, zone: pro.getTimeZone() }
+  })
+  expect(state.mounted).toBe(1)
+  expect(state.focused).toBeGreaterThan(300)
+  expect(state.value).toBe('Asia/Tokyo')
+  expect(state.zone).toBe('Asia/Tokyo')
   expect(await pageErrors(page)).toEqual([])
 })
