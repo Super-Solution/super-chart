@@ -577,6 +577,51 @@ polls. Each mark lands on the bar that contains its time and is drawn as one mar
 * Limits: 10 marks per bar, 1000 per answer; text is plain, never HTML. A host that wants its own look uses annotations
   directly. There is no filtering by category yet.
 
+## Trading sessions
+
+`SymbolInfo.session` is an optional weekly schedule for a symbol that does not trade around the clock. With it the
+chart shades pre-market and after-hours bars, draws a faint dashed line where a new local date begins, ends the
+bar-close countdown at the real session close, and says "pre-market" or "after hours" when a keyboard user steps the
+crosshair onto such a bar. A symbol without `session` (most crypto) behaves exactly as before. It is a field of
+`SymbolInfo`, not tied to any one product.
+
+```ts
+const symbol = {
+  ticker: 'SESSION', timezone: 'America/New_York',
+  session: {
+    regular: '0930-1600', pre: '0400-0930', post: '1600-2000',
+    closed: ['2026-11-26'],                                                   // Thanksgiving
+    exceptions: { '2026-11-27': { regular: '0930-1300', post: '1300-1700' } } // early close
+  }
+}
+```
+
+| Member | Rule |
+| --- | --- |
+| `timezone` | IANA zone the times are read in (default: the symbol's `timezone`, then UTC). Daylight saving moves the times in UTC by itself |
+| `regular`, `pre`, `post` | segments `HHMM-HHMM[:days]` separated by commas; `regular` is required. `days` are digits `1` Monday to `7` Sunday, default `12345`. `2400` may end a segment. An end at or before the start crosses midnight and belongs to the day it starts on (`2200-0600:12345`); `0000-0000` is refused, write `0000-2400`. Where schedules overlap, `regular` wins over `pre`, `pre` over `post` |
+| `closed` | dates (`YYYY-MM-DD` in `timezone`) with no session at all |
+| `exceptions` | `{ date: { regular?, pre?, post? } }`: each member replaces that field for the date, `''` means none; no `:days` here. At most 2000 dates in `closed` and `exceptions` together |
+
+* **Checking.** `compileSession(session, fallbackZone)` (exported by core, DOM-free) returns the checked schedule or
+  `session: null` with every fault listed as `{ field, code }`: `bad_session`, `bad_timezone`, `bad_segments`,
+  `bad_date`, `too_many`. A schedule with any fault is ignored as a whole, so a half-right one never misleads;
+  `getSessionState()` on the workspace says `none`, `active` (the zone and the kind of the newest bar: `regular`,
+  `pre`, `post` or `closed`) or `invalid` with the issues. `sessionKindAt`, `sessionChangeAfter`, `sessionBarClose` and
+  `sessionLayout` answer the same questions without a chart.
+* **Shading.** Intraday periods only: a bar of a day or more has no time of day. Pre-market and after-hours bars get
+  a wash behind them (in every pane, so volume and indicators line up); the line marks the first bar of each local
+  date in the session's zone. Bars outside every segment (a feed that sends overnight or weekend bars) are left bare.
+  Bars sit at equal steps, so a closed weekend is not a gap on the axis.
+* **Countdown.** A host-supplied `countdown.closeTimestamp` still wins. Otherwise an intraday bar closes at its period
+  or at the end of the session stretch it opened in (a 15:30 hour bar on a 16:00 close counts down to 16:00), as
+  exchanges split bars at the session edge. A bar of a day or more closes at the last regular close before its
+  calendar end. A bar that opened while the market was closed keeps the period estimate.
+* **Limits, plainly.** The chart trusts the schedule: it does not know exchange calendars, so holidays and early
+  closes exist only where the feed lists them. Daylight-saving gaps are read with the later offset. The day line is a
+  calendar date, not a futures session start. There is no viewer switch to hide the shading yet, and extended-hours
+  bars appear only if the datafeed sends them.
+
 ## Price-driven styles
 
 The price mode control, `setPriceMode(mode, options)` and the command palette offer five styles that make one

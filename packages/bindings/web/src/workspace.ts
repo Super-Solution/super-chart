@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/promise-function-async -- Load methods validate synchronously and return the shared queue promise without an async wrapper. */
 import { EngineChart, type EngineChartOptions, type EngineConfiguration } from './chart'
-import { ENGINE_CHART_TYPES, DRAWING_TYPES, DERIVED_STYLES, createDerivedSeriesPort, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, parseWorkspaceDocument, checkTimeZone, timeZoneChoices, localTimeZone, COMMON_TIME_ZONES, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type DerivedSeriesPort, type DerivedStyle, type DerivedStyleOptions, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1 } from '@supersolutions/super-chart-core'
+import { ENGINE_CHART_TYPES, DRAWING_TYPES, DERIVED_STYLES, createDerivedSeriesPort, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, compileSymbolSession, sessionBarClose, sessionKindAt, parseWorkspaceDocument, checkTimeZone, timeZoneChoices, localTimeZone, COMMON_TIME_ZONES, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type DerivedSeriesPort, type DerivedStyle, type DerivedStyleOptions, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1, type SessionIssue, type TradingSession } from '@supersolutions/super-chart-core'
 import { DatafeedMarks, MARKS_LAYER, type WorkspaceMarksState } from './datafeedMarks'
 import { EngineAnnotations, attachAnnotationIntents, type AnnotationIntentEvent, type EngineAnnotationTheme } from './annotations'
 import { themeName } from './tokens'
@@ -124,13 +124,18 @@ export interface ChartWorkspaceOptions {
   contextMenu?: boolean | WorkspaceContextMenuOptions
   /** Host persistence for completed edits; only acknowledged documents are evicted from memory. */
   drawingCache?: WorkspaceDrawingCacheOptions
-  /** Period-close estimate. Disable or supply the exchange's real session close. */
+  /** Bar-close countdown: the period estimate, or the real close when the symbol has a `session`. Disable it, or supply the exchange's own close, which wins. */
   countdown?: { enabled?: boolean, closeTimestamp?: (market: WorkspaceMarket, lastBar: MarketBar) => number | null }
 }
 
 /** What the price-mode control offers: the real bars, Heikin Ashi, and the price-driven styles. */
 export type WorkspacePriceMode = 'raw' | 'heikin-ashi' | DerivedStyle
 const PRICE_MODES: readonly WorkspacePriceMode[] = Object.freeze(['raw', 'heikin-ashi', ...DERIVED_STYLES] as const)
+/** The result of `getSessionState()`. */
+export type WorkspaceSessionState =
+  | { readonly status: 'none' }
+  | { readonly status: 'active', readonly timezone: string, readonly newestBar: 'regular' | 'pre' | 'post' | 'closed' | null }
+  | { readonly status: 'invalid', readonly issues: readonly SessionIssue[] }
 /** Event marks listed in the Objects menu; the rest are counted. */
 const MARK_ROWS = 50
 const EMPTY_DRAWINGS = '{"version":1,"drawings":[]}'
@@ -185,6 +190,8 @@ export class ChartWorkspace {
    */
   readonly annotations: EngineAnnotations
   private marks!: DatafeedMarks
+  /** The symbol's trading schedule once checked; `null` when it has none or it was refused. */
+  private tradingSession: { session: TradingSession | null, issues: readonly SessionIssue[] } = { session: null, issues: [] }
   /** Constructor load outcome; same-tick market changes share its final request. */
   readonly ready: Promise<WorkspaceLoadResult>
   private readonly doc: Document
@@ -704,10 +711,11 @@ export class ChartWorkspace {
           bar: text => this.t('a11y.bar', {
             ...text,
             change: text.change === '' ? '' : this.t('a11y.barChange', { change: text.change }),
-            volume: text.volume === '' ? '' : this.t('a11y.barVolume', { volume: text.volume })
+            volume: text.volume === '' ? '' : this.t('a11y.barVolume', { volume: text.volume }),
+            session: text.session === '' ? '' : this.t(`a11y.barSession.${text.session}`)
           })
         },
-        render: { ...(options.theme === undefined ? {} : getWorkspaceTheme(resolveThemeName(options.theme, this.win))?.render), ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone, locale: this.locale },
+        render: { ...(options.theme === undefined ? {} : getWorkspaceTheme(resolveThemeName(options.theme, this.win))?.render), ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone, session: this.compileSession(this.symbol), locale: this.locale },
         onToolComplete: reason => {
           const again = reason === 'completed' && this.stayInDrawing ? this.lastTool : null
           this.setToolValue(null)
@@ -765,6 +773,9 @@ export class ChartWorkspace {
         let closeTimestamp: number | null | undefined
         if (lastBar !== null && options.countdown?.closeTimestamp !== undefined) {
           try { closeTimestamp = options.countdown.closeTimestamp(this.market(), lastBar) } catch { return null }
+        } else if (lastBar !== null && this.tradingSession.session !== null) {
+          // The host's own close wins; otherwise the schedule says where this bar really ends (undefined: it cannot, keep the estimate).
+          closeTimestamp = sessionBarClose(this.tradingSession.session, lastBar.timestamp, this.period, this.symbol.timezone)
         }
         return { marketKey: this.requestedPair(), lastBar, period: this.period, symbolTimezone: this.symbol.timezone, replaying: this.loader.replaying, closeTimestamp }
       },
@@ -848,6 +859,7 @@ export class ChartWorkspace {
       this.scale = { ...this.chart.getLayoutOptions().priceScale, range: undefined }
       this.chart.setLayout({ priceScale: this.scale })
     }
+    if (JSON.stringify(nextSymbol.session) !== JSON.stringify(this.symbol.session) || nextSymbol.timezone !== this.symbol.timezone) this.chart.setRenderOptions({ session: this.compileSession(nextSymbol) })
     if (nextPeriod.timespan !== this.period.timespan || nextSymbol.timezone !== this.symbol.timezone || (!changed && nextSymbol.pricePrecision !== this.symbol.pricePrecision)) {
       this.chart.setRenderOptions({
         timespan: nextPeriod.timespan,
@@ -966,7 +978,7 @@ export class ChartWorkspace {
     this.assertLive()
     const state = this.getLoadState()
     if (state.loaded === null || !['ready', 'empty'].includes(state.status)) throw new Error('Load a market before saving its workspace')
-    const { formatPrice, showTimeAxis, timespan, symbolTimezone, pointFigureBox, locale, ...render } = this.chart.getRenderOptions()
+    const { formatPrice, showTimeAxis, timespan, symbolTimezone, session, pointFigureBox, locale, ...render } = this.chart.getRenderOptions()
     // A price-driven style is not saved, so neither is the chart type it borrowed (step line for Kagi, X/O for point and figure).
     if (this.typeBeforeStyle !== null && (render.chartType === 'step-line' || render.chartType === 'point-figure')) render.chartType = this.typeBeforeStyle
     const document: WorkspaceDocumentV1 = {
@@ -1005,7 +1017,7 @@ export class ChartWorkspace {
       if (this.disposed) return { status: 'disposed' }
       if (generation !== this.restoreGeneration) return { status: 'superseded', by: this.market() }
       const configuration: EngineConfiguration = {
-        render: { ...document.render, formatPrice: this.chart.getRenderOptions().formatPrice, timespan: period.timespan, symbolTimezone: document.symbol.timezone, locale: this.locale },
+        render: { ...document.render, formatPrice: this.chart.getRenderOptions().formatPrice, timespan: period.timespan, symbolTimezone: document.symbol.timezone, session: this.compileSession(document.symbol), locale: this.locale },
         layout: document.layout,
         mode: document.mode ?? 'raw',
         indicators: document.indicators,
@@ -1082,6 +1094,27 @@ export class ChartWorkspace {
    * `placeMarks` in core list them). A failed answer is not retried until the view leaves the window it covered or
    * `refreshMarks()` is called.
    */
+  /**
+   * What the symbol's `session` is doing: `none` (the symbol has no schedule), `active` (its zone and the kind of the
+   * newest bar: `regular`, `pre`, `post` or `closed`), or `invalid` with every fault by stable code (see
+   * `SessionIssueCode`); an invalid schedule is ignored as a whole, so the chart shows no bands and the countdown
+   * keeps its estimate.
+   */
+  getSessionState (): WorkspaceSessionState {
+    this.assertLive()
+    const { session, issues } = this.tradingSession
+    if (session === null) return issues.length === 0 ? { status: 'none' } : { status: 'invalid', issues }
+    const last = this.chart.getLastBar()
+    // A bar of a day or more has no time of day to classify.
+    const intraday = ['second', 'minute', 'hour'].includes(this.period.timespan)
+    return { status: 'active', timezone: session.timezone, newestBar: last === null || !intraday ? null : sessionKindAt(session, last.timestamp) }
+  }
+
+  private compileSession (symbol: SymbolInfo): TradingSession | null {
+    this.tradingSession = compileSymbolSession(symbol)
+    return this.tradingSession.session
+  }
+
   getMarksState (): WorkspaceMarksState { this.assertLive(); return this.marks.getState() }
 
   /** Asks the datafeed for marks again for the current view (after a new filing or headline, say). */

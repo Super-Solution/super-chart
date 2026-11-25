@@ -1,4 +1,4 @@
-import { nearestChartIndex, derivePrecision, formatBarDate, timeAxisTicks, type FinancialChartModel, type ChartCandlePoint, type EngineRenderFrame, type EngineRenderOptions, type BarDateRequestType } from '@supersolutions/super-chart-core'
+import { nearestChartIndex, derivePrecision, formatBarDate, timeAxisTicks, sessionLayout, type FinancialChartModel, type ChartCandlePoint, type EngineRenderFrame, type EngineRenderOptions, type BarDateRequestType } from '@supersolutions/super-chart-core'
 import { paintPriceSeries } from './seriesRenderer'
 import { typicalPrice, halfBarWidth } from './geometry'
 import { timeLabelCentre } from './badge'
@@ -230,6 +230,41 @@ function paintTimeAxis (ctx: CanvasRenderingContext2D, m: FinancialChartModel, p
   ctx.font = font
 }
 
+const DATE_ONLY: ReadonlySet<string> = new Set(['day', 'week', 'month', 'year'])
+/**
+ * Pre-market and after-hours as a wash behind the bars, and a faint dashed line where a new local date begins, from
+ * `options.session`. Intraday periods only (a bar of a day or more has no time of day); bars outside every session are
+ * left bare. The wash spans from the middle of the gap before the first extended bar to the middle of the gap after
+ * the last, so it meets the next bar's region without a seam.
+ */
+function paintSession (ctx: CanvasRenderingContext2D, m: FinancialChartModel, p: Palette, options: EngineRenderOptions): void {
+  const session = options.session
+  if (session === undefined || session === null || DATE_ONLY.has(options.timespan ?? '')) return
+  const xs = m.xPositions, count = xs.length, g = m.geometry
+  if (count < 2 || !m.xKeys.every(key => typeof key === 'number')) return
+  const { kinds, breaks } = sessionLayout(session, m.xKeys as number[])
+  const edge = (i: number, side: -1 | 1): number => {
+    const j = i + side
+    return j < 0 || j >= count ? xs[i] + side * Math.abs(xs[i] - xs[i - side]) / 2 : (xs[i] + xs[j]) / 2
+  }
+  ctx.fillStyle = colors(options.theme).inkWash
+  for (let i = 0; i < count; i++) {
+    if (kinds[i] !== 1 && kinds[i] !== 2) continue
+    let end = i
+    while (end + 1 < count && (kinds[end + 1] === 1 || kinds[end + 1] === 2)) end++
+    const left = edge(i, -1), right = edge(end, 1)
+    if (Number.isFinite(left) && Number.isFinite(right) && right > left) ctx.fillRect(left, g.top, right - left, g.plotHeight)
+    i = end
+  }
+  ctx.strokeStyle = p.grid; ctx.setLineDash([2, 4]); ctx.beginPath()
+  for (let i = 1; i < count; i++) {
+    if (breaks[i] === 0) continue
+    const x = Math.round(edge(i, -1)) + 0.5
+    if (Number.isFinite(x)) { ctx.moveTo(x, g.top); ctx.lineTo(x, g.bottom) }
+  }
+  ctx.stroke(); ctx.setLineDash([])
+}
+
 /**
  * Draw in the frame's logical-pixel coordinate system. The host sets the DPR transform.
  * No data or geometry is recalculated here; inspection and rendering use the same model.
@@ -261,6 +296,7 @@ export function paintEngineFrame (
     ctx.save()
     try {
       clipPlot(ctx, m)
+      paintSession(ctx, m, p, options)
       // Horizontal grid only: price levels matter, time is read from the axis.
       ctx.strokeStyle = p.grid
       ctx.beginPath()

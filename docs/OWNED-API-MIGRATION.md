@@ -105,12 +105,14 @@ pauses it without automatically restarting. Timestamps are epoch milliseconds.
 Replay buffers incoming data through the existing loader and reveals only the
 selected history to indicators, drawings and optional layers.
 
-The countdown is a period-boundary estimate, not an exchange-session calendar.
-Intraday intervals use elapsed time; daily and longer intervals advance the
+The countdown is a period-boundary estimate unless the symbol carries a
+`session` (see [WORKSPACE-UI.md](WORKSPACE-UI.md#trading-sessions)), in which
+case it ends at the real session close. Without one, intraday intervals use elapsed time; daily and longer intervals advance the
 symbol's local calendar, including DST. Stale bars, replay, unavailable data and
 ambiguous/nonexistent calendar boundaries hide the countdown. Configure
 `countdown.closeTimestamp(market, lastBar)` for holidays or early closes; return
-`null` when that boundary is unknown. `countdown.enabled: false` disables it.
+`null` when that boundary is unknown; the host's value wins over the schedule.
+`countdown.enabled: false` disables it.
 
 Search recents use canonical market identity, including venue/market fields, not
 the ticker alone. They are kept only in memory unless the host explicitly supplies

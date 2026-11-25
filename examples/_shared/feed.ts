@@ -8,6 +8,16 @@ import type { Datafeed, DatafeedMark, HistoryRequest, MarketBar, MarksRequest, P
  */
 export const SYMBOLS: SymbolInfo[] = [
   { ticker: 'EQUITY', name: 'Synthetic equity (2 decimals)', exchange: 'LOCAL', pricePrecision: 2 },
+  // A schedule in New York time: the bars are made up around the clock, so pre-market, after hours and the closed
+  // hours between are all on screen. Thanksgiving is closed and the day after closes at 13:00 (2026).
+  {
+    ticker: 'SESSION',
+    name: 'Synthetic equity with a trading session',
+    exchange: 'LOCAL',
+    pricePrecision: 2,
+    timezone: 'America/New_York',
+    session: { regular: '0930-1600', pre: '0400-0930', post: '1600-2000', closed: ['2026-11-26'], exceptions: { '2026-11-27': { regular: '0930-1300', post: '1300-1700' } } }
+  },
   { ticker: 'COIN', name: 'Synthetic coin (6 decimals)', exchange: 'LOCAL', pricePrecision: 6 },
   { ticker: 'FX', name: 'Synthetic currency pair (5 decimals)', exchange: 'LOCAL', pricePrecision: 5 },
   { ticker: 'EMPTY', name: 'A market with no data', exchange: 'LOCAL' },
@@ -24,7 +34,7 @@ export const PERIODS: Period[] = [
 ]
 
 const UNITS: Record<string, number> = { minute: 60_000, hour: 3_600_000, day: 86_400_000 }
-const BASE: Record<string, number> = { EQUITY: 182, COIN: 0.0042, FX: 1.0875, EMPTY: 1, BROKEN: 1 }
+const BASE: Record<string, number> = { EQUITY: 182, SESSION: 64, COIN: 0.0042, FX: 1.0875, EMPTY: 1, BROKEN: 1 }
 const stepOf = (period: Period): number => {
   const unit = UNITS[period.timespan]
   if (unit === undefined) throw new Error('The example feed supports minute, hour and day periods')
@@ -56,15 +66,15 @@ const delay = async (ms: number, signal?: AbortSignal): Promise<void> => {
 
 const DAY = 86_400_000, MINUTE = 60_000
 /**
- * Fictional events for `[from, to)`, the same every time: a headline every 53 minutes, a dividend every 30 days, and
+ * Fictional events for `[from, to)`, the same every time: a headline every 7 hours, a dividend every 30 days, and
  * every 91 days an earnings date with a guidance note on the same bar (so one bar can carry two marks). It is the shape
  * a real feed returns for `getMarks`, with nothing real in it.
  */
 export function exampleMarks (symbol: SymbolInfo, from: number, to: number): DatafeedMark[] {
   const marks: DatafeedMark[] = []
   const add = (kind: string, time: number, mark: Omit<DatafeedMark, 'id' | 'time'>): void => { if (time >= from && time < to && marks.length < 900) marks.push({ id: `${symbol.ticker}:${kind}:${time}`, time, ...mark }) }
-  for (let slot = Math.ceil(from / (53 * MINUTE)); slot * 53 * MINUTE < to && marks.length < 900; slot++) {
-    const time = slot * 53 * MINUTE
+  for (let slot = Math.ceil(from / (420 * MINUTE)); slot * 420 * MINUTE < to && marks.length < 900; slot++) {
+    const time = slot * 420 * MINUTE
     add('news', time, { label: 'N', text: `Headline ${slot} (fictional)`, tone: slot % 5 === 0 ? 'bear' : 'neutral', category: 'news' })
   }
   for (let day = Math.floor(from / DAY); day * DAY < to; day++) {

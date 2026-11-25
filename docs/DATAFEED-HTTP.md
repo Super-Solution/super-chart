@@ -51,7 +51,10 @@ list); `limit` defaults to 50, at most 200.
   "market": "spot", "type": "crypto", "priceCurrency": "USD", "pricePrecision": 2, "volumePrecision": 1, "timezone": "UTC" } ] }
 ```
 
-Members are those of `SymbolInfo`; only `ticker` is required. `timezone` matters for daily bars: say which IANA
+Members are those of `SymbolInfo`; only `ticker` is required. A symbol that does not trade around the clock may
+carry a `session` object (`regular`, `pre`, `post`, `closed`, `exceptions`, in the symbol's zone): the chart then
+shades extended hours and counts down to the real close; its grammar and fault codes are in
+[WORKSPACE-UI.md](WORKSPACE-UI.md#trading-sessions). `timezone` matters for daily bars: say which IANA
 zone a day opens in when it is not UTC. Omit `pricePrecision` (or send `"auto"`) to let the chart derive it.
 
 ### `GET /v1/bars?ticker=&period=&from=&to=&limit=[&market=&exchange=]`

@@ -4,7 +4,7 @@
 
 One page that exposes the levers of `ChartWorkspace` against the shared synthetic feed (`../_shared/feed.ts`):
 
-- **Market:** five markets, including `EMPTY` (no data) and `BROKEN` (the feed throws), six intervals, live ticking on or off.
+- **Market:** six markets (`SESSION` has a trading schedule, so extended hours are shaded), including `EMPTY` (no data) and `BROKEN` (the feed throws), six intervals, live ticking on or off.
 - **Look:** light, dark and a registered custom theme, locale, density, layout (`auto`, `regular`, `compact`, `narrow`).
 - **Width:** desktop, 768, 390 and 320 px frames, to see the layout change by the workspace's own width.
 - **Parts:** every `ui.parts` switch, including the left tool rail.

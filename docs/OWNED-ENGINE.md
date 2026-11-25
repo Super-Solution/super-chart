@@ -143,8 +143,8 @@ A cache-backed request that times out now restores the full late answer rather
 than merging its tail into an empty chart. This also fixes the shared loader.
 Search supports keyboard navigation and IME-safe selection, with optional
 host-namespaced recents. Timed replay pauses in hidden documents and on market
-changes. Countdown is a period-boundary estimate; hosts may supply actual session
-closes. Workspace JSON validates indicators, image data and schema before loading
+changes. Countdown is a period-boundary estimate unless the symbol has a `session`
+(then it ends at the real close); hosts may also supply actual session closes. Workspace JSON validates indicators, image data and schema before loading
 the matching market. Superseded restoration never applies saved state to another
 market. Executable plugins and credentials are not serialized.
 

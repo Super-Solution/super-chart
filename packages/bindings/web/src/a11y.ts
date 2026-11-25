@@ -5,7 +5,7 @@
  * own timezone rules) so a host can phrase them in its language with `EngineChartOptions.descriptions`; the
  * English wording below is only the default.
  */
-import { derivePrecision, formatBarDate, type EngineFrame, type EngineRenderOptions, type MarketBar } from '@supersolutions/super-chart-core'
+import { derivePrecision, formatBarDate, sessionKindAt, type EngineFrame, type EngineRenderOptions, type MarketBar } from '@supersolutions/super-chart-core'
 
 /** Strings for the summary of what the chart currently shows. */
 export interface ChartSummaryText {
@@ -39,6 +39,8 @@ export interface BarReadoutText {
   volume: string
   /** As in `ChartSummaryText.change`. */
   change: string
+  /** `pre` or `post` when the symbol has a trading session and this intraday bar opened in pre-market or after hours; otherwise empty. */
+  session: 'pre' | 'post' | ''
 }
 
 /** Wording hooks; each one replaces the English default for that sentence. */
@@ -54,7 +56,7 @@ export function defaultSummary (t: ChartSummaryText): string {
 }
 
 export function defaultBar (t: BarReadoutText): string {
-  return `${t.time}: open ${t.open}, high ${t.high}, low ${t.low}, close ${t.close}${t.change === '' ? '' : `, ${t.change}`}${t.volume === '' ? '' : `, volume ${t.volume}`}`
+  return `${t.time}: open ${t.open}, high ${t.high}, low ${t.low}, close ${t.close}${t.change === '' ? '' : `, ${t.change}`}${t.volume === '' ? '' : `, volume ${t.volume}`}${t.session === 'pre' ? ', pre-market' : t.session === 'post' ? ', after hours' : ''}`
 }
 
 const DAY_OR_LARGER = new Set(['day', 'week', 'month', 'year'])
@@ -112,6 +114,12 @@ export function chartSummaryText (frame: EngineFrame, options: EngineRenderOptio
   }
 }
 
+function extendedHours (timestamp: number, options: EngineRenderOptions): 'pre' | 'post' | '' {
+  if (options.session === undefined || options.session === null || DAY_OR_LARGER.has(options.timespan ?? '')) return ''
+  const kind = sessionKindAt(options.session, timestamp)
+  return kind === 'pre' || kind === 'post' ? kind : ''
+}
+
 /** The readout strings for one bar and the close before it. */
 export function barReadoutText (bar: Readonly<MarketBar>, previousClose: number | undefined, digits: number, options: EngineRenderOptions): BarReadoutText {
   return {
@@ -121,7 +129,8 @@ export function barReadoutText (bar: Readonly<MarketBar>, previousClose: number 
     low: bar.low.toFixed(digits),
     close: bar.close.toFixed(digits),
     volume: bar.volume === undefined || bar.volume === null || !Number.isFinite(bar.volume) ? '' : volumeFormat.format(bar.volume),
-    change: changeText(bar.close, previousClose)
+    change: changeText(bar.close, previousClose),
+    session: extendedHours(bar.timestamp, options)
   }
 }
 

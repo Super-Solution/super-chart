@@ -7,7 +7,7 @@ import { validatePriceScale, type PriceScaleOptions } from './priceScale'
 import { ENGINE_CHART_TYPES, ENGINE_RENDER_THEMES, type EngineRenderOptions } from './renderTypes'
 
 /** Presentation only. Feed-derived date metadata and callback functions are never stored here. */
-export type WorkspaceSavedRender = Omit<EngineRenderOptions, 'formatPrice' | 'showTimeAxis' | 'timespan' | 'symbolTimezone'>
+export type WorkspaceSavedRender = Omit<EngineRenderOptions, 'formatPrice' | 'showTimeAxis' | 'timespan' | 'symbolTimezone' | 'session'>
 export interface WorkspaceDrawingDocument {
   readonly version: 1
   readonly drawings: readonly Drawing[]

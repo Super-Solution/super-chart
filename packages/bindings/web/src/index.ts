@@ -3,7 +3,7 @@ export { EngineChart } from './chart'
 export type { EngineChartOptions, EngineConfiguration } from './chart'
 export { paintEngineFrame, paintEngineCursor } from './canvasRenderer'
 export { ChartWorkspace, ChartWorkspace as SuperChart } from './workspace'
-export type { WorkspacePriceMode } from './workspace'
+export type { WorkspacePriceMode, WorkspaceSessionState } from './workspace'
 export { WORKSPACE_SLOTS, WORKSPACE_PARTS } from './workspace'
 export type { ChartWorkspaceOptions, WorkspaceSearchOptions, SymbolSearchRequest, WorkspaceAppearanceOptions, WorkspaceSlotName, WorkspacePart, WorkspaceContextTarget, WorkspaceContextMenuOptions, WorkspaceCommandOptions } from './workspace'
 export { WORKSPACE_THEMES, WORKSPACE_CHROME_VARS, AUTO_THEME, registerWorkspaceTheme, getWorkspaceTheme, listWorkspaceThemes, resolveThemeName, followColorScheme, prefersDark } from './theme'
@@ -30,7 +30,7 @@ export type {
   PriceScaleOptions, PriceScaleMode,
   EngineFrame, EngineLayout, EngineInspection,
   WorkspaceDocumentV1, WorkspaceDocumentOptions, WorkspaceSavedRender,
-  Datafeed, SymbolInfo, Period, Timespan, HistoryRequest, HistoryResult, SearchRequest, DatafeedSubscribeCallback, MarketBar, DatafeedMark, MarkTone, MarksRequest,
+  Datafeed, SymbolInfo, Period, Timespan, HistoryRequest, HistoryResult, SearchRequest, DatafeedSubscribeCallback, MarketBar, DatafeedMark, MarkTone, MarksRequest, SymbolSession, SessionKind, SessionIssue, SessionIssueCode, TradingSession,
   WorkspaceState, WorkspaceEvents, WorkspaceLoadState, WorkspaceLoadResult, WorkspaceMarket, WorkspaceReplayState
 } from '@supersolutions/super-chart-core'
 

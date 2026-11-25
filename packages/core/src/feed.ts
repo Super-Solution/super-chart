@@ -32,6 +32,40 @@ export interface SymbolInfo {
    * chart's timezone.
    */
   timezone?: string
+  /**
+   * When this symbol trades, for extended-hours shading and a countdown that ends at the real session close. Optional:
+   * a symbol that trades around the clock (most crypto) leaves it out and nothing changes. See `SymbolSession`.
+   */
+  session?: SymbolSession
+}
+
+/**
+ * A weekly trading schedule. Times are wall-clock in `timezone`, so daylight saving moves them in UTC by itself.
+ * A schedule is a list of segments `HHMM-HHMM` with an optional `:days` suffix (`1` Monday ... `7` Sunday, default
+ * `12345`), separated by commas: `"0930-1600"`, `"0400-0930,1600-2000:12345"`, `"1800-1700:1234,1800-2400:7"`. `2400`
+ * is allowed as an end. An end at or before the start crosses midnight and belongs to the day it starts on
+ * (`1800-1700` runs to 17:00 the next day); `0000-0000` is refused, write `0000-2400`. Where schedules overlap,
+ * `regular` wins over `pre` and `pre` over `post`.
+ *
+ * It is checked with `compileSession`; a schedule with any fault is ignored as a whole (so a half-right one never
+ * misleads) and the reasons, with stable codes, come back from the workspace's `getSessionState()`.
+ */
+export interface SymbolSession {
+  /** IANA zone the times are read in. Default: the symbol's `timezone`, then UTC. */
+  timezone?: string
+  /** The regular session. Required. */
+  regular: string
+  /** Pre-market segments, drawn as extended hours. */
+  pre?: string
+  /** After-hours segments, drawn as extended hours. */
+  post?: string
+  /** Dates with no session at all (holidays), `YYYY-MM-DD` in `timezone`. At most 2000 dates in `closed` and `exceptions` together. */
+  closed?: string[]
+  /**
+   * Dates whose schedule differs (an early close): each member replaces that field of the weekly schedule for the
+   * date, and an empty string means none that day. Segments here take no `:days` suffix.
+   */
+  exceptions?: Record<string, { regular?: string, pre?: string, post?: string }>
 }
 
 export interface Period {
