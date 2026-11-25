@@ -2,3 +2,4 @@
 export * from '@supersolutions/super-chart-core'
 export * from './marketOverlayLayer'
 export * from './marketOverlayRenderer'
+export * from './depthOverlayLayer'
