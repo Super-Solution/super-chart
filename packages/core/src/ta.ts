@@ -211,6 +211,65 @@ export function ema (src: Series, len: number): Series {
   return out
 }
 
+/**
+ * Double exponential moving average, `2 * EMA - EMA(EMA)`. Each EMA is seeded from the
+ * average of its first `len` values (the TA-Lib convention), so the first value lands
+ * at index `2 * (len - 1)`.
+ */
+export function dema (src: Series, len: number): Series {
+  const e1 = ema(src, len)
+  const e2 = ema(e1, len)
+  return e1.map((a, i) => {
+    const b = e2[i]
+    return a == null || b == null ? null : 2 * a - b
+  })
+}
+
+/**
+ * Triple exponential moving average, `3 * EMA - 3 * EMA(EMA) + EMA(EMA(EMA))`, with the
+ * same seeding as `dema`; the first value lands at index `3 * (len - 1)`.
+ */
+export function tema (src: Series, len: number): Series {
+  const e1 = ema(src, len)
+  const e2 = ema(e1, len)
+  const e3 = ema(e2, len)
+  return e1.map((a, i) => {
+    const b = e2[i], c = e3[i]
+    return a == null || b == null || c == null ? null : 3 * a - 3 * b + c
+  })
+}
+
+/**
+ * Kaufman's adaptive moving average. The efficiency ratio is the net change over `len`
+ * bars divided by the sum of the absolute bar-to-bar changes; it blends the `fast` and
+ * `slow` smoothing constants, squared. Like TA-Lib the average starts from the bar
+ * before the first output (index `len - 1`) and the first value lands at index `len`.
+ * A null or non-finite price ends the run and the average restarts from the next run.
+ */
+export function kama (src: Series, len: number, fast = 2, slow = 30): Series {
+  const n = src.length
+  const out = nulls(n)
+  if (!isLength(len) || !isLength(fast) || !isLength(slow)) return out
+  const fastSc = 2 / (fast + 1)
+  const slowSc = 2 / (slow + 1)
+  let run = 0
+  let prev = 0
+  for (let i = 0; i < n; i++) {
+    const v = src[i]
+    if (v == null || !Number.isFinite(v)) { run = 0; continue }
+    run++
+    if (run === len) { prev = v; continue }
+    if (run < len + 1) continue
+    let volatility = 0
+    for (let j = i - len + 1; j <= i; j++) volatility += Math.abs((src[j] as number) - (src[j - 1] as number))
+    const efficiency = volatility === 0 ? 0 : Math.abs(v - (src[i - len] as number)) / volatility
+    const smoothing = (efficiency * (fastSc - slowSc) + slowSc) ** 2
+    prev = prev + smoothing * (v - prev)
+    out[i] = prev
+  }
+  return out
+}
+
 /** Wilder's moving average (RMA): starts from the SMA of the first `len` values. */
 export function rma (src: Series, len: number): Series {
   const n = src.length
