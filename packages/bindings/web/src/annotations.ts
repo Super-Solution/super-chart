@@ -1,7 +1,7 @@
 import type { EngineFrame } from '@supersolutions/super-chart-core'
 import type { EngineLayer } from './layer'
-import { derivePrecision } from '@supersolutions/super-chart-core'
-import { colors, CANVAS_FONT, CANVAS_LABEL_FONT } from './tokens'
+import { derivePrecision, ENGINE_RENDER_THEMES } from '@supersolutions/super-chart-core'
+import { colors, CANVAS_FONT, CANVAS_LABEL_FONT, type ThemeName } from './tokens'
 import {
   ANNOTATION_TEMPLATE_LIMITS, ANNOTATION_TEMPLATE_NAME, BUILT_IN_ANNOTATION_TEMPLATES,
   type AnnotationFigure, type AnnotationParams, type AnnotationTemplate
@@ -17,7 +17,7 @@ export type { AnnotationIntentEvent } from './annotationIntents'
 export type EngineAnnotationTone = 'bull' | 'bear' | 'neutral' | 'accent'
 /** The kinds the layer paints itself. Any other `kind` names a template: the built-in `trend`, `ray`, `fibonacci`, `plan`, or one the host registers. */
 export type EngineAnnotationKind = 'level' | 'zone' | 'marker'
-export type EngineAnnotationTheme = 'light' | 'dark'
+export type EngineAnnotationTheme = ThemeName
 export interface EngineAnnotationAnchor { readonly time: number, readonly price?: number }
 export interface EngineAnnotationSpec {
   readonly key: string
@@ -90,8 +90,8 @@ function scope (value: unknown): string | null {
   return value === null ? null : named(value, ENGINE_ANNOTATION_LIMITS.symbolLength, 'symbol')
 }
 function theme (value: unknown): EngineAnnotationTheme {
-  if (value !== 'light' && value !== 'dark') throw new TypeError('Invalid annotation theme')
-  return value
+  if (typeof value !== 'string' || !(ENGINE_RENDER_THEMES as readonly string[]).includes(value)) throw new TypeError('Invalid annotation theme')
+  return value as EngineAnnotationTheme
 }
 function annotationId (layer: string, key: string): string {
   // Escape each part separately; a colon in a host key cannot collide with another layer.

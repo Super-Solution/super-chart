@@ -2,7 +2,7 @@ import type { MarketBar } from '../types'
 import { indicatorField as priceSeries, ownedKernel, ownedWindow } from './indicatorInputs'
 import {
   atr, atrBands, keltner, donchian, anchoredVwap, sma, rsi, macd, stochK,
-  stochRsi, mfi, bbPercent, supertrend, ichimoku, type Series
+  stochRsi, mfi, bbPercent, supertrend, ichimoku, wma, hma, vwma, dema, tema, kama, type Series
 } from '../ta'
 import { previousRangeHighLow } from '../analysis/previousRangeHighLow'
 import type { EngineIndicators, IndicatorDefinition, IndicatorFigure, IndicatorRow } from './indicators'
@@ -11,7 +11,8 @@ import type { EngineIndicators, IndicatorDefinition, IndicatorFigure, IndicatorR
 export const TECHNICAL_INDICATOR_NAMES = Object.freeze([
   'SC_RSI', 'SC_MACD', 'SC_SMA',
   'SC_ATR', 'SC_ATR_BANDS', 'SC_KELTNER', 'SC_DONCHIAN', 'SC_VWAP',
-  'SC_STOCH', 'SC_STOCHRSI', 'SC_MFI', 'SC_BBP', 'SC_SUPERTREND', 'SC_ICHIMOKU', 'SC_PDHL'
+  'SC_STOCH', 'SC_STOCHRSI', 'SC_MFI', 'SC_BBP', 'SC_SUPERTREND', 'SC_ICHIMOKU', 'SC_PDHL',
+  'SC_WMA', 'SC_HMA', 'SC_DEMA', 'SC_TEMA', 'SC_VWMA', 'SC_KAMA'
 ] as const)
 
 export type TechnicalIndicatorName = typeof TECHNICAL_INDICATOR_NAMES[number]
@@ -249,6 +250,25 @@ export const TECHNICAL_INDICATOR_DEFINITIONS: readonly IndicatorDefinition[] = O
     const displacement = Math.min(p[3], bars.length + 1)
     const result = ichimoku(high, low, close, p[0], p[1], p[2], displacement)
     return rows(['conversion', 'base', 'spanA', 'spanB', 'lagging'], [result.conversion, result.base, result.spanA, result.spanB, result.lagging])
+  }),
+  define('SC_WMA', [9], ['period'], 'price', lines(['wma', 'WMA']), (bars, p) => {
+    return rows(['wma'], [wma(priceSeries(bars, 'close'), p[0])])
+  }),
+  define('SC_HMA', [9], ['period'], 'price', lines(['hma', 'HMA']), (bars, p) => {
+    return rows(['hma'], [hma(priceSeries(bars, 'close'), p[0])])
+  }),
+  define('SC_DEMA', [20], ['period'], 'price', lines(['dema', 'DEMA']), (bars, p) => {
+    return rows(['dema'], [dema(priceSeries(bars, 'close'), p[0])])
+  }),
+  define('SC_TEMA', [20], ['period'], 'price', lines(['tema', 'TEMA']), (bars, p) => {
+    return rows(['tema'], [tema(priceSeries(bars, 'close'), p[0])])
+  }),
+  define('SC_VWMA', [20], ['period'], 'price', lines(['vwma', 'VWMA']), (bars, p) => {
+    return rows(['vwma'], [vwma(priceSeries(bars, 'close'), priceSeries(bars, 'volume'), p[0])])
+  }),
+  define('SC_KAMA', [10, 2, 30], ['period', 'period', 'period'], 'price', lines(['kama', 'KAMA']), (bars, p) => {
+    if (p[1] >= p[2]) throw new RangeError('SC_KAMA fast period must be shorter than the slow period')
+    return rows(['kama'], [kama(priceSeries(bars, 'close'), p[0], p[1], p[2])])
   }),
   define('SC_PDHL', [0], ['range'], 'price', lines(['high', 'Previous High'], ['low', 'Previous Low']), (bars, p) => {
     const range = previousRangeHighLow(bars, p[0] === 1 ? 'week' : 'day', 'UTC')

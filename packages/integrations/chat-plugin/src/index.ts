@@ -515,7 +515,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     manifest: {
       manifestVersion: 0,
       name: '@supersolutions/super-chart-chat-plugin',
-      version: '0.9.1',
+      version: '0.10.0',
       license: 'GPL-3.0-or-later',
       capabilities: [
         { id: 'chart.card', surface: 'card', cardKind: CHART_CARD_KIND },

@@ -17,6 +17,7 @@ export type { ContextMenuItem } from './panels'
 export { DrawingImageRenderer, createDrawingImage } from './drawingMedia'
 export type { EngineLayer } from './layer'
 export { SUPER_CHART_COLORS, FONT_SANS, FONT_MONO } from './tokens'
+export type { ChartDescriptions, ChartSummaryText, BarReadoutText } from './a11y'
 export type { SuperChartColors, ThemeName } from './tokens'
 
 // Models the Web surface has always exposed from its main entry; they now live in core.

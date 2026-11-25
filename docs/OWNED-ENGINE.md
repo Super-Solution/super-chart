@@ -61,7 +61,10 @@ reference MA/EMA calculation; existing native callers retain it by default.
 Optional SC_ATR, SC_ATR_BANDS, SC_KELTNER, SC_DONCHIAN, SC_VWAP, SC_STOCH,
 SC_STOCHRSI, SC_MFI, SC_BBP, SC_SUPERTREND, SC_ICHIMOKU, SC_RSI, SC_MACD,
 SC_SMA and SC_PDHL reuse the existing
-owned TA formulas. Inspection returns the actual registry rows used for plotting,
+owned TA formulas. SC_WMA, SC_HMA, SC_DEMA, SC_TEMA, SC_VWMA and SC_KAMA (price pane, full recompute)
+follow TA-Lib's seeding: DEMA/TEMA start at index `2*(len-1)` / `3*(len-1)`, KAMA at `len` from the
+price at `len - 1`; they match TA-Lib 0.8.3 to about 1e-13 on 500 synthetic bars. They exist in the
+TypeScript core only, not in the Go/Python/Rust indicator servers. Inspection returns the actual registry rows used for plotting,
 not the differently seeded native reference EMA. Separate instances have distinct
 pane scales by default; an explicit shared `paneId` groups lower indicators.
 Visibility and parameter changes update the owned registry. Custom callbacks are conservatively invalidated by offscreen changes
@@ -72,7 +75,7 @@ VR, WR, MTM, EMV, ROC, PVT, AO, SAR, BIAS, BRAR, SMA and BBI. These use document
 owned conventions, not a claim of bit-identical legacy-engine behavior. DMI/TRIX
 seeding, negative single-line WR, unshifted CR averages and unscaled EMV are
 explicit in the module. Owned SAR includes Wilder's prior-two-extrema clamp;
-the older shared-core SAR is unchanged. The catalogs provide 41 names in total.
+the older shared-core SAR is unchanged. The catalogs provide 47 names in total.
 SC_PDHL is a latest-period UTC reference, not a historical backtesting series.
 
 All 65 former drawing tools are retained through owned models and geometry:

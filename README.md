@@ -102,7 +102,7 @@ and [docs/API-LAYERS.md](docs/API-LAYERS.md).
 - Linear, logarithmic, percentage and reversed price scales; editable price range.
 - Continuous pan/pinch/wheel zoom, keyboard navigation, optional reduced-motion-aware
   inertia, draggable pane boundaries and price axis.
-- Seven incremental built-ins (MA, EMA, BOLL, VOL, MACD, RSI, KDJ); 15 technical and
+- Seven incremental built-ins (MA, EMA, BOLL, VOL, MACD, RSI, KDJ); 21 technical (including the WMA, HMA, DEMA, TEMA, VWMA and KAMA moving averages) and
   19 classic definitions in core's `/indicators`.
 - All 65 drawing tools with selection, editing, lock/hide, bounded undo/redo and
   validated JSON import/export, a `drawingsChange` event, and optional server sync of
@@ -110,6 +110,8 @@ and [docs/API-LAYERS.md](docs/API-LAYERS.md).
   [usage](docs/WORKSPACE-UI.md#saving-drawings-to-a-server)).
 - Abortable market loading/search, cached history, older-page backoff, coalesced live
   updates, replay, period-close countdown and validated workspace JSON restore.
+- Colour-blind safe themes (`dark-colorblind`, `light-colorblind`), a spoken chart summary (`describe()`) and
+  Shift+Left/Right to read the chart bar by bar through a live region.
 - PNG snapshots and fullscreen when the browser supports it.
 
 ## In a chat
