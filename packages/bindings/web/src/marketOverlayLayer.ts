@@ -22,8 +22,9 @@ export function createMarketOverlayLayer (
       paintMarketOverlays(context, projected, style)
       const statuses = Object.values(projected.status)
       const message = statuses.includes('invalid-data') ? 'Overlay data unavailable'
-        : statuses.includes('too-wide') ? 'Zoom in to display imbalance zones'
-          : statuses.includes('missing-volume') ? 'Volume profile needs reported volume' : ''
+        : projected.status.volumeProfile === 'too-wide' ? 'Zoom in to display the volume profile'
+          : statuses.includes('too-wide') ? 'Zoom in to display imbalance zones'
+            : statuses.includes('missing-volume') ? 'Volume profile needs reported volume' : ''
       if (message !== '') {
         context.save()
         try {

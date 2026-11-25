@@ -15,8 +15,8 @@ export interface MarketOverlayRenderOptions {
 export function paintMarketOverlays (
   ctx: CanvasRenderingContext2D, frame: MarketOverlayFrame, options: MarketOverlayRenderOptions = {}
 ): void {
-  const { bounds, profile, zones } = frame
-  if (profile === null && zones.length === 0) return
+  const { bounds, profile, sessionProfiles, zones } = frame
+  if (profile === null && sessionProfiles.length === 0 && zones.length === 0) return
   // Zones are market data (up/down); the volume profile is a neutral measure, so it takes line-strong.
   const theme = colors(options.theme)
   const up = options.up ?? theme.up, down = options.down ?? theme.down
@@ -42,21 +42,23 @@ export function paintMarketOverlays (
         ctx.strokeStyle = color; ctx.strokeRect(x, y, width, height)
       }
     }
-    if (profile !== null) {
+    const profiles = profile === null ? sessionProfiles.map(entry => entry.profile) : [profile, ...sessionProfiles.map(entry => entry.profile)]
+    for (const each of profiles) {
       ctx.fillStyle = profileColor
-      for (const row of profile.rows) {
+      for (const row of each.rows) {
         if (row.rect === null) continue
         ctx.globalAlpha = alpha * (row.pointOfControl ? 0.65 : 0.32)
         ctx.fillRect(row.rect.x, row.rect.y, row.rect.width, row.rect.height)
       }
       ctx.strokeStyle = profileColor
+      // The lines run across the profile's own span (the whole plot for the visible profile).
       const line = (y: number | null, opacity: number, dash: number[]): void => {
         if (y === null) return
         ctx.globalAlpha = alpha * opacity; ctx.setLineDash(dash)
-        ctx.beginPath(); ctx.moveTo(bounds.left, y); ctx.lineTo(bounds.right, y); ctx.stroke()
+        ctx.beginPath(); ctx.moveTo(each.span.left, y); ctx.lineTo(each.span.right, y); ctx.stroke()
       }
-      line(profile.pocY, 0.9, [4, 4])
-      if (options.showValueArea) { line(profile.vahY, 0.5, [2, 4]); line(profile.valY, 0.5, [2, 4]) }
+      line(each.pocY, 0.9, [4, 4])
+      if (options.showValueArea) { line(each.vahY, 0.5, [2, 4]); line(each.valY, 0.5, [2, 4]) }
     }
   } finally { ctx.restore() }
 }
