@@ -110,6 +110,8 @@ and [docs/API-LAYERS.md](docs/API-LAYERS.md).
   [usage](docs/WORKSPACE-UI.md#saving-drawings-to-a-server)).
 - Abortable market loading/search, cached history, older-page backoff, coalesced live
   updates, replay, period-close countdown and validated workspace JSON restore.
+- Colour-blind safe themes (`dark-colorblind`, `light-colorblind`), a spoken chart summary (`describe()`) and
+  Shift+Left/Right to read the chart bar by bar through a live region.
 - PNG snapshots and fullscreen when the browser supports it.
 
 ## In a chat

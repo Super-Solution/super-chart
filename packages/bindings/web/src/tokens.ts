@@ -14,7 +14,10 @@
  * holds at least 4.9:1 on the up, down and flat fills.
  */
 
-export type ThemeName = 'light' | 'dark'
+import type { EngineRenderTheme } from '@supersolutions/super-chart-core'
+
+/** A canvas colour set; the `-colorblind` sets share their base theme's surfaces and swap the market colours. */
+export type ThemeName = EngineRenderTheme
 
 export interface SuperChartColors {
   /** Page background around the chart. */
@@ -61,7 +64,7 @@ export interface SuperChartColors {
   indicator: readonly [string, string, string]
 }
 
-export const SUPER_CHART_COLORS: Readonly<Record<ThemeName, Readonly<SuperChartColors>>> = Object.freeze({
+const BASE_COLORS: Readonly<Record<'light' | 'dark', Readonly<SuperChartColors>>> = Object.freeze({
   light: Object.freeze({
     ground: '#fafafa',
     surface: '#ffffff',
@@ -116,6 +119,41 @@ export const SUPER_CHART_COLORS: Readonly<Record<ThemeName, Readonly<SuperChartC
   })
 })
 
+/**
+ * Colour-vision-safe market colours: Okabe-Ito blue for up and orange for down, so a bar is never told
+ * apart by red against green alone. Interface states (`success`, `danger`) keep their meaning. The
+ * indicator slots leave blue and orange free for the candles. `onMarket` stays above 4.5:1 on both fills.
+ */
+const COLORBLIND_COLORS: Readonly<Record<'light' | 'dark', Readonly<SuperChartColors>>> = Object.freeze({
+  light: Object.freeze({
+    ...BASE_COLORS.light,
+    up: '#0072b2',
+    down: '#b34700',
+    upBar: 'rgba(0, 114, 178, 0.42)',
+    downBar: 'rgba(179, 71, 0, 0.42)',
+    upZone: 'rgba(0, 114, 178, 0.10)',
+    downZone: 'rgba(179, 71, 0, 0.10)',
+    indicator: Object.freeze(['#a8447f', '#7a6a00', '#007a5a'] as const)
+  }),
+  dark: Object.freeze({
+    ...BASE_COLORS.dark,
+    up: '#56b4e9',
+    down: '#e69f00',
+    upBar: 'rgba(86, 180, 233, 0.38)',
+    downBar: 'rgba(230, 159, 0, 0.38)',
+    upZone: 'rgba(86, 180, 233, 0.12)',
+    downZone: 'rgba(230, 159, 0, 0.12)',
+    indicator: Object.freeze(['#cc79a7', '#f0e442', '#2fc59d'] as const)
+  })
+})
+
+export const SUPER_CHART_COLORS: Readonly<Record<ThemeName, Readonly<SuperChartColors>>> = Object.freeze({
+  light: BASE_COLORS.light,
+  dark: BASE_COLORS.dark,
+  'light-colorblind': COLORBLIND_COLORS.light,
+  'dark-colorblind': COLORBLIND_COLORS.dark
+})
+
 /** Interface text. The library downloads no fonts; without Inter the system face is used. */
 export const FONT_SANS = '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans TC", sans-serif'
 /**
@@ -130,7 +168,12 @@ export const CANVAS_LABEL_FONT = `500 11px ${FONT_SANS}`
 
 /** Unknown or missing values fall back to dark, the engine's long-standing default. */
 export function themeName (value: unknown): ThemeName {
-  return value === 'light' ? 'light' : 'dark'
+  return value === 'light' || value === 'light-colorblind' || value === 'dark-colorblind' ? value : 'dark'
+}
+
+/** The surface a colour set sits on, for code that only cares about light against dark. */
+export function baseTheme (value: unknown): 'light' | 'dark' {
+  return value === 'light' || value === 'light-colorblind' ? 'light' : 'dark'
 }
 
 export function colors (theme: unknown): Readonly<SuperChartColors> {

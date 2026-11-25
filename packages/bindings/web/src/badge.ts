@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { colors, themeName } from './tokens'
+import { baseTheme, colors } from './tokens'
 
 /** Where the badge leads. */
 export const POWERED_BY_URL = 'https://supersolution.io'
@@ -71,7 +71,7 @@ export function attachPoweredBy (root: HTMLElement, theme: unknown): PoweredByBa
   link.append(text)
   root.append(style, link)
   const setTheme = (value: unknown): void => {
-    const c = colors(value), dark = themeName(value) === 'dark'
+    const c = colors(value), dark = baseTheme(value) === 'dark'
     link.style.setProperty('--sc-powered-bar', c.ink)
     link.style.setProperty('--sc-powered-mid', c.violet)
     link.style.setProperty('--sc-powered-ink', c.ink)

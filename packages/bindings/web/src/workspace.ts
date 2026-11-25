@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/promise-function-async -- Load methods validate synchronously and return the shared queue promise without an async wrapper. */
 import { EngineChart, type EngineChartOptions, type EngineConfiguration } from './chart'
 import { ENGINE_CHART_TYPES, DRAWING_TYPES, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, parseWorkspaceDocument, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1 } from '@supersolutions/super-chart-core'
-import { EngineAnnotations, attachAnnotationIntents, type AnnotationIntentEvent } from './annotations'
+import { EngineAnnotations, attachAnnotationIntents, type AnnotationIntentEvent, type EngineAnnotationTheme } from './annotations'
+import { themeName } from './tokens'
 import type { HoldDrawEvent } from './holdDraw'
 import { WORKSPACE_CHROME_VARS, getWorkspaceTheme, listWorkspaceThemes, type WorkspaceChromeKey, type WorkspaceThemeName } from './theme'
 import { createTranslator, resolveLocale, type Translator } from './i18n'
@@ -668,6 +669,19 @@ export class ChartWorkspace {
       this.chart = new EngineChart(this.chartHost, {
         ...options.chart,
         ariaLabel: this.t('chart.label'),
+        descriptions: options.chart?.descriptions ?? {
+          summary: text => this.t('a11y.summary', {
+            ...text,
+            chartType: this.t(`chartType.${text.chartType}`),
+            change: text.change === '' ? '' : this.t('a11y.change', { change: text.change }),
+            indicators: text.indicators === '' ? '' : this.t('a11y.indicators', { names: text.indicators })
+          }),
+          bar: text => this.t('a11y.bar', {
+            ...text,
+            change: text.change === '' ? '' : this.t('a11y.barChange', { change: text.change }),
+            volume: text.volume === '' ? '' : this.t('a11y.barVolume', { volume: text.volume })
+          })
+        },
         render: { ...(options.theme === undefined ? {} : getWorkspaceTheme(options.theme)?.render), ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone },
         onToolComplete: reason => {
           const again = reason === 'completed' && this.stayInDrawing ? this.lastTool : null
@@ -959,8 +973,8 @@ export class ChartWorkspace {
   }
 
   /** The annotation layer follows the active preset's base colours, the host's own `render.theme` included. */
-  private annotationTheme (): 'dark' | 'light' {
-    return this.chart.getRenderOptions().theme === 'light' ? 'light' : 'dark'
+  private annotationTheme (): EngineAnnotationTheme {
+    return themeName(this.chart.getRenderOptions().theme)
   }
 
   private applyChromeTheme (theme: WorkspaceThemeName): void {

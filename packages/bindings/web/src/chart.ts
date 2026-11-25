@@ -1,3 +1,4 @@
+import { attachChartSpeech, barReadoutText, chartSummaryText, defaultBar, defaultSummary, priceDigits, type ChartDescriptions } from './a11y'
 import { RealtimeSeries, RealtimeView, derivePrecision, normalizeBars, normalizeBar, ENGINE_CHART_TYPES, buildEngineFrame, validateEngineLayout, validatePriceScale, EngineIndicators, DrawingStore, DRAWING_TYPES, projectDrawing, viewportLimitsForWidth, financialGeometry, type CandleMode, type MarketBar, type ChartDataPort, type EngineRenderOptions, type EngineFrame, type EngineLayout, type EngineInspection, type EngineIndicatorSpec, type IndicatorDefinition, type Drawing, type DrawingType, type DrawingGeometry, type DrawingBounds } from '@supersolutions/super-chart-core'
 import { paintEngineFrame, paintEngineCursor } from './canvasRenderer'
 import { attachEngineGestures } from './gestures'
@@ -28,6 +29,12 @@ export interface EngineChartOptions {
   onToolComplete?: (reason: ToolEnd) => void
   /** Accessible description of the chart region. Default is the English text; the workspace passes its locale's. */
   ariaLabel?: string
+  /**
+   * The words the chart uses for its spoken summary (`describe()`, read when the chart gets focus) and for the bar a
+   * keyboard user steps onto with Shift+Left/Right. Each hook receives ready-made strings and returns one sentence;
+   * leave one out to keep the English default.
+   */
+  descriptions?: ChartDescriptions
   /**
    * Hold a pointer still for about a third of a second, then draw: the stroke becomes the line, rectangle, ellipse,
    * circle or triangle it resembles (Tab tries the next best, Escape takes it back) and a scribble erases the person's
@@ -113,6 +120,12 @@ export class EngineChart {
   private preview: Drawing | null = null
   private frame: EngineFrame | null = null
   private frameId = 0
+  private readonly speech: ReturnType<typeof attachChartSpeech>
+  private readonly descriptions: ChartDescriptions
+  private descriptionTimer: ReturnType<typeof setTimeout> | null = null
+  /** The bar a keyboard user stepped onto (Shift+Left/Right); the crosshair follows it until the pointer takes over. */
+  private keyboardBar: number | null = null
+  private keyboardMoving = false
   private cursorX: number | null = null
   private cursorY: number | null = null
   private width = 0
@@ -155,7 +168,7 @@ export class EngineChart {
     this.root.style.cssText = 'position:relative;width:100%;height:100%;min-height:0;overflow:hidden;touch-action:none;'
     this.root.tabIndex = 0
     this.root.setAttribute('role', 'group')
-    this.root.setAttribute('aria-label', options.ariaLabel ?? 'Chart. Drag to pan, pinch or wheel to zoom; Home follows the latest candle.')
+    this.root.setAttribute('aria-label', options.ariaLabel ?? 'Chart. Drag to pan, pinch or wheel to zoom; Home follows the latest candle. Shift with left or right arrow reads one bar at a time.')
     this.canvas = this.doc.createElement('canvas')
     this.drawingCanvas = this.doc.createElement('canvas')
     this.drawingCanvas.width = this.drawingCanvas.height = 1
@@ -169,6 +182,9 @@ export class EngineChart {
     if (context === null || drawingContext === null || cursorContext === null) { this.view.dispose(); throw new Error('Canvas 2D is unavailable') }
     this.context = context; this.drawingContext = drawingContext; this.cursorContext = cursorContext
     this.badge = attachPoweredBy(this.root, this.renderOptions.theme)
+    this.descriptions = options.descriptions ?? {}
+    this.speech = attachChartSpeech(this.root)
+    this.root.addEventListener('keydown', event => { this.keyboardInspect(event) }, { signal: this.abort.signal })
     host.append(this.root)
     this.unsubscribers.push(this.series.subscribe(change => {
       this.indicators.invalidate(change)
@@ -581,9 +597,71 @@ export class EngineChart {
     } finally { release() }
   }
 
+  /**
+   * What the chart shows now, in words: how many bars are in view, the span, the last bar's open/high/low/close and its
+   * change, and the visible indicators. The same sentence is the chart region's accessible description. Empty while the
+   * chart has no data.
+   */
+  describe (): string {
+    this.assertLive()
+    const frame = this.frame
+    if (frame === null) return ''
+    const names = this.indicators.list().filter(item => item.visible).map(item => item.params.length === 0 ? item.name : `${item.name}(${item.params.join(',')})`)
+    const text = chartSummaryText(frame, this.renderOptions, this.series.getDataList().length, names)
+    return text === null ? '' : (this.descriptions.summary ?? defaultSummary)(text)
+  }
+
+  private scheduleDescription (): void {
+    if (this.descriptionTimer !== null || this.disposed) return
+    // A live feed repaints often; the description only needs to be current when someone asks for it.
+    this.descriptionTimer = setTimeout(() => {
+      this.descriptionTimer = null
+      if (!this.disposed) this.speech.setDescription(this.describe())
+    }, 800)
+  }
+
+  /**
+   * Shift+Left/Right moves the crosshair one bar at a time and says that bar's open, high, low, close, change and volume;
+   * the first press lands on the last bar in view. Escape leaves it. The bar stays under the crosshair while the view
+   * moves, and the view pans when the next bar is out of sight.
+   */
+  private keyboardInspect (event: KeyboardEvent): void {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing || this.frame === null) return
+    if (event.key === 'Escape') {
+      if (this.keyboardBar !== null) { this.keyboardBar = null; this.moveCursor(null, null) }
+      return
+    }
+    if (!event.shiftKey || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return
+    const target = event.target
+    if (target instanceof this.win.HTMLElement && target !== this.root && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return
+    const bars = this.series.getDataList(), visible = this.frame.snapshot.bars
+    if (bars.length === 0 || visible.length === 0) return
+    event.preventDefault()
+    const direction = event.key === 'ArrowLeft' ? -1 : 1
+    let position = this.keyboardBar === null ? barPosition(bars, visible[visible.length - 1].timestamp) : barPosition(bars, this.keyboardBar)
+    if (this.keyboardBar !== null) position = Math.min(bars.length - 1, Math.max(0, position + direction))
+    const bar = bars[position]
+    this.keyboardBar = bar.timestamp
+    const text = barReadoutText(bar, position > 0 ? bars[position - 1].close : undefined, priceDigits(this.frame, this.renderOptions), this.renderOptions)
+    this.speech.announce((this.descriptions.bar ?? defaultBar)(text))
+    if (bar.timestamp < visible[0].timestamp || bar.timestamp > visible[visible.length - 1].timestamp) this.view.pan(direction * 3)
+    this.cursorDirty = true; this.schedule()
+  }
+
+  /** Keeps the crosshair on the bar a keyboard user is reading while the view pans, resizes or ticks. */
+  private placeKeyboardCursor (frame: EngineFrame): void {
+    if (this.keyboardBar === null) return
+    const bar = frame.snapshot.bars.find(item => item.timestamp === this.keyboardBar)
+    const at = bar === undefined ? null : frame.project(bar.timestamp, bar.close)
+    this.keyboardMoving = true
+    try { this.moveCursor(at === null ? null : at.x, at === null ? null : at.y) } finally { this.keyboardMoving = false }
+  }
+
   dispose (): void {
     if (this.disposed) return
     this.disposed = true
+    if (this.descriptionTimer !== null) clearTimeout(this.descriptionTimer)
+    this.speech.dispose()
     this.abort.abort(); this.resizeObserver.disconnect(); this.unsubscribers.forEach(fn => fn())
     this.drawingInput.dispose(); this.badge.dispose(); this.drawingImages.dispose(); this.stopGestures(); this.view.dispose()
     this.dprQuery?.removeEventListener('change', this.pixelRatioChanged)
@@ -606,6 +684,7 @@ export class EngineChart {
   private magnetActive (): boolean { return this.drawingMagnet !== this.modifierHeld }
 
   private moveCursor (x: number | null, y: number | null): void {
+    if (!this.keyboardMoving) this.keyboardBar = null
     if (this.cursorX === x && this.cursorY === y) return
     this.cursorX = x; this.cursorY = x === null ? null : y; this.cursorDirty = true; this.schedule()
   }
@@ -765,6 +844,7 @@ export class EngineChart {
       if (this.disposed) return
       this.drawingDirty = false; this.counters.drawingPaints++
     }
+    this.placeKeyboardCursor(this.frame)
     if (this.cursorDirty) {
       this.cursorContext.setTransform(this.canvas.width / this.width, 0, 0, this.canvas.height / this.height, 0, 0)
       this.cursorContext.clearRect(0, 0, this.width, this.height)
@@ -788,6 +868,17 @@ export class EngineChart {
     this.counters.frames++; this.counters.lastFrameMs = this.win.performance.now() - started
     if (this.counters.firstDataFrameMs === 0 && this.frame.snapshot.bars.length > 0) this.counters.firstDataFrameMs = this.counters.lastFrameMs
     this.counters.maxFrameMs = Math.max(this.counters.maxFrameMs, this.counters.lastFrameMs)
+    if (repainted) this.scheduleDescription()
     if (repainted) for (const listener of [...this.frameListeners]) { try { listener() } catch (error) { console.warn('[super-chart] Frame observer failed', error) } }
   }
+}
+
+/** Index of the bar with this timestamp, or of the nearest earlier one; bars are in time order. */
+function barPosition (bars: ReadonlyArray<Readonly<MarketBar>>, timestamp: number): number {
+  let low = 0, high = bars.length - 1
+  while (low < high) {
+    const middle = (low + high + 1) >> 1
+    if (bars[middle].timestamp <= timestamp) low = middle; else high = middle - 1
+  }
+  return low
 }

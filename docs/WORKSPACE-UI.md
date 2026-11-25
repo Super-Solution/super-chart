@@ -412,6 +412,29 @@ live workspace; the saved workspace document records the theme (`dark` or
 `light`), never a host-defined theme's colours. Registries are module-global:
 register before constructing, and use distinct names.
 
+### Colour-blind safe themes
+
+`theme: 'dark-colorblind'` and `theme: 'light-colorblind'` (also `render.theme` on `EngineChart`, and in the
+command palette) keep the dark or light surfaces and swap the green/red market colours for the Okabe-Ito
+blue/orange pair, which holds in the common forms of colour-vision deficiency. The same set colours volume bars,
+zones, annotation tones and the indicator lines (which move off blue and orange so they do not read as candles).
+Measured on the token values: up and down hold 5.2:1 or better against the chart surface and the price text on
+their fills 5.2:1 or better; simulated deuteranopia, protanopia and tritanopia (Machado 2009) put the up/down
+colours 85 to 111 CIELAB units apart, against 17 to 36 for green/red under protanopia and deuteranopia.
+Colour is still not the only cue: `hollow-candles` and `hollow-down-candles` separate direction by fill.
+
+## Reading the chart without seeing it
+
+The chart region is a focusable group with an accessible description, `describe()` on `EngineChart`
+and `ChartWorkspace.chart`: how many bars are in view, the time span, the last bar's open/high/low/close and
+its change against the bar before, and the visible indicators. It refreshes at most about once a second while a
+feed ticks and is never announced by itself, so a live chart does not chatter.
+
+Shift+Left / Shift+Right step the crosshair bar by bar (the first press lands on the last bar in view). Each step is
+announced through a polite live region (time, open, high, low, close, change, volume), the view pans when the next bar
+is out of sight, and the crosshair stays on that bar until the pointer moves or Escape is pressed. Unshifted arrows still
+pan. `descriptions` on the chart options (the workspace fills it from its locale: `en`, `zh-TW`) replaces the wording.
+
 ## Hold to draw
 
 `chart: { drawByHolding: true }` (or `{ holdMs, erase }`) turns on a pen gesture

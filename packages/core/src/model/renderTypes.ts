@@ -1,5 +1,13 @@
 import type { Timespan } from '../feed'
 
+/**
+ * The canvas colour sets. The two `-colorblind` sets keep the light or dark surface and replace the
+ * green/red candles with the Okabe-Ito blue/orange pair, which stays distinguishable in the common
+ * forms of colour-vision deficiency (and the indicator lines move off blue/orange too).
+ */
+export type EngineRenderTheme = 'light' | 'dark' | 'light-colorblind' | 'dark-colorblind'
+export const ENGINE_RENDER_THEMES: readonly EngineRenderTheme[] = Object.freeze(['light', 'dark', 'light-colorblind', 'dark-colorblind'] as const)
+
 /** Web renderer settings. Geometry, data ownership and native drawing stay in their own layers. */
 export const ENGINE_CHART_TYPES = [
   'candles', 'hollow-candles', 'outline-candles', 'hollow-down-candles',
@@ -15,7 +23,7 @@ export interface EngineRenderOptions {
   /** Baseline chart reference price; defaults to the first visible close. */
   baseline?: number
   /** Selects the Super Chart light or dark palette; the single colours below override it. Default dark. */
-  theme?: 'light' | 'dark'
+  theme?: EngineRenderTheme
   background?: string
   grid?: string
   text?: string

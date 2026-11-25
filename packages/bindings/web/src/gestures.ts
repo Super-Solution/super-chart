@@ -279,6 +279,8 @@ export function attachEngineGestures (
       return
     }
     if (e.key === 'Escape') { clear(); e.preventDefault(); return }
+    // Shift+Arrow steps the crosshair bar by bar (the chart handles it); only the unshifted keys pan.
+    if (e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) return
     if (!['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', '+', '=', '-', 'Home'].includes(e.key)) return
     flush(); clear()
     const span = viewportSpan(view.getSnapshot().viewport)
