@@ -4,7 +4,7 @@ import { ENGINE_CHART_TYPES, DRAWING_TYPES, DERIVED_STYLES, createDerivedSeriesP
 import { EngineAnnotations, attachAnnotationIntents, type AnnotationIntentEvent, type EngineAnnotationTheme } from './annotations'
 import { themeName } from './tokens'
 import type { HoldDrawEvent } from './holdDraw'
-import { WORKSPACE_CHROME_VARS, getWorkspaceTheme, listWorkspaceThemes, type WorkspaceChromeKey, type WorkspaceThemeName } from './theme'
+import { AUTO_THEME, WORKSPACE_CHROME_VARS, followColorScheme, getWorkspaceTheme, listWorkspaceThemes, resolveThemeName, type WorkspaceChromeKey, type WorkspaceThemeName } from './theme'
 import { createTranslator, resolveLocale, type Translator } from './i18n'
 import { resolveLayout, resolveIntervalControl, validLayoutMode, validIntervalControl, type WorkspaceLayoutMode, type WorkspaceLayoutClass, type WorkspaceIntervalControl } from './layout'
 import { CommandRegistry, validateCommand, type WorkspaceCommand } from './commands'
@@ -107,8 +107,9 @@ export interface ChartWorkspaceOptions {
   periods?: readonly Period[]
   chart?: EngineChartOptions
   /**
-   * `light` or `dark` for the chrome and the canvas colours; `chart.render` colours still win. Leave it out to keep the
-   * dark default and restyle through the existing `--sc-*` CSS custom properties (see `WORKSPACE_CHROME_VARS`).
+   * `light` or `dark` for the chrome and the canvas colours; `chart.render` colours still win. `auto` follows the page's
+   * `prefers-color-scheme` and switches live. Leave it out to keep the dark default and restyle through the existing
+   * `--sc-*` CSS custom properties (see `WORKSPACE_CHROME_VARS`).
    */
   theme?: WorkspaceThemeName
   /** Language of the chrome text: a registered locale tag (see `registerLocale`). Default `en`. */
@@ -138,7 +139,7 @@ const DEFAULT_PERIODS: readonly Period[] = [
 const pairKey = (symbol: SymbolInfo, period: Period): string => `${symbolKey(symbol)}:${periodKey(period)}`
 const label = (value: string): string => value.replace(/-/g, ' ')
 function validTheme (theme: unknown): WorkspaceThemeName {
-  if (typeof theme !== 'string' || getWorkspaceTheme(theme) === undefined) throw new TypeError(`Workspace theme must be one of ${listWorkspaceThemes().map(name => JSON.stringify(name)).join(', ')} (see registerWorkspaceTheme)`)
+  if (typeof theme !== 'string' || (theme !== AUTO_THEME && getWorkspaceTheme(theme) === undefined)) throw new TypeError(`Workspace theme must be "auto" or one of ${listWorkspaceThemes().map(name => JSON.stringify(name)).join(', ')} (see registerWorkspaceTheme)`)
   return theme
 }
 function validSymbol (symbol: SymbolInfo): SymbolInfo {
@@ -211,6 +212,7 @@ export class ChartWorkspace {
   private ui: { headless: boolean, layout: WorkspaceLayoutMode, intervals: WorkspaceIntervalControl, parts: Partial<Record<WorkspacePart, boolean>> }
   private layoutClass: WorkspaceLayoutClass = 'regular'
   private themeName: WorkspaceThemeName | null
+  private stopFollowingScheme: (() => void) | null = null
   private toolsOpen = false
   private readonly slots = new Map<WorkspaceSlotName, HTMLElement>()
   private readonly toolbar: HTMLDivElement
@@ -348,7 +350,7 @@ export class ChartWorkspace {
       parts: validParts(options.ui?.parts)
     }
     this.themeName = options.theme ?? null
-    if (options.theme !== undefined) this.applyChromeTheme(validTheme(options.theme))
+    if (options.theme !== undefined) this.applyChromeTheme(resolveThemeName(validTheme(options.theme), this.win))
     for (const [name, value] of Object.entries(options.ui?.variables ?? {})) {
       if (!/^--sc-[a-z0-9-]+$/.test(name) || typeof value !== 'string') throw new TypeError('Workspace variables must use --sc- names and string values')
       this.root.style.setProperty(name, value)
@@ -689,7 +691,7 @@ export class ChartWorkspace {
             volume: text.volume === '' ? '' : this.t('a11y.barVolume', { volume: text.volume })
           })
         },
-        render: { ...(options.theme === undefined ? {} : getWorkspaceTheme(options.theme)?.render), ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone, locale: this.locale },
+        render: { ...(options.theme === undefined ? {} : getWorkspaceTheme(resolveThemeName(options.theme, this.win))?.render), ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone, locale: this.locale },
         onToolComplete: reason => {
           const again = reason === 'completed' && this.stayInDrawing ? this.lastTool : null
           this.setToolValue(null)
@@ -704,6 +706,7 @@ export class ChartWorkspace {
         const size = this.derived.getStyle()?.size
         if (this.chart.getRenderOptions().chartType === 'point-figure' && size !== null && size !== undefined) this.chart.setRenderOptions({ pointFigureBox: size })
       })
+      this.followScheme()
       this.annotations = new EngineAnnotations({ symbol: null, theme: this.annotationTheme(), onChange: () => { this.chart.requestPaint(); this.objectsDirty = true; this.renderObjects() } })
       this.chart.addLayer(this.annotations)
       this.drawingToolbar = new DrawingToolbar({
@@ -719,7 +722,7 @@ export class ChartWorkspace {
       })
       this.unsubscribe.push(this.chart.onFrame(() => { this.drawingToolbar.refresh() }), this.chart.drawings.subscribe(() => { this.drawingToolbar.refresh() }))
       this.unsubscribe.push(attachAnnotationIntents(this.chartHost, this.annotations, event => { for (const listener of [...this.intentListeners]) listener(event) }))
-    } catch (error) { this.abort.abort(); this.root.remove(); throw error }
+    } catch (error) { this.stopFollowingScheme?.(); this.abort.abort(); this.root.remove(); throw error }
     this.loader = this.createLoader()
     this.timedReplay = this.createReplay()
     this.countdown = createBarCountdown({
@@ -1010,9 +1013,22 @@ export class ChartWorkspace {
   setTheme (theme: WorkspaceThemeName): void {
     if (this.disposed) return
     const name = validTheme(theme)
-    this.applyChromeTheme(name)
-    this.chart.setRenderOptions({ ...getWorkspaceTheme(name)!.render })
     this.themeName = name
+    this.applyTheme()
+    this.followScheme()
+  }
+
+  /** Listen for system colour-scheme changes exactly while the theme is `auto`; dispose removes the listener. */
+  private followScheme (): void {
+    this.stopFollowingScheme?.(); this.stopFollowingScheme = null
+    if (this.themeName === AUTO_THEME) this.stopFollowingScheme = followColorScheme(this.win, () => { if (!this.disposed && this.themeName === AUTO_THEME) this.applyTheme() })
+  }
+
+  /** Paint the chrome and canvas with the preset the current theme name stands for (`auto` reads the system now). */
+  private applyTheme (): void {
+    const preset = resolveThemeName(this.themeName ?? 'dark', this.win)
+    this.applyChromeTheme(preset)
+    this.chart.setRenderOptions({ ...getWorkspaceTheme(preset)!.render })
     this.annotations.setTheme(this.annotationTheme())
   }
 
@@ -1042,6 +1058,7 @@ export class ChartWorkspace {
     this.saveDrawings();
     this.disposed = true; this.cancelSearch(); this.abort.abort()
     this.restoreGeneration++; this.pendingRestore = null
+    this.stopFollowingScheme?.(); this.stopFollowingScheme = null
     this.timedReplay.dispose(); this.countdown.dispose(); this.resizeObserver?.disconnect(); this.resizeObserver = null
     this.commandRegistry.clear(); this.bindings.length = 0
     this.loads.dispose(); this.events.clear()
@@ -1719,7 +1736,7 @@ export class ChartWorkspace {
     const add = (id: string, title: string, group: string, run: () => void | Promise<void>, extra: Partial<WorkspaceCommand> = {}): void => { commands.push({ id, title, group: t(group), run, ...extra }) }
     add('workspace.search', t('palette.search'), 'palette.group.general', () => { this.openSearch('', 'command') }, { keywords: ['symbol', 'ticker'] })
     add('workspace.reload', t('palette.reload'), 'palette.group.general', () => { void this.reload() })
-    for (const name of listWorkspaceThemes()) add(`theme.${name}`, t('palette.theme', { name: t(`theme.${name}`) }), 'palette.group.general', () => { this.setTheme(name) }, { keywords: ['theme', 'dark', 'light'], when: () => this.themeName !== name })
+    for (const name of [AUTO_THEME, ...listWorkspaceThemes()]) add(`theme.${name}`, t('palette.theme', { name: t(`theme.${name}`) }), 'palette.group.general', () => { this.setTheme(name) }, { keywords: ['theme', 'dark', 'light'], when: () => this.themeName !== name })
     for (const period of this.periods) add(`interval.${periodKey(period)}`, t('palette.interval', { name: period.text }), 'palette.group.interval', () => { void this.setPeriod(period) }, { keywords: ['interval', 'timeframe', 'period'], when: () => periodKey(period) !== periodKey(this.period) })
     // Point and figure belongs to the price mode (it needs a box size), so it is not offered as a plain chart type.
     for (const type of ENGINE_CHART_TYPES.filter(type => type !== 'point-figure')) add(`chartType.${type}`, t('palette.chartType', { name: t(`chartType.${type}`) }), 'palette.group.chart', () => { this.chart.setRenderOptions({ chartType: type }); this.syncPresentation() })

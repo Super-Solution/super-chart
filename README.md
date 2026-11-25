@@ -79,8 +79,8 @@ import { SuperChart } from '@supersolutions/super-chart-react'
   onMarketChange={event => save(event)} style={{ height: 600 }} />
 ```
 
-Symbol, period, theme, locale and `ui` follow the props; the ref is the
-`ChartWorkspace`. Safe under Strict Mode and server rendering. Full example:
+Symbol, period, theme (`dark`, `light` or `auto` to follow the system), locale and `ui`
+follow the props; the ref is the `ChartWorkspace`. Safe under Strict Mode and server rendering. Full example:
 [examples/react](examples/react/README.md).
 
 ### Chrome, commands and interaction
@@ -186,7 +186,8 @@ instead. AVP is omitted until turnover/volume units are explicit. Volume profile
 estimates activity across candle ranges, not trade prints; order blocks are heuristics.
 
 The workspace chrome is dark by default. Pass `theme: 'light'` or call
-`workspace.setTheme('light')` for matching light controls and canvas colours. Presets
+`workspace.setTheme('light')` for matching light controls and canvas colours, or
+`theme: 'auto'` to follow the system's light/dark setting live. Presets
 use the same `--sc-*` variables as the default UI; `WORKSPACE_CHROME_VARS` lists their
 names. Customize through host CSS or `ui.variables` (for example `--sc-background`,
 `--sc-text`, `--sc-control-background`), and use `chart.render` for canvas colours.

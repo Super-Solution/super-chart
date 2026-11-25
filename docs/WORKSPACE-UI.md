@@ -438,6 +438,25 @@ live workspace; the saved workspace document records the theme (`dark` or
 `light`), never a host-defined theme's colours. Registries are module-global:
 register before constructing, and use distinct names.
 
+### `theme: 'auto'` follows the system
+
+`theme: 'auto'` (or `workspace.setTheme('auto')`, or the palette command "Theme: Follow system") picks the `dark`
+preset while the page's `prefers-color-scheme` is dark and `light` while it is light, and switches live when the
+person changes the system setting, with no reload. `getTheme()` keeps answering `'auto'`; the saved workspace document
+records the resolved `dark` or `light`, so a restored chart does not depend on the machine that saved it. Choosing any
+other theme (`setTheme('dark')`, a palette command) stops following. The listener exists only while the theme is
+`auto` and `dispose()` removes it. `auto` is a mode, not a preset: `registerWorkspaceTheme('auto', …)` and
+`extends: 'auto'` throw. The colour-blind sets are chosen by name; `auto` does not pick them.
+
+The default is unchanged: with no `theme` the workspace is dark and restyles through the `--sc-*` variables. Making
+`auto` the default would change the look of every embedder that never set a theme, so that stays a decision for the
+owner (it is one line in the constructor). In React, `<SuperChart theme="auto" />` works the same way: the prop is
+compared with `getTheme()`, which stays `'auto'`, so a re-render does not reapply it. Without `matchMedia` (a
+server-rendered shell, an old WebView) `auto` reads as dark.
+
+The pieces are exported on their own for hosts and sibling libraries: `resolveThemeName(name, window)`,
+`followColorScheme(window, onChange)` (returns the stop function) and `prefersDark(window)`.
+
 ### Colour-blind safe themes
 
 `theme: 'dark-colorblind'` and `theme: 'light-colorblind'` (also `render.theme` on `EngineChart`, and in the
