@@ -729,6 +729,7 @@ export class EngineChart {
     if (options.candleDensity !== undefined && options.candleDensity !== 'raw' && options.candleDensity !== 'pixel-envelope') throw new RangeError('Unknown candle density mode')
     if (options.chartType !== undefined && !ENGINE_CHART_TYPES.includes(options.chartType)) throw new RangeError('Unknown chart type')
     if (options.baseline !== undefined && !Number.isFinite(options.baseline)) throw new RangeError('Baseline must be a finite price')
+    if (options.chartType === 'point-figure' && options.pointFigureBox === undefined) throw new RangeError('The point-figure chart type needs pointFigureBox, the price height of a box; use the point-figure price mode')
     if (options.pointFigureBox !== undefined && !(Number.isFinite(options.pointFigureBox) && options.pointFigureBox > 0)) throw new RangeError('Point and figure box must be a positive finite price distance')
   }
 

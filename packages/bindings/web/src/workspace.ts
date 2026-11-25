@@ -930,7 +930,9 @@ export class ChartWorkspace {
     this.assertLive()
     const state = this.getLoadState()
     if (state.loaded === null || !['ready', 'empty'].includes(state.status)) throw new Error('Load a market before saving its workspace')
-    const { formatPrice, showTimeAxis, timespan, symbolTimezone, ...render } = this.chart.getRenderOptions()
+    const { formatPrice, showTimeAxis, timespan, symbolTimezone, pointFigureBox, ...render } = this.chart.getRenderOptions()
+    // A price-driven style is not saved, so neither is the chart type it borrowed (step line for Kagi, X/O for point and figure).
+    if (this.typeBeforeStyle !== null && (render.chartType === 'step-line' || render.chartType === 'point-figure')) render.chartType = this.typeBeforeStyle
     const document: WorkspaceDocumentV1 = {
       version: 1,
       ...this.market(),

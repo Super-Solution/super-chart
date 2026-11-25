@@ -6,7 +6,7 @@ const start = performance.now()
 // Load the renderer only when its host is mounted. The engine entry has no UI framework.
 const { EngineChart } = await import('@supersolutions/super-chart-web')
 const { ENGINE_CHART_TYPES, DRAWING_TYPES } = await import('@supersolutions/super-chart-core')
-byId<HTMLSelectElement>('style').replaceChildren(...ENGINE_CHART_TYPES.map(type => new Option(type, type)))
+byId<HTMLSelectElement>('style').replaceChildren(...ENGINE_CHART_TYPES.filter(type => type !== 'point-figure').map(type => new Option(type, type)))
 byId<HTMLSelectElement>('drawing').replaceChildren(new Option('Select / pan', ''), ...DRAWING_TYPES.map(type => new Option(type, type)))
 const chart = new EngineChart(byId('chart'), { onToolComplete: () => { byId<HTMLSelectElement>('drawing').value = '' }, onInspect: hit => {
   byId('readout').textContent = hit === null ? '' : `${new Date(hit.timestamp).toISOString()} · ${hit.mode} · O ${hit.displayBar.open.toFixed(4)} H ${hit.displayBar.high.toFixed(4)} L ${hit.displayBar.low.toFixed(4)} C ${hit.displayBar.close.toFixed(4)}`
