@@ -3,6 +3,12 @@
 Releases of the five `@supersolutions/super-chart-*` packages, which share one version. Older releases are in the git
 history (`git log --oneline`, one commit per release). Nothing here is published by this repository's commits.
 
+## 0.13.1
+
+Changed
+
+* **`@supersolutions/super-chart-chat-plugin` depends on `@supersolutions/super-protocol` 0.4.1** (it was 0.3.0), the version Super Chat 0.5.0 uses. A project with the chat plugin and Super Chat no longer installs two copies of the protocol. No chart behaviour changes; the five packages move to 0.13.1 together.
+
 ## 0.13.0
 
 Added
