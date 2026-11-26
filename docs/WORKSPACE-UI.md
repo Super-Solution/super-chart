@@ -78,6 +78,31 @@ plus a gap of its own inset, 30px from the chart's left edge. A label whose tick
 closer to the edge than that is moved right to the clearance instead of running under
 the badge. Hovering the badge opens it over the row for as long as the pointer is on it.
 
+## The time axis
+
+The time-axis row shows round times, as many as the width allows, not three labels. `timeAxisTicks(timestamps,
+positions, options)` in `@supersolutions/super-chart-core` is the pure function behind it (no DOM, only `Intl`), so a
+server or a test can ask the same question the canvas does.
+
+- **What is a tick.** Bars sit at equal steps, so a weekend or a closed session is not a gap on the axis. A tick is
+  the bar that starts a boundary: the first bar of a year, a month or a day, or the first one past a round time of day
+  (12h, 6h, 3h, 1h, 30m, 15m, 5m, 1m, 30s, 15s, 10s, 5s, 1s) read in the chart's time zone. A bar that starts a new
+  group of 15, 10, 5 or 2 days of the month outranks a plain new day, so a daily chart reads `Nov 16 Dec 16` instead
+  of only months.
+- **How many.** The coarsest boundaries come first; each finer level is added while at least 85% of its candidates
+  fit the minimum spacing (the width of a `00:00` label plus 40px). A short window gets minute ticks, a long one
+  months and years, and resizing moves between them. When two compete for room the higher boundary stays.
+- **Which zone.** Day, week, month and year bars carry a date only, so they are read in `SymbolInfo.timezone` and
+  never get a time of day; intraday bars are read in the chart's `timeZone` (half-hour zones such as Asia/Kolkata and
+  daylight-saving changes are followed through `Intl`).
+- **How they read.** Years, months and days are drawn heavier (`2026`, `Nov`, `25`); times are `HH:mm` (or
+  `HH:mm:ss` on second bars). Month and day names follow `render.locale`, which the workspace sets from its own
+  locale (`zh-TW` gives `11月`, `25日`); a bad tag falls back to `en`. A short stroke marks each tick's bar, so a label
+  moved away from the badge or the edge still points at its bar.
+- **Limits.** The row still keeps clear of the badge (`timeLabelCentre`). An axis whose keys are not timestamps (a
+  category axis) keeps the three-label layout. Ticks are not drawn as vertical grid lines: the grid stays horizontal.
+  Ticks are chosen per frame from the visible bars: measured on 1,200 bars (Node 22, this machine) 0.35 to 0.73 ms once the zone offsets are cached, and 2 to 18 ms the first time a window of bars is seen.
+
 ## The selection toolbar
 
 Selecting a drawing shows a floating toolbar over it, like TradingView's. It is
@@ -338,13 +363,32 @@ new ChartWorkspace(host, {
 
 - `layout` is a size class for the chrome. `regular` has labelled tools, `compact`
   shows icons and moves secondary actions into a More menu, `narrow` also folds
-  the drawing tools behind a Tools button and shows the intervals as one
-  dropdown. `auto` follows the workspace's own width (`LAYOUT_BREAKPOINTS`:
+  the drawing tools behind a Tools button, shows the intervals as one dropdown
+  and keeps the market bar to one row (see below). `auto` follows the workspace's own width (`LAYOUT_BREAKPOINTS`:
   narrow below 560px, compact below 780px), not the window's. `getLayout()`
   returns the class in effect. With the rail, `compact` also moves undo/redo into
   More; `narrow` has no rail.
 - `intervals: 'select'` renders the period list as a dropdown at any width;
-  `'bar'` keeps buttons; `'auto'` picks the bar unless the layout is `narrow`.
+  `'bar'` keeps buttons; `'auto'` picks the bar unless the layout is `narrow` or the
+  bar does not fit: in `compact` the market bar never wraps, so `auto` looks at the
+  bar after the other parts are placed and uses the dropdown when the buttons would be
+  clipped or scrolled out of sight (`resolveIntervalControl(control, layout, fits)`).
+  Only `'bar'` set by the host can still overflow.
+
+**Phone widths (`narrow`).** The market bar is one row: Tools, the symbol (shortened
+with an ellipsis, its search icon dropped below 340px), the interval dropdown, and
+the Chart, Indicators, Objects and More menus as icons (their names stay as the
+accessible name and tooltip; the Indicators count is a small badge). The command-palette
+button moves into More, and the Auto and time-zone controls move into the Chart menu,
+so the footer keeps only the status, the countdown, Replay and Load older. Measured
+in the demo workspace (740px high, headless Chromium, Playwright): the two bars took
+23.8% of the height at 390px (77 + 99 px) and 28.6% at 320px (113 + 99 px) before;
+they take 10.9% at 390px (44 + 37 px) and 15.3% at 320px (44 + 69 px, where the
+footer still wraps Load older to a second line) now. Below about 330px the symbol
+shows only its first letters; the footer shows the full ticker.
+
+The left tool rail, when it is taller than the chart, shows a soft shadow at the
+edge that has more tools beyond it, so lock, hide and delete are not silently cut off.
 - `headless: true` removes the market bar, drawing bar, footer, status, notice and
   replay controls. Loading, replay, drawings, the command palette (keyboard) and
   the API keep working. `parts` switches off one piece at a time
@@ -393,9 +437,38 @@ own picker.
 ## Scale bar
 
 Beside the chart-settings panel's percent, log and reverse options, the scale bar
-has **Auto** (return to the automatic price range after a manual range) and
-**UTC** (toggle between UTC and the browser's time zone for axis and crosshair
-labels). Both are also palette commands.
+has **Auto** (return to the automatic price range after a manual range) and a
+**time-zone menu** for the axis and crosshair labels of intraday bars. Both are also
+palette commands.
+
+The menu is a native `<select>` (so the keyboard, type-to-select and screen readers
+work as they do everywhere) with two groups: this device's zone and 14 common
+financial-centre zones first, then every IANA zone the runtime reports
+(`Intl.supportedValuesOf('timeZone')`, about 420 in current browsers), each with its
+UTC offset as of now (`America/New_York (UTC-05:00)`), refreshed whenever the menu
+takes focus so daylight saving reads true. There is no zone database in the package:
+only `Intl`. The default is still `UTC`, and every value that worked before still
+works, because the menu's values are the same IANA ids `render.timeZone` always took
+(`UTC` and the device zone were the two old toggle states; saved workspace documents
+carry the id). A zone the host set that Intl does not list (an alias such as
+`Asia/Calcutta`) is added to the menu so it can be shown.
+
+```ts
+workspace.setTimeZone('Asia/Taipei')   // RangeError with code 'time_zone_unknown' (or 'time_zone_type')
+workspace.getTimeZone()                // 'Asia/Taipei'
+```
+
+Palette: **Time zone: UTC / this device / each common zone** (`view.timezone.<id>`), and
+the earlier `view.timezone` toggle between UTC and the device zone. Day, week, month
+and year bars are unaffected: they read in `SymbolInfo.timezone` (see the time axis).
+The pure pieces are exported from core for hosts and agents: `checkTimeZone(value)`
+returns `{ ok: true, id }` or `{ ok: false, code: 'time_zone_type' | 'time_zone_unknown', hint }`,
+`listTimeZones()`, `localTimeZone()`, `formatUtcOffset(id, at)` and `timeZoneChoices()`.
+
+Limits: offsets in the labels are those of the moment the list was built, not of the
+bars on screen, so a chart looking at last winter's bars shows today's offset in the
+menu while the axis itself uses the offset of each bar. The menu is one flat list of
+IANA ids (no city-name search or localised zone names).
 
 ## Locales and themes
 
@@ -412,6 +485,25 @@ to English, and an unknown key never throws. `setLocale` and `setTheme` change a
 live workspace; the saved workspace document records the theme (`dark` or
 `light`), never a host-defined theme's colours. Registries are module-global:
 register before constructing, and use distinct names.
+
+### `theme: 'auto'` follows the system
+
+`theme: 'auto'` (or `workspace.setTheme('auto')`, or the palette command "Theme: Follow system") picks the `dark`
+preset while the page's `prefers-color-scheme` is dark and `light` while it is light, and switches live when the
+person changes the system setting, with no reload. `getTheme()` keeps answering `'auto'`; the saved workspace document
+records the resolved `dark` or `light`, so a restored chart does not depend on the machine that saved it. Choosing any
+other theme (`setTheme('dark')`, a palette command) stops following. The listener exists only while the theme is
+`auto` and `dispose()` removes it. `auto` is a mode, not a preset: `registerWorkspaceTheme('auto', …)` and
+`extends: 'auto'` throw. The colour-blind sets are chosen by name; `auto` does not pick them.
+
+The default is unchanged: with no `theme` the workspace is dark and restyles through the `--sc-*` variables. Making
+`auto` the default would change the look of every embedder that never set a theme, so that stays a decision for the
+owner (it is one line in the constructor). In React, `<SuperChart theme="auto" />` works the same way: the prop is
+compared with `getTheme()`, which stays `'auto'`, so a re-render does not reapply it. Without `matchMedia` (a
+server-rendered shell, an old WebView) `auto` reads as dark.
+
+The pieces are exported on their own for hosts and sibling libraries: `resolveThemeName(name, window)`,
+`followColorScheme(window, onChange)` (returns the stop function) and `prefersDark(window)`.
 
 ### Colour-blind safe themes
 
@@ -464,6 +556,71 @@ by the person; the chart emits `start`, `move`, `commit` or `cancel` through
 `onAnnotationIntent`, and never edits the annotation itself. The host validates
 the price and writes it back with `setAnnotations`. See
 [API-LAYERS.md](API-LAYERS.md) and [TRADE-HEADS.md](TRADE-HEADS.md).
+
+## Event marks
+
+A `Datafeed` with the optional `getMarks(symbol, period, from, to, { signal })` gets earnings dates, dividends,
+splits and headlines drawn on the chart. The workspace asks for the visible range plus one view-width on each side
+after the view has settled, and again when the symbol or interval changes or `refreshMarks()` is called; it never
+polls. Each mark lands on the bar that contains its time and is drawn as one marker through the annotation layer
+(layer `datafeed:marks`, so host annotations are never touched); marks that share a bar read `A · B · C +2`.
+
+* The tooltip opens on hover, and on a tap on touch screens. The Objects menu lists the marks in words, newest first
+  (50 shown, the rest counted), for the keyboard and screen readers; the canvas markers carry only the short label.
+* An "Event marks" switch in the presentation panel and the command palette entry (`Show or hide event marks`) hide
+  them; the choice is the viewer's and is not saved in the workspace document. Both exist only when the feed has `getMarks`.
+* `getMarksState()` returns `status` (`unsupported`, `hidden`, `idle`, `loading`, `ready`, `error`), the counts, the
+  covered range and every rejected mark by stable code (`bad_label`, `duplicate_id`, `out_of_range`, `too_many_on_bar`
+  ...). One faulty mark never hides the others; a failing feed leaves the chart as it was. The codes and the wire
+  shape are in [DATAFEED-HTTP.md](DATAFEED-HTTP.md); `validateMarks` and `placeMarks` are exported from core and run
+  without a DOM.
+* Limits: 10 marks per bar, 1000 per answer; text is plain, never HTML. A host that wants its own look uses annotations
+  directly. There is no filtering by category yet.
+
+## Trading sessions
+
+`SymbolInfo.session` is an optional weekly schedule for a symbol that does not trade around the clock. With it the
+chart shades pre-market and after-hours bars, draws a faint dashed line where a new local date begins, ends the
+bar-close countdown at the real session close, and says "pre-market" or "after hours" when a keyboard user steps the
+crosshair onto such a bar. A symbol without `session` (most crypto) behaves exactly as before. It is a field of
+`SymbolInfo`, not tied to any one product.
+
+```ts
+const symbol = {
+  ticker: 'SESSION', timezone: 'America/New_York',
+  session: {
+    regular: '0930-1600', pre: '0400-0930', post: '1600-2000',
+    closed: ['2026-11-26'],                                                   // Thanksgiving
+    exceptions: { '2026-11-27': { regular: '0930-1300', post: '1300-1700' } } // early close
+  }
+}
+```
+
+| Member | Rule |
+| --- | --- |
+| `timezone` | IANA zone the times are read in (default: the symbol's `timezone`, then UTC). Daylight saving moves the times in UTC by itself |
+| `regular`, `pre`, `post` | segments `HHMM-HHMM[:days]` separated by commas; `regular` is required. `days` are digits `1` Monday to `7` Sunday, default `12345`. `2400` may end a segment. An end at or before the start crosses midnight and belongs to the day it starts on (`2200-0600:12345`); `0000-0000` is refused, write `0000-2400`. Where schedules overlap, `regular` wins over `pre`, `pre` over `post` |
+| `closed` | dates (`YYYY-MM-DD` in `timezone`) with no session at all |
+| `exceptions` | `{ date: { regular?, pre?, post? } }`: each member replaces that field for the date, `''` means none; no `:days` here. At most 2000 dates in `closed` and `exceptions` together |
+
+* **Checking.** `compileSession(session, fallbackZone)` (exported by core, DOM-free) returns the checked schedule or
+  `session: null` with every fault listed as `{ field, code }`: `bad_session`, `bad_timezone`, `bad_segments`,
+  `bad_date`, `too_many`. A schedule with any fault is ignored as a whole, so a half-right one never misleads;
+  `getSessionState()` on the workspace says `none`, `active` (the zone and the kind of the newest bar: `regular`,
+  `pre`, `post` or `closed`) or `invalid` with the issues. `sessionKindAt`, `sessionChangeAfter`, `sessionBarClose` and
+  `sessionLayout` answer the same questions without a chart.
+* **Shading.** Intraday periods only: a bar of a day or more has no time of day. Pre-market and after-hours bars get
+  a wash behind them (in every pane, so volume and indicators line up); the line marks the first bar of each local
+  date in the session's zone. Bars outside every segment (a feed that sends overnight or weekend bars) are left bare.
+  Bars sit at equal steps, so a closed weekend is not a gap on the axis.
+* **Countdown.** A host-supplied `countdown.closeTimestamp` still wins. Otherwise an intraday bar closes at its period
+  or at the end of the session stretch it opened in (a 15:30 hour bar on a 16:00 close counts down to 16:00), as
+  exchanges split bars at the session edge. A bar of a day or more closes at the last regular close before its
+  calendar end. A bar that opened while the market was closed keeps the period estimate.
+* **Limits, plainly.** The chart trusts the schedule: it does not know exchange calendars, so holidays and early
+  closes exist only where the feed lists them. Daylight-saving gaps are read with the later offset. The day line is a
+  calendar date, not a futures session start. There is no viewer switch to hide the shading yet, and extended-hours
+  bars appear only if the datafeed sends them.
 
 ## Price-driven styles
 

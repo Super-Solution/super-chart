@@ -20,8 +20,8 @@ Each example is also a plain URL on the same dev server (`npm run dev`, then `/e
 | [`datafeed-http`](datafeed-http/README.md) | node + web | a `Datafeed` over the HTTP contract and a server for it |
 | [`workspace-persistence`](workspace-persistence/README.md) | any | save, upgrade and restore a workspace (no UI; has tests) |
 
-`_shared/feed.ts` is the one mock data source: deterministic history, a ticking last bar, and five markets
-(`EQUITY`, `COIN`, `FX`, plus `EMPTY` and `BROKEN` for the empty and error states). It touches no DOM and no browser
+`_shared/feed.ts` is the one mock data source: deterministic history, a ticking last bar, and six markets
+(`EQUITY`, `SESSION` with a New York trading schedule, `COIN`, `FX`, plus `EMPTY` and `BROKEN` for the empty and error states). It touches no DOM and no browser
 global, so any host can use it. Use `MARKETS` where an example should simply show a chart.
 
 ## Targets

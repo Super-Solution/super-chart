@@ -133,3 +133,9 @@ export function createIcon (doc: Document, name: IconName): SVGSVGElement {
   svg.append(path)
   return svg
 }
+
+/** A CSS `url()` of an icon as a black stroke, for `mask-image`: lets the chrome show an icon without changing the element's text. */
+export function iconMask (name: IconName): string {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='${name === 'more' ? 3 : 1.75}' stroke-linecap='round' stroke-linejoin='round'><path d='${PATHS[name] ?? PATHS.more}'/></svg>`
+  return `url("data:image/svg+xml,${svg.replace(/</g, '%3C').replace(/>/g, '%3E').replace(/"/g, "'")}")`
+}

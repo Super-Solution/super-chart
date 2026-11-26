@@ -57,7 +57,8 @@ func crossing(name string, f func(a, b ta.Series) ta.Series) spec {
 }
 
 // catalog lists every indicator the server can run, in the order GET /v1/indicators reports them.
-// It mirrors the kernels in ../ta and the Python server's catalog; keep the three in step.
+// It mirrors the kernels in ../ta and the Python server's catalog; keep the three in step. PivotPoints is a kernel
+// but not a catalog entry: it needs a period key per bar and a request carries no timestamps.
 var catalog = []spec{
 	windowed("sma", ta.SMA),
 	windowed("ema", ta.EMA),
@@ -137,6 +138,44 @@ var catalog = []spec{
 	{"sar", []input{{"high", "high"}, {"low", "low"}}, []param{{"start", 0.02, false}, {"inc", 0.02, false}, {"max", 0.2, false}}, value,
 		func(in map[string]ta.Series, p map[string]float64) map[string]ta.Series {
 			return one(ta.SAR(in["high"], in["low"], p["start"], p["inc"], p["max"]))
+		}},
+	{"aroon", []input{{"high", "high"}, {"low", "low"}}, lenOnly(14), []string{"up", "down"},
+		func(in map[string]ta.Series, p map[string]float64) map[string]ta.Series {
+			r := ta.Aroon(in["high"], in["low"], p["len"])
+			return map[string]ta.Series{"up": r.Up, "down": r.Down}
+		}},
+	{"cmf", hlcvIn, lenOnly(20), value, func(in map[string]ta.Series, p map[string]float64) map[string]ta.Series {
+		return one(ta.CMF(in["high"], in["low"], in["close"], in["volume"], p["len"]))
+	}},
+	{"adl", hlcvIn, nil, value, func(in map[string]ta.Series, _ map[string]float64) map[string]ta.Series {
+		return one(ta.ADL(in["high"], in["low"], in["close"], in["volume"]))
+	}},
+	{"forceIndex", []input{{"close", "close"}, {"volume", "volume"}}, lenOnly(13), value,
+		func(in map[string]ta.Series, p map[string]float64) map[string]ta.Series {
+			return one(ta.ForceIndex(in["close"], in["volume"], p["len"]))
+		}},
+	{"vortex", hlcIn, lenOnly(14), []string{"plus", "minus"}, func(in map[string]ta.Series, p map[string]float64) map[string]ta.Series {
+		r := ta.Vortex(in["high"], in["low"], in["close"], p["len"])
+		return map[string]ta.Series{"plus": r.Plus, "minus": r.Minus}
+	}},
+	{"tsi", srcIn, []param{{"long", 25, false}, {"short", 13, false}, {"signal", 13, false}}, []string{"tsi", "signal"},
+		func(in map[string]ta.Series, p map[string]float64) map[string]ta.Series {
+			r := ta.TSI(in["src"], p["long"], p["short"], p["signal"])
+			return map[string]ta.Series{"tsi": r.TSI, "signal": r.Signal}
+		}},
+	{"ultimate", hlcIn, []param{{"fast", 7, false}, {"mid", 14, false}, {"slow", 28, false}}, value,
+		func(in map[string]ta.Series, p map[string]float64) map[string]ta.Series {
+			return one(ta.Ultimate(in["high"], in["low"], in["close"], p["fast"], p["mid"], p["slow"]))
+		}},
+	{"zigzag", []input{{"high", "high"}, {"low", "low"}}, []param{{"deviation", 5, false}}, []string{"line", "pivot"},
+		func(in map[string]ta.Series, p map[string]float64) map[string]ta.Series {
+			r := ta.ZigZag(in["high"], in["low"], p["deviation"])
+			return map[string]ta.Series{"line": r.Line, "pivot": r.Pivot}
+		}},
+	{"chandelier", hlcIn, []param{{"len", 22, false}, {"mult", 3, false}}, []string{"long", "short"},
+		func(in map[string]ta.Series, p map[string]float64) map[string]ta.Series {
+			r := ta.Chandelier(in["high"], in["low"], in["close"], p["len"], p["mult"])
+			return map[string]ta.Series{"long": r.Long, "short": r.Short}
 		}},
 }
 

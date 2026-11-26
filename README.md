@@ -79,8 +79,8 @@ import { SuperChart } from '@supersolutions/super-chart-react'
   onMarketChange={event => save(event)} style={{ height: 600 }} />
 ```
 
-Symbol, period, theme, locale and `ui` follow the props; the ref is the
-`ChartWorkspace`. Safe under Strict Mode and server rendering. Full example:
+Symbol, period, theme (`dark`, `light` or `auto` to follow the system), locale and `ui`
+follow the props; the ref is the `ChartWorkspace`. Safe under Strict Mode and server rendering. Full example:
 [examples/react](examples/react/README.md).
 
 ### Chrome, commands and interaction
@@ -99,11 +99,13 @@ host decides what the new price means. See [docs/WORKSPACE-UI.md](docs/WORKSPACE
 and [docs/API-LAYERS.md](docs/API-LAYERS.md).
 
 - Fourteen price series styles, plus Heikin Ashi display; indicators use raw OHLC.
+- Trading sessions: an optional `SymbolInfo.session` (weekly schedule in an IANA zone, holidays, early closes) shades pre-market and after hours, marks each new date and ends the countdown at the real close; faults are listed with stable codes by `getSessionState()`; see [docs/WORKSPACE-UI.md](docs/WORKSPACE-UI.md#trading-sessions).
+- Event marks: a datafeed with the optional `getMarks` gets earnings, dividends, splits and headlines drawn on the bars (one marker per bar, tooltip, an Objects list, stable rejection codes); see [docs/WORKSPACE-UI.md](docs/WORKSPACE-UI.md#event-marks) and [docs/DATAFEED-HTTP.md](docs/DATAFEED-HTTP.md).
 - Price-driven styles: Renko, line break, range bars, Kagi and point and figure (one mark per price move, not per time bar); see [docs/WORKSPACE-UI.md](docs/WORKSPACE-UI.md#price-driven-styles).
 - Linear, logarithmic, percentage and reversed price scales; editable price range.
 - Continuous pan/pinch/wheel zoom, keyboard navigation, optional reduced-motion-aware
   inertia, draggable pane boundaries and price axis.
-- Seven incremental built-ins (MA, EMA, BOLL, VOL, MACD, RSI, KDJ); 21 technical (including the WMA, HMA, DEMA, TEMA, VWMA and KAMA moving averages) and
+- Seven incremental built-ins (MA, EMA, BOLL, VOL, MACD, RSI, KDJ); 33 technical (the WMA, HMA, DEMA, TEMA, VWMA and KAMA moving averages, CVD, and Aroon, CMF, ADL, Force Index, Vortex, TSI, Ultimate, ZigZag, Pivot Points and Chandelier Exit) and
   19 classic definitions in core's `/indicators`.
 - All 65 drawing tools with selection, editing, lock/hide, bounded undo/redo and
   validated JSON import/export, a `drawingsChange` event, and optional server sync of
@@ -186,7 +188,8 @@ instead. AVP is omitted until turnover/volume units are explicit. Volume profile
 estimates activity across candle ranges, not trade prints; order blocks are heuristics.
 
 The workspace chrome is dark by default. Pass `theme: 'light'` or call
-`workspace.setTheme('light')` for matching light controls and canvas colours. Presets
+`workspace.setTheme('light')` for matching light controls and canvas colours, or
+`theme: 'auto'` to follow the system's light/dark setting live. Presets
 use the same `--sc-*` variables as the default UI; `WORKSPACE_CHROME_VARS` lists their
 names. Customize through host CSS or `ui.variables` (for example `--sc-background`,
 `--sc-text`, `--sc-control-background`), and use `chart.render` for canvas colours.

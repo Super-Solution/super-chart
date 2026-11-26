@@ -19,8 +19,9 @@ new SuperChart(host, { datafeed, symbol: { ticker: 'SAMPLE-USD', pricePrecision:
 | File | What it is |
 | --- | --- |
 | `httpDatafeed.ts` | `createHttpDatafeed({ baseUrl, token?, pollMs?, timeoutMs? })`: search, paged history, polling for the live bar; every request is cut off after `timeoutMs` (default 15 s) and a market keeps one poll timer however often it is re-subscribed |
-| `serve.mjs` | the contract over `data/<TICKER>.<period>.csv`; no auth, no rate limit, no TLS (an example) |
+| `serve.mjs` | the contract over `data/<TICKER>.<period>.csv` and `data/<TICKER>.marks.json` (`/v1/marks`); no auth, no rate limit, no TLS (an example) |
 | `data/SAMPLE-USD.1h.csv`, `.1d.csv` | fictional random-walk bars, `timestamp` as ISO-8601 UTC or epoch milliseconds |
+| `data/SAMPLE-USD.marks.json` | fictional events (a listing, a dividend, a split, earnings with guidance on one bar, a headline); `getMarks` on the adapter reads them through `/v1/marks` |
 | `data/symbols.json` | the symbol list the server answers `/v1/symbols` with |
 | `data/bars.response.json` | what a `/v1/bars` answer looks like |
 

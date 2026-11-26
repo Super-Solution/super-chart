@@ -3,10 +3,10 @@ export { EngineChart } from './chart'
 export type { EngineChartOptions, EngineConfiguration } from './chart'
 export { paintEngineFrame, paintEngineCursor } from './canvasRenderer'
 export { ChartWorkspace, ChartWorkspace as SuperChart } from './workspace'
-export type { WorkspacePriceMode } from './workspace'
+export type { WorkspacePriceMode, WorkspaceSessionState } from './workspace'
 export { WORKSPACE_SLOTS, WORKSPACE_PARTS } from './workspace'
 export type { ChartWorkspaceOptions, WorkspaceSearchOptions, SymbolSearchRequest, WorkspaceAppearanceOptions, WorkspaceSlotName, WorkspacePart, WorkspaceContextTarget, WorkspaceContextMenuOptions, WorkspaceCommandOptions } from './workspace'
-export { WORKSPACE_THEMES, WORKSPACE_CHROME_VARS, registerWorkspaceTheme, getWorkspaceTheme, listWorkspaceThemes } from './theme'
+export { WORKSPACE_THEMES, WORKSPACE_CHROME_VARS, AUTO_THEME, registerWorkspaceTheme, getWorkspaceTheme, listWorkspaceThemes, resolveThemeName, followColorScheme, prefersDark } from './theme'
 export type { WorkspaceTheme, WorkspaceThemeName, WorkspaceChromeKey, WorkspaceThemeInput } from './theme'
 export { registerLocale, listLocales, hasLocale, createTranslator } from './i18n'
 export type { WorkspaceMessages, WorkspaceMessageKey, Translator } from './i18n'
@@ -30,11 +30,13 @@ export type {
   PriceScaleOptions, PriceScaleMode,
   EngineFrame, EngineLayout, EngineInspection,
   WorkspaceDocumentV1, WorkspaceDocumentOptions, WorkspaceSavedRender,
-  Datafeed, SymbolInfo, Period, Timespan, HistoryRequest, HistoryResult, SearchRequest, DatafeedSubscribeCallback, MarketBar,
+  Datafeed, SymbolInfo, Period, Timespan, HistoryRequest, HistoryResult, SearchRequest, DatafeedSubscribeCallback, MarketBar, DatafeedMark, MarkTone, MarksRequest, SymbolSession, SessionKind, SessionIssue, SessionIssueCode, TradingSession,
   WorkspaceState, WorkspaceEvents, WorkspaceLoadState, WorkspaceLoadResult, WorkspaceMarket, WorkspaceReplayState
 } from '@supersolutions/super-chart-core'
 
 export type { WorkspaceDrawingStorage, WorkspaceDrawingCacheOptions } from './drawingDocuments'
+export { markSpecs, groupLabel, MARKS_LAYER } from './datafeedMarks'
+export type { WorkspaceMarksState } from './datafeedMarks'
 export { EngineAnnotations, ENGINE_ANNOTATION_LIMITS, ANNOTATION_TEMPLATE_LIMITS, BUILT_IN_ANNOTATION_TEMPLATES, DEFAULT_FIBONACCI_LEVELS } from './annotations'
 export type {
   EngineAnnotationSpec, EngineAnnotationKind, EngineAnnotationTone, EngineAnnotationAnchor, EngineAnnotationRange, EngineAnnotationSpan, EngineAnnotationSnapshot, EngineProjectedAnnotation, EngineSetAnnotationsResult,

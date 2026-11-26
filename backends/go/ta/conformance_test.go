@@ -35,6 +35,13 @@ type args struct {
 	Inc      float64 `json:"inc"`
 	Max      float64 `json:"max"`
 	ATRLen   float64 `json:"atrLen"`
+
+	Periods   Series  `json:"periods"`
+	Kind      float64 `json:"kind"`
+	Deviation float64 `json:"deviation"`
+	Long      float64 `json:"long"`
+	Short     float64 `json:"short"`
+	Mid       float64 `json:"mid"`
 }
 
 type testCase struct {
@@ -117,6 +124,32 @@ func run(c testCase) map[string]Series {
 	case "keltner":
 		r := Keltner(a.High, a.Low, a.Close, a.Len, a.Mult, a.ATRLen)
 		return map[string]Series{"basis": r.Basis, "upper": r.Upper, "lower": r.Lower}
+	case "aroon":
+		r := Aroon(a.High, a.Low, a.Len)
+		return map[string]Series{"up": r.Up, "down": r.Down}
+	case "cmf":
+		return map[string]Series{"": CMF(a.High, a.Low, a.Close, a.Volume, a.Len)}
+	case "adl":
+		return map[string]Series{"": ADL(a.High, a.Low, a.Close, a.Volume)}
+	case "forceIndex":
+		return map[string]Series{"": ForceIndex(a.Close, a.Volume, a.Len)}
+	case "vortex":
+		r := Vortex(a.High, a.Low, a.Close, a.Len)
+		return map[string]Series{"plus": r.Plus, "minus": r.Minus}
+	case "tsi":
+		r := TSI(a.Src, a.Long, a.Short, a.Signal)
+		return map[string]Series{"tsi": r.TSI, "signal": r.Signal}
+	case "ultimate":
+		return map[string]Series{"": Ultimate(a.High, a.Low, a.Close, a.Fast, a.Mid, a.Slow)}
+	case "zigzag":
+		r := ZigZag(a.High, a.Low, a.Deviation)
+		return map[string]Series{"line": r.Line, "pivot": r.Pivot}
+	case "pivotPoints":
+		r := PivotPoints(a.High, a.Low, a.Close, a.Periods, a.Kind)
+		return map[string]Series{"pp": r.PP, "r1": r.R1, "r2": r.R2, "r3": r.R3, "s1": r.S1, "s2": r.S2, "s3": r.S3}
+	case "chandelier":
+		r := Chandelier(a.High, a.Low, a.Close, a.Len, a.Mult)
+		return map[string]Series{"long": r.Long, "short": r.Short}
 	}
 	panic("unknown function " + c.Fn)
 }

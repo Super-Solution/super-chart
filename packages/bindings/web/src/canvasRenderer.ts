@@ -1,4 +1,4 @@
-import { nearestChartIndex, derivePrecision, formatBarDate, type FinancialChartModel, type ChartCandlePoint, type EngineRenderFrame, type EngineRenderOptions, type BarDateRequestType } from '@supersolutions/super-chart-core'
+import { nearestChartIndex, derivePrecision, formatBarDate, timeAxisTicks, sessionLayout, type FinancialChartModel, type ChartCandlePoint, type EngineRenderFrame, type EngineRenderOptions, type BarDateRequestType } from '@supersolutions/super-chart-core'
 import { paintPriceSeries } from './seriesRenderer'
 import { typicalPrice, halfBarWidth } from './geometry'
 import { timeLabelCentre } from './badge'
@@ -63,7 +63,6 @@ function precision (value: number | undefined): number {
   return value !== undefined && Number.isFinite(value) ? Math.max(0, Math.min(20, Math.trunc(value))) : 2
 }
 const dateLabels = new Map<string, string>()
-const calendarDates = new Map<string, Record<string, string>>()
 function boundedSet<T> (cache: Map<string, T>, key: string, value: T): T {
   if (cache.size >= 512) cache.delete(cache.keys().next().value as string)
   cache.set(key, value)
@@ -74,19 +73,6 @@ function timeLabel (displayDtf: Intl.DateTimeFormat, timestamp: number, options:
   const key = JSON.stringify([options.timeZone ?? 'UTC', timestamp, options.timespan ?? '', options.symbolTimezone, type, format])
   const cached = dateLabels.get(key)
   return cached ?? boundedSet(dateLabels, key, formatBarDate({ displayDtf, timestamp, timespan: options.timespan ?? '', symbolTimezone: options.symbolTimezone, type, format }))
-}
-function calendarDate (format: Intl.DateTimeFormat, timestamp: number, timezone: string): Record<string, string> {
-  const key = JSON.stringify([timezone, timestamp]), cached = calendarDates.get(key)
-  if (cached !== undefined) return cached
-  const date: Record<string, string> = {}
-  for (const part of format.formatToParts(timestamp)) if (part.type === 'year' || part.type === 'month' || part.type === 'day') date[part.type] = part.value
-  return boundedSet(calendarDates, key, date)
-}
-function boundaryFormat (date: Record<string, string>, previous: Record<string, string> | null): string {
-  if (previous === null) return 'MM-DD'
-  if (date.year !== previous.year) return 'YYYY'
-  if (date.month !== previous.month) return 'YYYY-MM'
-  return date.day !== previous.day ? 'MM-DD' : 'HH:mm'
 }
 function ready (m: FinancialChartModel): boolean {
   const g = m.geometry
@@ -200,6 +186,85 @@ function paintCandles (ctx: CanvasRenderingContext2D, m: FinancialChartModel, ca
   }
 }
 
+const BOLD_FONT = /^(\d+)\s/
+/** Emphasised (years, months, days) ticks are drawn heavier than times of day. */
+function boldFont (font: string): string { return font.replace(BOLD_FONT, '700 ') }
+/**
+ * The time-axis row: round-time ticks chosen for the width (`timeAxisTicks`), each with a short stroke at its bar and
+ * its label clear of the badge and the chart edge. Keys that are not timestamps (category axes) keep the three-point layout.
+ */
+function paintTimeAxis (ctx: CanvasRenderingContext2D, m: FinancialChartModel, p: Palette, options: EngineRenderOptions): void {
+  const g = m.geometry
+  const timestamps = m.xKeys as number[]
+  const timed = timestamps.length > 0 && timestamps.every(key => typeof key === 'number')
+  let labels: Array<{ index: number, label: string, emphasised: boolean }>
+  if (timed) {
+    const seconds = options.timespan === 'second'
+    const sample = ctx.measureText(seconds ? '00:00:00' : '00:00').width
+    labels = timeAxisTicks(timestamps, m.xPositions, {
+      timeZone: options.timeZone,
+      symbolTimezone: options.symbolTimezone,
+      timespan: options.timespan,
+      locale: options.locale,
+      minSpacing: sample + 40,
+      left: g.left,
+      right: g.right
+    }).map(tick => ({ index: tick.index, label: tick.label, emphasised: tick.level === 'year' || tick.level === 'month' || tick.level === 'day' }))
+  } else {
+    labels = m.xTickIndices.map(index => ({ index, label: String(m.xKeys[index]), emphasised: false }))
+  }
+  let labelRight = -Infinity
+  ctx.fillStyle = p.text; ctx.textAlign = 'center'
+  const font = ctx.font, heavy = boldFont(font)
+  ctx.strokeStyle = p.grid
+  for (const { index, label, emphasised } of labels) {
+    ctx.font = emphasised ? heavy : font
+    const width = Math.min(ctx.measureText(label).width, Math.max(1, g.width - 8))
+    const x = timeLabelCentre(m.xPositions[index], width, g.width, 4)
+    if (x - width / 2 < labelRight + 8) continue
+    ctx.beginPath(); ctx.moveTo(Math.round(m.xPositions[index]) + 0.5, g.bottom); ctx.lineTo(Math.round(m.xPositions[index]) + 0.5, g.bottom + 4); ctx.stroke()
+    ctx.fillStyle = emphasised ? options.text ?? p.ink : p.text
+    ctx.fillText(label, x, Math.min(g.height - 8, g.bottom + 18), width)
+    labelRight = x + width / 2
+  }
+  ctx.font = font
+}
+
+const DATE_ONLY: ReadonlySet<string> = new Set(['day', 'week', 'month', 'year'])
+/**
+ * Pre-market and after-hours as a wash behind the bars, and a faint dashed line where a new local date begins, from
+ * `options.session`. Intraday periods only (a bar of a day or more has no time of day); bars outside every session are
+ * left bare. The wash spans from the middle of the gap before the first extended bar to the middle of the gap after
+ * the last, so it meets the next bar's region without a seam.
+ */
+function paintSession (ctx: CanvasRenderingContext2D, m: FinancialChartModel, p: Palette, options: EngineRenderOptions): void {
+  const session = options.session
+  if (session === undefined || session === null || DATE_ONLY.has(options.timespan ?? '')) return
+  const xs = m.xPositions, count = xs.length, g = m.geometry
+  if (count < 2 || !m.xKeys.every(key => typeof key === 'number')) return
+  const { kinds, breaks } = sessionLayout(session, m.xKeys as number[])
+  const edge = (i: number, side: -1 | 1): number => {
+    const j = i + side
+    return j < 0 || j >= count ? xs[i] + side * Math.abs(xs[i] - xs[i - side]) / 2 : (xs[i] + xs[j]) / 2
+  }
+  ctx.fillStyle = colors(options.theme).inkWash
+  for (let i = 0; i < count; i++) {
+    if (kinds[i] !== 1 && kinds[i] !== 2) continue
+    let end = i
+    while (end + 1 < count && (kinds[end + 1] === 1 || kinds[end + 1] === 2)) end++
+    const left = edge(i, -1), right = edge(end, 1)
+    if (Number.isFinite(left) && Number.isFinite(right) && right > left) ctx.fillRect(left, g.top, right - left, g.plotHeight)
+    i = end
+  }
+  ctx.strokeStyle = p.grid; ctx.setLineDash([2, 4]); ctx.beginPath()
+  for (let i = 1; i < count; i++) {
+    if (breaks[i] === 0) continue
+    const x = Math.round(edge(i, -1)) + 0.5
+    if (Number.isFinite(x)) { ctx.moveTo(x, g.top); ctx.lineTo(x, g.bottom) }
+  }
+  ctx.stroke(); ctx.setLineDash([])
+}
+
 /**
  * Draw in the frame's logical-pixel coordinate system. The host sets the DPR transform.
  * No data or geometry is recalculated here; inspection and rendering use the same model.
@@ -214,7 +279,6 @@ export function paintEngineFrame (
   if (!ready(m)) return
   const p = palette(options)
   const digits = precision(options.pricePrecision ?? frame.pricePrecision ?? derivePrecision(frame.snapshot.bars))
-  const formatter = timeFormat(options.timeZone ?? 'UTC')
   const bars = frame.snapshot.bars
   const last = frame.indicatorPane === true ? undefined : bars[bars.length - 1]
   const lastY = last === undefined ? NaN : m.y(last.close)
@@ -232,6 +296,7 @@ export function paintEngineFrame (
     ctx.save()
     try {
       clipPlot(ctx, m)
+      paintSession(ctx, m, p, options)
       // Horizontal grid only: price levels matter, time is read from the axis.
       ctx.strokeStyle = p.grid
       ctx.beginPath()
@@ -344,20 +409,7 @@ export function paintEngineFrame (
       ctx.fillStyle = p.onMarket; ctx.textAlign = 'right'
       ctx.fillText(options.formatPrice?.(last.close, digits) ?? last.close.toFixed(digits), g.left - 6, Math.round(lastY), Math.max(1, g.left - 10))
     }
-    let labelRight = -Infinity
-    let previousDate: Record<string, string> | null = null
-    ctx.fillStyle = p.text; ctx.textAlign = 'center'
-    for (const index of options.showTimeAxis === false ? [] : m.xTickIndices) {
-      const key = m.xKeys[index]
-      const date = (options.timespan === 'minute' || options.timespan === 'second') && typeof key === 'number' && Number.isFinite(key) && Math.abs(key) <= 8.64e15 ? calendarDate(formatter, key, options.timeZone ?? 'UTC') : null
-      const label = typeof key === 'number' ? timeLabel(formatter, key, options, 'xAxis', date === null ? 'HH:mm' : boundaryFormat(date, previousDate)) : String(key)
-      const width = Math.min(ctx.measureText(label).width, Math.max(1, g.width - 8))
-      const x = timeLabelCentre(m.xPositions[index], width, g.width, 4)
-      if (x - width / 2 < labelRight + 8) continue
-      ctx.fillText(label, x, Math.min(g.height - 8, g.bottom + 18), width)
-      labelRight = x + width / 2
-      previousDate = date
-    }
+    if (options.showTimeAxis !== false) paintTimeAxis(ctx, m, p, options)
   } finally { ctx.restore() }
 }
 

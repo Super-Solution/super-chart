@@ -15,13 +15,14 @@ export type Value = number | Series
  */
 export type ParamKind = 'series' | 'length' | 'count' | 'number'
 
-export interface ParamSpec { name: string, kind: ParamKind, default?: number, min?: number }
+export interface ParamSpec { name: string, kind: ParamKind, default?: number, min?: number, max?: number }
 
 export type PriceSeries = 'open' | 'high' | 'low' | 'close' | 'volume'
 
 export interface BuiltinContext {
   n: number
-  series: (name: PriceSeries) => Series
+  /** A price series, or `time` (the bar's timestamp in milliseconds). */
+  series: (name: PriceSeries | 'time') => Series
 }
 
 type Group = 'ma' | 'osc' | 'vol' | 'volume' | 'trend' | 'range' | 'signal' | 'pivot' | 'math'
@@ -76,9 +77,12 @@ export function zipValue (a: Value, b: Value, f: (x: number, y: number) => numbe
 
 const S = (v: Value, ctx: BuiltinContext): Series => asSeries(v, ctx.n)
 const N = (v: Value): number => v as number
+/** Period key of every bar (null where the time is unknown) for the pivot levels. */
+const periodsOf = (c: BuiltinContext, anchor: number): Array<number | null> => c.series('time').map(t => t == null ? null : ta.periodBucket(t, anchor))
 
 const src = (name = 'src'): ParamSpec => ({ name, kind: 'series' })
 const len = (min = 1, name = 'len'): ParamSpec => ({ name, kind: 'length', min })
+const lenOr = (fallback: number, name = 'len'): ParamSpec => ({ name, kind: 'length', min: 1, default: fallback })
 
 function def (name: string, params: ParamSpec[], groups: Group[], impl: Builtin['impl'], note?: string): Builtin {
   const b: Builtin = { name, params, groups, impl }
@@ -123,6 +127,26 @@ const LIST: Builtin[] = [
   def('valuewhen', [src('cond'), src(), { name: 'occurrence', kind: 'count', default: 0 }], ['signal'], (a, c) => ta.valuewhen(S(a[0], c), S(a[1], c), N(a[2]))),
   def('pivothigh', [src(), { name: 'left', kind: 'count' }, { name: 'right', kind: 'count' }], ['pivot'], (a, c) => ta.pivot(S(a[0], c), N(a[1]), N(a[2]), 'high')),
   def('pivotlow', [src(), { name: 'left', kind: 'count' }, { name: 'right', kind: 'count' }], ['pivot'], (a, c) => ta.pivot(S(a[0], c), N(a[1]), N(a[2]), 'low')),
+  def('aroonup', [lenOr(14)], ['osc'], (a, c) => ta.aroon(c.series('high'), c.series('low'), N(a[0])).up, 'Aroon Up over high, 0..100'),
+  def('aroondown', [lenOr(14)], ['osc'], (a, c) => ta.aroon(c.series('high'), c.series('low'), N(a[0])).down, 'Aroon Down over low, 0..100'),
+  def('tsi', [src(), lenOr(13, 'short'), lenOr(25, 'long')], ['osc'], (a, c) => ta.tsi(S(a[0], c), N(a[2]), N(a[1])).tsi, 'true strength index, Pine argument order'),
+  def('tsisignal', [src(), lenOr(13, 'short'), lenOr(25, 'long'), lenOr(13, 'signal')], ['osc'], (a, c) => ta.tsi(S(a[0], c), N(a[2]), N(a[1]), N(a[3])).signal, 'EMA of tsi'),
+  def('ultimate', [lenOr(7, 'a'), lenOr(14, 'b'), lenOr(28, 'c')], ['osc'], (a, c) => ta.ultimate(c.series('high'), c.series('low'), c.series('close'), N(a[0]), N(a[1]), N(a[2])), 'ultimate oscillator, weights 4:2:1'),
+  def('vortexplus', [lenOr(14)], ['osc'], (a, c) => ta.vortex(c.series('high'), c.series('low'), c.series('close'), N(a[0])).plus, 'VI+'),
+  def('vortexminus', [lenOr(14)], ['osc'], (a, c) => ta.vortex(c.series('high'), c.series('low'), c.series('close'), N(a[0])).minus, 'VI-'),
+  def('cmf', [lenOr(20)], ['volume'], (a, c) => ta.cmf(c.series('high'), c.series('low'), c.series('close'), c.series('volume'), N(a[0])), 'Chaikin money flow, -1..1'),
+  def('adl', [], ['volume'], (_a, c) => ta.adl(c.series('high'), c.series('low'), c.series('close'), c.series('volume')), 'accumulation/distribution line'),
+  def('forceindex', [lenOr(13)], ['volume'], (a, c) => ta.forceIndex(c.series('close'), c.series('volume'), N(a[0])), 'EMA of change(close) * volume'),
+  def('chandelierlong', [lenOr(22), { name: 'mult', kind: 'number', default: 3 }], ['vol'], (a, c) => ta.chandelier(c.series('high'), c.series('low'), c.series('close'), N(a[0]), N(a[1])).long, 'highest(high,len) - mult*atr(len)'),
+  def('chandeliershort', [lenOr(22), { name: 'mult', kind: 'number', default: 3 }], ['vol'], (a, c) => ta.chandelier(c.series('high'), c.series('low'), c.series('close'), N(a[0]), N(a[1])).short, 'lowest(low,len) + mult*atr(len)'),
+  def('zigzag', [{ name: 'deviation', kind: 'number', default: 5 }], ['pivot'], (a, c) => ta.zigzag(c.series('high'), c.series('low'), N(a[0])).line, 'percent reversal; repaints, the last leg ends at the latest extreme, not for backtests'),
+  def('zigzagpivot', [{ name: 'deviation', kind: 'number', default: 5 }], ['pivot'], (a, c) => ta.zigzag(c.series('high'), c.series('low'), N(a[0])).pivot, 'confirmed zigzag pivots only; known after the reversal, not at the pivot bar'),
+  def('pivotpoint', [{ name: 'anchor', kind: 'count', default: 0, max: 4 }, { name: 'kind', kind: 'count', default: 0, max: 1 }], ['pivot'],
+    (a, c) => ta.pivotPoints(c.series('high'), c.series('low'), c.series('close'), periodsOf(c, N(a[0])), N(a[1])).pp, 'from the previous period; anchor 0 day 1 week 2 month 3 quarter 4 year (UTC); kind 0 classic 1 fibonacci'),
+  def('pivotresistance', [{ name: 'n', kind: 'length', min: 1, max: 3, default: 1 }, { name: 'anchor', kind: 'count', default: 0, max: 4 }, { name: 'kind', kind: 'count', default: 0, max: 1 }], ['pivot'],
+    (a, c) => { const r = ta.pivotPoints(c.series('high'), c.series('low'), c.series('close'), periodsOf(c, N(a[1])), N(a[2])); return N(a[0]) === 1 ? r.r1 : N(a[0]) === 2 ? r.r2 : r.r3 }, 'R1..R3'),
+  def('pivotsupport', [{ name: 'n', kind: 'length', min: 1, max: 3, default: 1 }, { name: 'anchor', kind: 'count', default: 0, max: 4 }, { name: 'kind', kind: 'count', default: 0, max: 1 }], ['pivot'],
+    (a, c) => { const r = ta.pivotPoints(c.series('high'), c.series('low'), c.series('close'), periodsOf(c, N(a[1])), N(a[2])); return N(a[0]) === 1 ? r.s1 : N(a[0]) === 2 ? r.s2 : r.s3 }, 'S1..S3'),
   unary('abs', Math.abs),
   unary('sign', Math.sign),
   unary('round', Math.round),

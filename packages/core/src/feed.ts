@@ -32,6 +32,40 @@ export interface SymbolInfo {
    * chart's timezone.
    */
   timezone?: string
+  /**
+   * When this symbol trades, for extended-hours shading and a countdown that ends at the real session close. Optional:
+   * a symbol that trades around the clock (most crypto) leaves it out and nothing changes. See `SymbolSession`.
+   */
+  session?: SymbolSession
+}
+
+/**
+ * A weekly trading schedule. Times are wall-clock in `timezone`, so daylight saving moves them in UTC by itself.
+ * A schedule is a list of segments `HHMM-HHMM` with an optional `:days` suffix (`1` Monday ... `7` Sunday, default
+ * `12345`), separated by commas: `"0930-1600"`, `"0400-0930,1600-2000:12345"`, `"1800-1700:1234,1800-2400:7"`. `2400`
+ * is allowed as an end. An end at or before the start crosses midnight and belongs to the day it starts on
+ * (`1800-1700` runs to 17:00 the next day); `0000-0000` is refused, write `0000-2400`. Where schedules overlap,
+ * `regular` wins over `pre` and `pre` over `post`.
+ *
+ * It is checked with `compileSession`; a schedule with any fault is ignored as a whole (so a half-right one never
+ * misleads) and the reasons, with stable codes, come back from the workspace's `getSessionState()`.
+ */
+export interface SymbolSession {
+  /** IANA zone the times are read in. Default: the symbol's `timezone`, then UTC. */
+  timezone?: string
+  /** The regular session. Required. */
+  regular: string
+  /** Pre-market segments, drawn as extended hours. */
+  pre?: string
+  /** After-hours segments, drawn as extended hours. */
+  post?: string
+  /** Dates with no session at all (holidays), `YYYY-MM-DD` in `timezone`. At most 2000 dates in `closed` and `exceptions` together. */
+  closed?: string[]
+  /**
+   * Dates whose schedule differs (an early close): each member replaces that field of the weekly schedule for the
+   * date, and an empty string means none that day. Segments here take no `:days` suffix.
+   */
+  exceptions?: Record<string, { regular?: string, pre?: string, post?: string }>
 }
 
 export interface Period {
@@ -94,6 +128,36 @@ export interface SearchRequest {
   signal: AbortSignal
 }
 
+/** How a mark reads on the chart: the same four tones annotations use (the chart picks the colours, in either theme). */
+export type MarkTone = 'bull' | 'bear' | 'neutral' | 'accent'
+
+/**
+ * An event that belongs to a moment, not to a price: an earnings date, a dividend, a split, a headline. The chart
+ * draws it as one marker on the bar the time falls in, through its annotation layer.
+ */
+export interface DatafeedMark {
+  /** Stable and unique within the answer (1 to 128 characters): the same event must keep its id between requests. */
+  id: string
+  /** When it happened, epoch milliseconds. It lands on the bar whose open time is the latest at or before it. */
+  time: number
+  /** What the marker says, up to 24 characters ("Earnings", "Div 0.24", "2:1"). Plain text, never HTML. */
+  label: string
+  /** The longer description shown in the tooltip and in the Objects list, up to 1024 characters. Plain text. */
+  text?: string
+  /** `bull` and `bear` use the chart's up and down colours, `accent` its highlight, `neutral` (default) muted ink. */
+  tone?: MarkTone
+  /** A CSS colour that overrides `tone`. Prefer `tone`: a fixed colour cannot follow the light and dark themes. */
+  color?: string
+  /** What kind of event, for the host's own grouping (`earnings`, `dividend`, `split`, `news`). Up to 32 characters; not drawn. */
+  category?: string
+}
+
+/** The fifth argument of getMarks. */
+export interface MarksRequest {
+  /** Aborted when the answer is no longer wanted (the symbol or period changed, the view moved on, or the chart was disposed). */
+  signal: AbortSignal
+}
+
 export interface Datafeed {
   /** A rejection (or throw) shows "Search failed" with Retry in the search dialog. */
   searchSymbols (search?: string, request?: SearchRequest): Promise<SymbolInfo[]>
@@ -120,6 +184,14 @@ export interface Datafeed {
    * `{ bars, noData: true }` to say there is nothing older.
    */
   getHistoryKLineData (symbol: SymbolInfo, period: Period, from: number, to: number, request?: HistoryRequest): Promise<MarketBar[] | HistoryResult>
+  /**
+   * Optional. Events to mark on the chart (earnings, dividends, splits, news) with `from <= time < to` (ms), in any
+   * order. The workspace asks for the visible range plus one view-width either side, after the view settles, and again
+   * when the symbol or interval changes or `refreshMarks()` is called; it never polls. A chart without this method asks
+   * for nothing and shows no marks. Resolve with `[]` for "none". A rejection leaves the chart as it was and is reported
+   * by `getMarksState()`. At most 10 marks are drawn per bar and 1000 per answer; the rest are reported, not drawn.
+   */
+  getMarks? (symbol: SymbolInfo, period: Period, from: number, to: number, request?: MarksRequest): Promise<DatafeedMark[]>
   /** Start live updates for this pair. The chart calls it once per load, after the history. */
   subscribe: (symbol: SymbolInfo, period: Period, callback: DatafeedSubscribeCallback) => void
   /**

@@ -187,7 +187,8 @@ describe("SuperScript: diagnostics", () => {
 
 // The reference is the AI system prompt: everything it documents must compile.
 describe("SuperScript: the reference compiles", () => {
-  const bars = wavy(300);
+  // Hourly, so the 300 bars span twelve days: the pivot levels come from the previous day and need more than one.
+  const bars = wavy(300).map((b, i) => ({ ...b, timestamp: i * 3_600_000 }));
 
   it("every function in the reference compiles and plots a value", () => {
     const ref = superscriptReference();

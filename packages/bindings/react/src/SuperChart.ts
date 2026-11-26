@@ -4,7 +4,7 @@ import type { AnnotationIntentEvent } from '@supersolutions/super-chart-web/anno
 import { periodKey, parsePeriod, symbolKey, type Period, type SymbolInfo } from '@supersolutions/super-chart-core'
 
 /**
- * Props of the React chart. The market, the theme, the locale and the layout follow the props after mount; everything else
+ * Props of the React chart. The market, the theme (`theme="auto"` follows the system's light/dark setting live), the locale and the layout follow the props after mount; everything else
  * in `ChartWorkspaceOptions` (`chart`, `loader`, `search`, `commands`, `contextMenu`, `drawingCache`, `countdown`,
  * `periods`) is read once when the chart mounts. Changing `datafeed` mounts a new chart, because it is a new source of
  * data: create it outside the component or memoize it, or every render replaces the chart.

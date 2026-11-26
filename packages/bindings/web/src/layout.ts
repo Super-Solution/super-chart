@@ -16,9 +16,12 @@ export function resolveLayout (mode: WorkspaceLayoutMode, width: number): Worksp
   return width < LAYOUT_BREAKPOINTS.narrow ? 'narrow' : width < LAYOUT_BREAKPOINTS.compact ? 'compact' : 'regular'
 }
 
-/** `auto` shows an interval bar unless the layout is narrow, where one dropdown takes less room. */
-export function resolveIntervalControl (control: WorkspaceIntervalControl, layout: WorkspaceLayoutClass): 'bar' | 'select' {
-  return control === 'auto' ? (layout === 'narrow' ? 'select' : 'bar') : control
+/**
+ * `auto` shows an interval bar unless the layout is narrow, or the bar does not fit beside the rest of the market bar
+ * (`fits` false), where one dropdown takes less room. A bar that is cut off or scrolls out of sight is never shown.
+ */
+export function resolveIntervalControl (control: WorkspaceIntervalControl, layout: WorkspaceLayoutClass, fits = true): 'bar' | 'select' {
+  return control === 'auto' ? (layout === 'narrow' || !fits ? 'select' : 'bar') : control
 }
 
 export function validLayoutMode (value: unknown): WorkspaceLayoutMode {

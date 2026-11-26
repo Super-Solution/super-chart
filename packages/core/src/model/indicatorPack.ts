@@ -2,7 +2,8 @@ import type { MarketBar } from '../types'
 import { indicatorField as priceSeries, ownedKernel, ownedWindow } from './indicatorInputs'
 import {
   atr, atrBands, keltner, donchian, anchoredVwap, sma, rsi, macd, stochK,
-  stochRsi, mfi, bbPercent, supertrend, ichimoku, wma, hma, vwma, dema, tema, kama, type Series
+  stochRsi, mfi, bbPercent, supertrend, ichimoku, wma, hma, vwma, dema, tema, kama,
+  aroon, adl, cmf, forceIndex, vortex, tsi, ultimate, zigzag, pivotPoints, chandelier, periodBucket, type Series
 } from '../ta'
 import { previousRangeHighLow } from '../analysis/previousRangeHighLow'
 import type { EngineIndicators, IndicatorDefinition, IndicatorFigure, IndicatorRow } from './indicators'
@@ -13,7 +14,8 @@ export const TECHNICAL_INDICATOR_NAMES = Object.freeze([
   'SC_ATR', 'SC_ATR_BANDS', 'SC_KELTNER', 'SC_DONCHIAN', 'SC_VWAP',
   'SC_STOCH', 'SC_STOCHRSI', 'SC_MFI', 'SC_BBP', 'SC_SUPERTREND', 'SC_ICHIMOKU', 'SC_PDHL',
   'SC_WMA', 'SC_HMA', 'SC_DEMA', 'SC_TEMA', 'SC_VWMA', 'SC_KAMA',
-  'SC_CVD', 'SC_CVD_EST'
+  'SC_CVD', 'SC_CVD_EST',
+  'SC_AROON', 'SC_CMF', 'SC_ADL', 'SC_FORCE', 'SC_VORTEX', 'SC_TSI', 'SC_ULTIMATE', 'SC_ZIGZAG', 'SC_PIVOTS', 'SC_CHANDELIER'
 ] as const)
 
 export type TechnicalIndicatorName = typeof TECHNICAL_INDICATOR_NAMES[number]
@@ -39,7 +41,13 @@ function lines (...entries: Array<readonly [string, string]>): readonly Indicato
   return Object.freeze(entries.map(([key, title]) => Object.freeze({ key, title, type: 'line' as const })))
 }
 
-type ParameterKind = 'period' | 'positive' | 'anchor' | 'offset' | 'range' | 'reset'
+const UP = '#26A69A', DOWN = '#EF5350', LEVEL = '#787B86'
+/** Lines that mean something by colour (up/down, resistance/support); the rest take the pane's palette. */
+function tinted (...entries: Array<readonly [string, string, string, ReadonlyArray<number>?]>): readonly IndicatorFigure[] {
+  return Object.freeze(entries.map(([key, title, color, dash]) => Object.freeze({ key, title, type: 'line' as const, color, ...(dash === undefined ? {} : { dash: Object.freeze([...dash]) }) })))
+}
+
+type ParameterKind = 'period' | 'positive' | 'anchor' | 'offset' | 'range' | 'reset' | 'kind'
 
 /** Missing values use the existing SC defaults; invalid explicit values fail instead of silently changing the requested calculation. */
 function parameters (name: string, supplied: readonly number[], defaults: readonly number[], kinds: readonly ParameterKind[]): readonly number[] {
@@ -52,10 +60,10 @@ function parameters (name: string, supplied: readonly number[], defaults: readon
         if (!Number.isSafeInteger(value) || value < 1) throw new RangeError(`${name} periods must be positive safe integers`)
         break
       case 'positive':
-        if (value <= 0) throw new RangeError(`${name} multiplier must be positive`)
+        if (value <= 0) throw new RangeError(`${name} multiplier or percentage must be positive`)
         break
       case 'anchor':
-        if (!Number.isInteger(value) || value < 0 || value > 4) throw new RangeError('SC_VWAP anchor must be 0, 1, 2, 3 or 4')
+        if (!Number.isInteger(value) || value < 0 || value > 4) throw new RangeError(`${name} anchor must be 0 (day), 1 (week), 2 (month), 3 (quarter) or 4 (year)`)
         break
       case 'offset': break // A fixed offset in minutes, matching the existing SC_VWAP calculation.
       case 'range':
@@ -63,6 +71,9 @@ function parameters (name: string, supplied: readonly number[], defaults: readon
         break
       case 'reset':
         if (value !== 0 && value !== 1) throw new RangeError(`${name} reset must be 0 (never) or 1 (every UTC day)`)
+        break
+      case 'kind':
+        if (value !== 0 && value !== 1) throw new RangeError(`${name} kind must be 0 (classic) or 1 (Fibonacci)`)
         break
     }
     return value
@@ -126,23 +137,6 @@ function cumulate (bars: readonly MarketBar[], delta: Series, daily: boolean): S
 const bands = lines(['basis', 'Basis'], ['upper', 'Upper'], ['lower', 'Lower'])
 const oscillator = lines(['k', '%K'], ['d', '%D'])
 const DAY_MS = 86400000
-
-/**
- * Exact fixed-offset bucket convention of existing SC_VWAP. The weekly epoch
- * offset is retained; this does not introduce exchange sessions or DST rules.
- */
-function vwapPeriod (timestamp: number, anchor: number, offset: number): number | null {
-  const shifted = timestamp + offset * 60000
-  if (!Number.isFinite(shifted)) return null
-  if (anchor === 0) return Math.floor(shifted / DAY_MS)
-  if (anchor === 1) return Math.floor((Math.floor(shifted / DAY_MS) - 3) / 7)
-  const date = new Date(shifted)
-  const year = date.getUTCFullYear(), month = date.getUTCMonth()
-  if (!Number.isFinite(year)) return null
-  if (anchor === 2) return year * 100 + month
-  if (anchor === 3) return year * 10 + Math.floor(month / 3)
-  return year
-}
 
 /**
  * Existing SC formulas, independent of their old template/drawing layer.
@@ -225,7 +219,7 @@ export const TECHNICAL_INDICATOR_DEFINITIONS: readonly IndicatorDefinition[] = O
   define('SC_VWAP', [0, 0, 2], ['anchor', 'offset', 'positive'], 'price', lines(['vwap', 'VWAP'], ['upper', 'Upper'], ['lower', 'Lower']), (bars, p) => {
     const { high, low, close } = prices(bars)
     const volume = priceSeries(bars, 'volume')
-    const periods = bars.map(bar => vwapPeriod(bar.timestamp, p[0], p[1]))
+    const periods = bars.map(bar => periodBucket(bar.timestamp, p[0], p[1]))
     const result = anchoredVwap(high, low, close, volume, periods, true)
     const upper: Series = new Array(bars.length), lower: Series = new Array(bars.length)
     for (let i = 0; i < bars.length; i++) {
@@ -314,6 +308,52 @@ export const TECHNICAL_INDICATOR_DEFINITIONS: readonly IndicatorDefinition[] = O
       delta[i] = !known ? null : high > low ? (volume as number) * (2 * close - high - low) / (high - low) : 0
     }
     return rows(['cvd'], [cumulate(bars, delta, p[0] === 1)])
+  }),
+  define('SC_AROON', [14], ['period'], 'separate', tinted(['up', 'Aroon Up', UP], ['down', 'Aroon Down', DOWN]), (bars, p) => {
+    const result = aroon(priceSeries(bars, 'high'), priceSeries(bars, 'low'), p[0])
+    return rows(['up', 'down'], [result.up, result.down])
+  }),
+  define('SC_CMF', [20], ['period'], 'separate', Object.freeze([Object.freeze({ key: 'cmf', title: 'CMF', type: 'line' as const })]), (bars, p) => {
+    const { high, low, close } = prices(bars)
+    return rows(['cmf'], [cmf(high, low, close, priceSeries(bars, 'volume'), p[0])])
+  }),
+  define('SC_ADL', [], [], 'separate', lines(['adl', 'ADL']), (bars) => {
+    const { high, low, close } = prices(bars)
+    return rows(['adl'], [adl(high, low, close, priceSeries(bars, 'volume'))])
+  }),
+  define('SC_FORCE', [13], ['period'], 'separate', lines(['force', 'Force Index']), (bars, p) => {
+    return rows(['force'], [forceIndex(priceSeries(bars, 'close'), priceSeries(bars, 'volume'), p[0])])
+  }),
+  define('SC_VORTEX', [14], ['period'], 'separate', tinted(['plus', 'VI+', UP], ['minus', 'VI-', DOWN]), (bars, p) => {
+    const { high, low, close } = prices(bars)
+    const result = vortex(high, low, close, p[0])
+    return rows(['plus', 'minus'], [result.plus, result.minus])
+  }),
+  define('SC_TSI', [25, 13, 13], ['period', 'period', 'period'], 'separate', lines(['tsi', 'TSI'], ['signal', 'Signal']), (bars, p) => {
+    const result = tsi(priceSeries(bars, 'close'), p[0], p[1], p[2])
+    return rows(['tsi', 'signal'], [result.tsi, result.signal])
+  }),
+  define('SC_ULTIMATE', [7, 14, 28], ['period', 'period', 'period'], 'separate', lines(['uo', 'Ultimate']), (bars, p) => {
+    const { high, low, close } = prices(bars)
+    return rows(['uo'], [ultimate(high, low, close, p[0], p[1], p[2])])
+  }),
+  define('SC_ZIGZAG', [5], ['positive'], 'price', lines(['zigzag', 'ZigZag']), (bars, p) => {
+    // Repaints: legs move as bars arrive and the last one stops at the latest extreme. Not a backtest signal.
+    return rows(['zigzag'], [zigzag(priceSeries(bars, 'high'), priceSeries(bars, 'low'), p[0]).line])
+  }),
+  define('SC_PIVOTS', [0, 0, 0], ['anchor', 'offset', 'kind'], 'price', tinted(
+    ['pp', 'Pivot', LEVEL], ['r1', 'R1', DOWN, [4, 3]], ['r2', 'R2', DOWN, [4, 3]], ['r3', 'R3', DOWN, [4, 3]],
+    ['s1', 'S1', UP, [4, 3]], ['s2', 'S2', UP, [4, 3]], ['s3', 'S3', UP, [4, 3]]
+  ), (bars, p) => {
+    const { high, low, close } = prices(bars)
+    const periods = bars.map(bar => periodBucket(bar.timestamp, p[0], p[1]))
+    const result = pivotPoints(high, low, close, periods, p[2])
+    return rows(['pp', 'r1', 'r2', 'r3', 's1', 's2', 's3'], [result.pp, result.r1, result.r2, result.r3, result.s1, result.s2, result.s3])
+  }),
+  define('SC_CHANDELIER', [22, 3], ['period', 'positive'], 'price', tinted(['long', 'Long exit', UP], ['short', 'Short exit', DOWN]), (bars, p) => {
+    const { high, low, close } = prices(bars)
+    const result = chandelier(high, low, close, p[0], p[1])
+    return rows(['long', 'short'], [result.long, result.short])
   }),
   define('SC_PDHL', [0], ['range'], 'price', lines(['high', 'Previous High'], ['low', 'Previous Low']), (bars, p) => {
     const range = previousRangeHighLow(bars, p[0] === 1 ? 'week' : 'day', 'UTC')

@@ -3,7 +3,8 @@
 Technical-analysis kernels for Super Chart: `sma`, `ema`, `rma`, `wma`, `hma`, `vwma`, `rsi`, `macd`, `stdev`,
 `dev`, `bollinger`, `bb_percent`, `true_range`, `atr`, `keltner`, `highest`, `lowest`, `change`, `mom`, `roc`,
 `crossover`, `crossunder`, `cross`, `cum`, `barssince`, `obv`, `vwap`, `cci`, `mfi`, `stoch`, `stoch_k`,
-`stoch_rsi` and `sar`. A series is a list of `float | None`. The TypeScript package in `packages/core` is the
+`stoch_rsi`, `sar`, `aroon`, `cmf`, `adl`, `force_index`, `vortex`, `tsi`, `ultimate`, `zigzag`, `pivot_points` and
+`chandelier`. A series is a list of `float | None`. The TypeScript package in `packages/core` is the
 reference; this port reproduces every case in [`../../conformance`](../../conformance/README.md). Pure standard
 library, no dependencies.
 

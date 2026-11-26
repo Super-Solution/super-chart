@@ -1108,3 +1108,328 @@ export function anchoredVwap (high: Series, low: Series, close: Series, volume: 
   }
   return { vwap, stdev: sd }
 }
+
+// --------------------------------------------------------------------------
+// Volume flow, trend, momentum and reference-level indicators
+// --------------------------------------------------------------------------
+
+const DAY_MS = 86400000
+
+/**
+ * The bucket a timestamp falls in, for indicators that restart per period. `anchor` is 0 day, 1 week,
+ * 2 month, 3 quarter, 4 year; `offset` shifts the bucket edges by a fixed number of minutes (no exchange
+ * sessions and no DST). Weeks run Sunday to Saturday (UTC), as SC_VWAP's always have. A timestamp that is not finite gives null.
+ */
+export function periodBucket (timestamp: number, anchor: number, offset = 0): number | null {
+  const shifted = timestamp + offset * 60000
+  if (!Number.isFinite(shifted)) return null
+  if (anchor === 0) return Math.floor(shifted / DAY_MS)
+  if (anchor === 1) return Math.floor((Math.floor(shifted / DAY_MS) - 3) / 7)
+  const date = new Date(shifted)
+  const year = date.getUTCFullYear(), month = date.getUTCMonth()
+  if (!Number.isFinite(year)) return null
+  if (anchor === 2) return year * 100 + month
+  if (anchor === 3) return year * 10 + Math.floor(month / 3)
+  return year
+}
+
+function finiteAt (s: ArrayLike<number | null>, i: number): number | null {
+  const v = i >= 0 && i < s.length ? s[i] : null
+  return v != null && Number.isFinite(v) ? v : null
+}
+
+/**
+ * Bars since the extreme of the last `window` values (0 = this bar), the most recent bar on a tie. A null or
+ * non-finite value restarts the window, so the first output needs `window` consecutive finite values. O(n).
+ */
+function barsSinceExtreme (src: Series, window: number, max: boolean): Series {
+  const n = src.length
+  const out = nulls(n)
+  if (!isLength(window)) return out
+  const queue = new Int32Array(n)
+  let head = 0, tail = 0, run = 0
+  for (let i = 0; i < n; i++) {
+    const v = finiteAt(src, i)
+    if (v === null) { head = 0; tail = 0; run = 0; continue }
+    run++
+    while (tail > head) {
+      const last = src[queue[tail - 1]] as number
+      if (max ? last <= v : last >= v) tail--
+      else break
+    }
+    queue[tail++] = i
+    while (queue[head] <= i - window) head++
+    if (run >= window) out[i] = i - queue[head]
+  }
+  return out
+}
+
+export interface AroonResult { up: Series, down: Series }
+
+/**
+ * Aroon over `len` bars: `100 * (len - barsSinceHigh) / len` (up) and the same for the low (down), each
+ * looking at the last `len + 1` bars as TradingView does. The most recent bar wins a tie. A null or
+ * non-finite high or low restarts the window.
+ */
+export function aroon (high: Series, low: Series, len: number): AroonResult {
+  const n = high.length
+  if (!isLength(len)) return { up: nulls(n), down: nulls(n) }
+  const score = (k: number | null): number | null => k === null ? null : 100 * (len - k) / len
+  return {
+    up: barsSinceExtreme(high, len + 1, true).map(score),
+    down: barsSinceExtreme(low, len + 1, false).map(score)
+  }
+}
+
+/**
+ * Money flow volume per bar: the close's position in the range, from -1 (at the low) to +1 (at the high), times
+ * volume; 0 on a bar with no range. A bar missing a high, low or close gives null in both series; a missing or
+ * non-finite volume counts as 0, like `obv`.
+ */
+function moneyFlow (high: Series, low: Series, close: Series, volume: Series): { flow: Series, volume: Series } {
+  const n = close.length
+  const flow = nulls(n)
+  const vol = nulls(n)
+  for (let i = 0; i < n; i++) {
+    const h = finiteAt(high, i), l = finiteAt(low, i), c = finiteAt(close, i)
+    if (h === null || l === null || c === null) continue
+    const v = finiteAt(volume, i) ?? 0
+    const multiplier = h === l ? 0 : ((c - l) - (h - c)) / (h - l)
+    flow[i] = multiplier * v
+    vol[i] = v
+  }
+  return { flow, volume: vol }
+}
+
+/** Accumulation/distribution line: the running total of money flow volume. Bars missing a price are gaps and add nothing. */
+export function adl (high: Series, low: Series, close: Series, volume: Series): Series {
+  const { flow } = moneyFlow(high, low, close, volume)
+  const out = nulls(flow.length)
+  let total = 0
+  for (let i = 0; i < flow.length; i++) {
+    const f = flow[i]
+    if (f === null) continue
+    total += f
+    out[i] = total
+  }
+  return out
+}
+
+/** Chaikin money flow: money flow volume over volume, both summed over `len` bars; null where the window has no volume. */
+export function cmf (high: Series, low: Series, close: Series, volume: Series, len: number): Series {
+  const { flow, volume: vol } = moneyFlow(high, low, close, volume)
+  const a = sum(flow, len), b = sum(vol, len)
+  return a.map((x, i) => {
+    const y = b[i]
+    return x === null || y === null || y === 0 ? null : x / y
+  })
+}
+
+/** Force index: the EMA of (close change) * volume. */
+export function forceIndex (close: Series, volume: Series, len: number): Series {
+  const n = close.length
+  const raw = nulls(n)
+  for (let i = 1; i < n; i++) {
+    const c = finiteAt(close, i), p = finiteAt(close, i - 1)
+    if (c === null || p === null) continue
+    raw[i] = (c - p) * (finiteAt(volume, i) ?? 0)
+  }
+  return ema(raw, len)
+}
+
+export interface VortexResult { plus: Series, minus: Series }
+
+/**
+ * Vortex indicator: VI+ = sum(|high - previous low|) / sum(TR) and VI- = sum(|low - previous high|) / sum(TR)
+ * over `len` bars. A bar needs a finite high, low and close on itself and on the bar before; a window with
+ * no true range gives null.
+ */
+export function vortex (high: Series, low: Series, close: Series, len: number): VortexResult {
+  const n = close.length
+  const up = nulls(n), down = nulls(n), range = nulls(n)
+  for (let i = 1; i < n; i++) {
+    const h = finiteAt(high, i), l = finiteAt(low, i), c = finiteAt(close, i)
+    const ph = finiteAt(high, i - 1), pl = finiteAt(low, i - 1), pc = finiteAt(close, i - 1)
+    if (h === null || l === null || c === null || ph === null || pl === null || pc === null) continue
+    up[i] = Math.abs(h - pl)
+    down[i] = Math.abs(l - ph)
+    range[i] = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc))
+  }
+  const tr = sum(range, len)
+  const ratio = (s: Series): Series => {
+    const total = sum(s, len)
+    return total.map((x, i) => {
+      const t = tr[i]
+      return x === null || t === null || t === 0 ? null : x / t
+    })
+  }
+  return { plus: ratio(up), minus: ratio(down) }
+}
+
+export interface TsiResult { tsi: Series, signal: Series }
+
+/**
+ * True strength index: 100 * EMA(EMA(change, long), short) / EMA(EMA(|change|, long), short), and its signal
+ * EMA. The EMAs are seeded from an SMA like every `ema` here; a flat stretch (no movement) gives null.
+ */
+export function tsi (src: Series, long = 25, short = 13, signal = 13): TsiResult {
+  const n = src.length
+  const move = nulls(n), size = nulls(n)
+  for (let i = 1; i < n; i++) {
+    const c = finiteAt(src, i), p = finiteAt(src, i - 1)
+    if (c === null || p === null) continue
+    move[i] = c - p
+    size[i] = Math.abs(c - p)
+  }
+  const top = ema(ema(move, long), short)
+  const bottom = ema(ema(size, long), short)
+  const line = top.map((x, i) => {
+    const y = bottom[i]
+    return x === null || y === null || y === 0 ? null : 100 * x / y
+  })
+  return { tsi: line, signal: ema(line, signal) }
+}
+
+/**
+ * Ultimate oscillator: buying pressure (close - min(low, previous close)) over true range, averaged over three
+ * windows with weights 4, 2 and 1, scaled to 0..100. The first bar has no previous close, so it is null.
+ */
+export function ultimate (high: Series, low: Series, close: Series, a = 7, b = 14, c = 28): Series {
+  const n = close.length
+  const pressure = nulls(n), range = nulls(n)
+  for (let i = 1; i < n; i++) {
+    const h = finiteAt(high, i), l = finiteAt(low, i), cl = finiteAt(close, i), pc = finiteAt(close, i - 1)
+    if (h === null || l === null || cl === null || pc === null) continue
+    const floor = Math.min(l, pc), ceiling = Math.max(h, pc)
+    pressure[i] = cl - floor
+    range[i] = ceiling - floor
+  }
+  const windows = [a, b, c].map(len => {
+    const p = sum(pressure, len), r = sum(range, len)
+    return p.map((x, i) => {
+      const y = r[i]
+      return x === null || y === null || y === 0 ? null : x / y
+    })
+  })
+  return windows[0].map((x, i) => {
+    const y = windows[1][i], z = windows[2][i]
+    return x === null || y === null || z === null ? null : 100 * (4 * x + 2 * y + z) / 7
+  })
+}
+
+export interface ZigZagResult {
+  /** The zigzag line: straight legs between pivots, the last leg ending at the latest extreme. Null before the first pivot. */
+  line: Series
+  /** The price of each confirmed pivot on its bar (highs at tops, lows at bottoms); null elsewhere. */
+  pivot: Series
+}
+
+/**
+ * ZigZag by percentage reversal: a leg ends when price turns against it by at least `deviation` percent of
+ * the extreme, measured on highs for a top and lows for a bottom. Bars missing a high or low are skipped.
+ *
+ * This repaints. A pivot is only known once price has reversed, so earlier legs move as bars arrive and the
+ * last leg reaches only the latest extreme, which may still be extended. `pivot` lists the confirmed ones;
+ * neither series is a historical signal and neither is safe to backtest on.
+ */
+export function zigzag (high: Series, low: Series, deviation = 5): ZigZagResult {
+  const n = Math.min(high.length, low.length)
+  const line = nulls(high.length), pivot = nulls(high.length)
+  if (!(Number.isFinite(deviation) && deviation > 0)) return { line, pivot }
+  const rise = 1 + deviation / 100, fall = 1 - deviation / 100
+  const marks: Array<[number, number]> = []
+  let direction = 0
+  let topValue = 0, topIndex = -1, bottomValue = 0, bottomIndex = -1
+  for (let i = 0; i < n; i++) {
+    const h = finiteAt(high, i), l = finiteAt(low, i)
+    if (h === null || l === null) continue
+    if (topIndex < 0) { topValue = h; topIndex = i; bottomValue = l; bottomIndex = i; continue }
+    if (direction === 0) {
+      if (h > topValue) { topValue = h; topIndex = i }
+      if (l < bottomValue) { bottomValue = l; bottomIndex = i }
+      if (topIndex > bottomIndex && topValue >= bottomValue * rise) {
+        marks.push([bottomIndex, bottomValue]); direction = 1
+      } else if (bottomIndex > topIndex && bottomValue <= topValue * fall) {
+        marks.push([topIndex, topValue]); direction = -1
+      }
+    } else if (direction === 1) {
+      if (h > topValue) { topValue = h; topIndex = i } else if (l <= topValue * fall) {
+        marks.push([topIndex, topValue]); direction = -1; bottomValue = l; bottomIndex = i
+      }
+    } else if (l < bottomValue) { bottomValue = l; bottomIndex = i } else if (h >= bottomValue * rise) {
+      marks.push([bottomIndex, bottomValue]); direction = 1; topValue = h; topIndex = i
+    }
+  }
+  if (direction === 0) return { line, pivot }
+  const confirmed = marks.length
+  marks.push(direction === 1 ? [topIndex, topValue] : [bottomIndex, bottomValue])
+  for (let k = 0; k < confirmed; k++) pivot[marks[k][0]] = marks[k][1]
+  for (let k = 0; k + 1 < marks.length; k++) {
+    const [from, a] = marks[k], [to, b] = marks[k + 1]
+    for (let i = from; i < to; i++) {
+      if (finiteAt(high, i) === null || finiteAt(low, i) === null) continue
+      line[i] = a + (b - a) * (i - from) / (to - from)
+    }
+    line[to] = b
+  }
+  return { line, pivot }
+}
+
+export interface PivotPointsResult { pp: Series, r1: Series, r2: Series, r3: Series, s1: Series, s2: Series, s3: Series }
+
+/**
+ * Pivot points from the previous completed period. `periods[i]` is the period key of bar i (see `periodBucket`);
+ * a new key starts a new period, and every bar of a period gets the levels computed from the period before it
+ * (null for the first period, and for a bar with a null key). `kind` 0 is classic: PP = (H + L + C) / 3,
+ * R1 = 2PP - L, S1 = 2PP - H, R2/S2 = PP +/- (H - L), R3 = H + 2(PP - L), S3 = L - 2(H - PP). `kind` 1 is
+ * Fibonacci: PP +/- 0.382, 0.618 and 1.0 times the range. H, L and C are the period's highest high, lowest
+ * low and last close; a period with no complete bar is ignored.
+ *
+ * The levels are known at the open, so they use no future data.
+ */
+export function pivotPoints (high: Series, low: Series, close: Series, periods: ReadonlyArray<number | null>, kind = 0): PivotPointsResult {
+  const n = close.length
+  const result: PivotPointsResult = { pp: nulls(n), r1: nulls(n), r2: nulls(n), r3: nulls(n), s1: nulls(n), s2: nulls(n), s3: nulls(n) }
+  if (kind !== 0 && kind !== 1) return result
+  let key: number | null = null
+  let h = 0, l = 0, c = 0, any = false
+  let levels: number[] | null = null
+  for (let i = 0; i < n; i++) {
+    const p = periods[i] ?? null
+    if (p === null) continue
+    if (p !== key) {
+      if (any) {
+        const pp = (h + l + c) / 3, range = h - l
+        levels = kind === 0
+          ? [pp, 2 * pp - l, pp + range, h + 2 * (pp - l), 2 * pp - h, pp - range, l - 2 * (h - pp)]
+          : [pp, pp + 0.382 * range, pp + 0.618 * range, pp + range, pp - 0.382 * range, pp - 0.618 * range, pp - range]
+      }
+      key = p; any = false
+    }
+    const bh = finiteAt(high, i), bl = finiteAt(low, i), bc = finiteAt(close, i)
+    if (bh !== null && bl !== null && bc !== null) {
+      if (!any) { h = bh; l = bl; any = true } else { h = Math.max(h, bh); l = Math.min(l, bl) }
+      c = bc
+    }
+    if (levels !== null) {
+      result.pp[i] = levels[0]; result.r1[i] = levels[1]; result.r2[i] = levels[2]; result.r3[i] = levels[3]
+      result.s1[i] = levels[4]; result.s2[i] = levels[5]; result.s3[i] = levels[6]
+    }
+  }
+  return result
+}
+
+export interface ChandelierResult { long: Series, short: Series }
+
+/**
+ * Chandelier exit: the highest high of `len` bars minus `mult` times ATR (the long stop), and the lowest low
+ * plus `mult` times ATR (the short stop). Plain levels, not the ratcheting version some scripts add.
+ */
+export function chandelier (high: Series, low: Series, close: Series, len = 22, mult = 3): ChandelierResult {
+  const range = atr(high, low, close, len)
+  const top = highest(high, len), bottom = lowest(low, len)
+  return {
+    long: top.map((x, i) => { const r = range[i]; return x === null || r === null ? null : x - mult * r }),
+    short: bottom.map((x, i) => { const r = range[i]; return x === null || r === null ? null : x + mult * r })
+  }
+}

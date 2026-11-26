@@ -1,7 +1,7 @@
 # Datafeed over HTTP
 
 Super Chart reads market data through the `Datafeed` interface (`searchSymbols`, `getHistoryKLineData`,
-`subscribe`, `unsubscribe`). This page is the small HTTP contract a server can implement so that one adapter
+`subscribe`, `unsubscribe`, and the optional `getMarks`). This page is the small HTTP contract a server can implement so that one adapter
 serves any data source: your own database, a CSV or JSON file, or a hosted relay. It is a contract and an
 example, not a product: the chart does not depend on it, and a datafeed written directly against the interface is
 equally valid.
@@ -51,7 +51,10 @@ list); `limit` defaults to 50, at most 200.
   "market": "spot", "type": "crypto", "priceCurrency": "USD", "pricePrecision": 2, "volumePrecision": 1, "timezone": "UTC" } ] }
 ```
 
-Members are those of `SymbolInfo`; only `ticker` is required. `timezone` matters for daily bars: say which IANA
+Members are those of `SymbolInfo`; only `ticker` is required. A symbol that does not trade around the clock may
+carry a `session` object (`regular`, `pre`, `post`, `closed`, `exceptions`, in the symbol's zone): the chart then
+shades extended hours and counts down to the real close; its grammar and fault codes are in
+[WORKSPACE-UI.md](WORKSPACE-UI.md#trading-sessions). `timezone` matters for daily bars: say which IANA
 zone a day opens in when it is not UTC. Omit `pricePrecision` (or send `"auto"`) to let the chart derive it.
 
 ### `GET /v1/bars?ticker=&period=&from=&to=&limit=[&market=&exchange=]`
@@ -76,6 +79,60 @@ nothing exists before `to`). The chart then stops asking further back; saying it
 series. Leave it `false` when unsure.
 
 An empty `bars` array for a known series is a normal answer, not an error.
+
+### `GET /v1/marks?ticker=&from=&to=[&market=&exchange=]` (optional)
+
+Maps to `Datafeed.getMarks`: events that belong to a moment rather than a price (earnings, dividends, splits,
+headlines). A server that has none leaves the route out; the adapter's `getMarks` then rejects with a 404, the chart
+shows no marks and `getMarksState()` says `error` with the reason. A feed written directly against the interface
+simply omits `getMarks`, and the chart neither asks nor shows the "Event marks" switch (`status: 'unsupported'`).
+
+* `ticker`, `from` and `to` are required by the adapter; `from` is inclusive and `to` exclusive, epoch milliseconds,
+  like `/v1/bars`. The chart asks for the visible range plus one view-width on each side, once the view has settled
+  for 200 ms, and again when the symbol or interval changes or the host calls `refreshMarks()`. It never polls, and
+  it aborts a request the view has moved past.
+* An answer is `{ "ticker": "SAMPLE-USD", "marks": [ ... ] }`, marks in any order. A ticker with no events answers
+  `"marks": []`: that is not an error.
+
+```json
+{ "ticker": "SAMPLE-USD", "marks": [
+  { "id": "SAMPLE-USD:earnings:2026-10-22", "time": 1792675800000, "label": "Earnings",
+    "text": "Quarterly results, below the estimate (fictional)", "tone": "bear", "category": "earnings" } ] }
+```
+
+| Member | Rule |
+| --- | --- |
+| `id` | required, 1 to 128 characters, unique in the answer and **stable**: the same event keeps its id between requests |
+| `time` | required, epoch milliseconds. It lands on the bar with the latest open time at or before it |
+| `label` | required, up to 24 characters, plain text: what the marker says on the chart |
+| `text` | optional, up to 1024 characters, plain text: the tooltip and the Objects list |
+| `tone` | optional `bull`, `bear`, `neutral` (default), `accent`: the chart picks the colour for either theme |
+| `color` | optional CSS colour that overrides `tone` (cannot follow the light and dark themes: prefer `tone`) |
+| `category` | optional, up to 32 characters, for the host's own grouping; not drawn |
+
+Text is plain: the chart writes it with `textContent` and the canvas draws it as text, never as HTML, and control
+characters are refused. The chart checks every answer with `validateMarks` (exported by the core package, DOM-free,
+so a server or a test can run the same check) and **leaves out only the faulty mark**, listing it in
+`getMarksState().rejected` with a stable code:
+
+| `code` | Meaning |
+| --- | --- |
+| `bad_response` | the answer was not an array (reported once) |
+| `bad_mark`, `bad_id`, `bad_time`, `bad_label`, `bad_text`, `bad_tone`, `bad_color`, `bad_category` | the entry or that member is missing or malformed |
+| `duplicate_id` | the id was already used in the answer; the first one stays |
+| `out_of_range` | `time` is outside the `[from, to)` that was asked |
+| `too_many` | more than 1000 marks in one answer; the rest are dropped |
+| `too_many_on_bar` | an eleventh mark on one bar; the first ten, in the order given, stay |
+
+Placement is not a fault: a valid mark whose time falls before the first loaded bar, or more than one bar-length
+past the newest, is counted in `unplaced` and appears when the bars do. Several marks on one bar draw one marker
+that reads `A · B · C +2`; the tooltip (hover, tap, or the Objects menu for the keyboard and screen readers) lists
+them all. Marks belong to the symbol and interval they were fetched for and are replaced, never merged, when either
+changes.
+
+Limits, plainly: the chart draws what the feed says and cannot tell a true event from a wrong one, so authorize
+per symbol as for bars; a mark's time is placed on bars, so on a weekly chart a daily event shares its week's bar;
+`color` is whatever CSS colour the server sends, so do not forward untrusted colour strings.
 
 ### Live bar
 
@@ -108,7 +165,7 @@ message is for people, and must not name the data source behind a relay.
 | 400 | `invalid_period` | the period is malformed, or not offered for this symbol |
 | 401 | `unauthorized` | no or expired credentials |
 | 403 | `forbidden` | the user may not read this symbol or range |
-| 404 | `unknown_symbol` | no such ticker (or `not_found` for an unknown route) |
+| 404 | `unknown_symbol` | no such ticker (or `not_found` for an unknown route, such as `/v1/marks` on a server without events) |
 | 429 | `rate_limited` | too many requests; send `Retry-After` in seconds |
 | 502, 503 | `upstream_unavailable` | the source behind the server failed; the chart will retry |
 
@@ -151,8 +208,9 @@ timestamp,open,high,low,close,volume
   sorted; the server sorts them.
 * A JSON source is the same rows as `{"bars": [...]}` with numeric `timestamp` in milliseconds.
 
-Everything else (a database, a cache in front of a quote vendor, the hosted relay) implements the same three
-routes and returns the same shapes.
+Marks come from `<TICKER>.marks.json` (`{"marks": [...]}`, `time` as epoch milliseconds or ISO-8601). Everything
+else (a database, a cache in front of a quote vendor, the hosted relay) implements the same routes and returns the
+same shapes.
 
 ## What the chart tolerates
 

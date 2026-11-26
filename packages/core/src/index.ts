@@ -4,7 +4,8 @@ import {
   bollinger, highest, lowest, linreg, correlation, change, mom, roc,
   crossover, crossunder, cross, cum, barssince, valuewhen, pivot, trueRange,
   atr, obv, vwap, cci, mfi, stochK, sar, stoch, stochRsi, bbPercent,
-  keltner, donchian, atrBands, supertrend, ichimoku, anchoredVwap
+  keltner, donchian, atrBands, supertrend, ichimoku, anchoredVwap,
+  aroon, adl, cmf, forceIndex, vortex, tsi, ultimate, zigzag, pivotPoints, chandelier, periodBucket
 } from './ta'
 export type { MarketBar } from './types'
 /** Explicit named functions keep generated declarations independent of module namespaces. */
@@ -52,7 +53,18 @@ export const ta = Object.freeze({
   atrBands,
   supertrend,
   ichimoku,
-  anchoredVwap
+  anchoredVwap,
+  aroon,
+  adl,
+  cmf,
+  forceIndex,
+  vortex,
+  tsi,
+  ultimate,
+  zigzag,
+  pivotPoints,
+  chandelier,
+  periodBucket
 })
 export type { Series } from './ta'
 export * from './series'
@@ -65,6 +77,7 @@ export { indicatorSeries as nativeIndicatorSeries } from './nativeIndicators'
 export type { NativeCandle } from './nativeIndicators'
 export type { ChartDataPort, HistoryLoadRequest } from './chartPort'
 export * from './feed'
+export * from './marks'
 export * from './dataLoader'
 export * from './historyCache'
 export * from './requestRange'
@@ -79,6 +92,8 @@ export * from './realtimeView'
 export * from './realtimeModel'
 export * from './model'
 export * from './formatBarDate'
+export * from './timeAxis'
+export * from './timeZones'
 export { detectFairValueGaps } from './analysis/fairValueGaps'
 export { detectOrderBlocks } from './analysis/orderBlocks'
 export { previousRangeHighLow } from './analysis/previousRangeHighLow'

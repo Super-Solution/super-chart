@@ -1,4 +1,5 @@
 import type { Timespan } from '../feed'
+import type { TradingSession } from './tradingSession'
 
 /**
  * The canvas colour sets. The two `-colorblind` sets keep the light or dark surface and replace the
@@ -38,10 +39,17 @@ export interface EngineRenderOptions {
   pricePrecision?: number
   /** Viewer/display IANA timezone, used for intraday bars. Default UTC. */
   timeZone?: string
+  /** BCP 47 tag for the month and day names on the time axis (`zh-TW`, `de`). Default `en`. The workspace passes its own locale. */
+  locale?: string
   /** Actual feed period; day-and-larger labels represent market sessions. */
   timespan?: Timespan
   /** SymbolInfo.timezone for daily/weekly/monthly/yearly session dates; default UTC. */
   symbolTimezone?: string
+  /**
+   * A checked trading schedule (`compileSession`): bars in pre-market and after-hours get a wash behind them and each
+   * new local date a faint line, on intraday periods only. The workspace sets it from `SymbolInfo.session`.
+   */
+  session?: TradingSession | null
   /** Internal pane composition can omit repeated time labels. */
   showTimeAxis?: boolean
   formatPrice?: (price: number, precision: number) => string

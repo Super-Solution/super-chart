@@ -3,10 +3,13 @@ import { ENGINE_RENDER_THEMES } from '@supersolutions/super-chart-core'
 import { SUPER_CHART_COLORS, baseTheme, withAlpha, type ThemeName } from './tokens'
 
 /**
+ * `auto` follows the page's `prefers-color-scheme`: the `dark` preset while it is dark, `light` while it is light,
+ * switching live. It is a mode, not a preset, so it has no `WORKSPACE_THEMES` entry and cannot be registered.
+ *
  * The built-in presets are `dark` and `light` plus their colour-vision-safe twins `dark-colorblind` and
  * `light-colorblind` (blue/orange candles); hosts add more with `registerWorkspaceTheme`.
  */
-export type WorkspaceThemeName = 'dark' | 'light' | 'dark-colorblind' | 'light-colorblind' | (string & Record<never, never>)
+export type WorkspaceThemeName = 'auto' | 'dark' | 'light' | 'dark-colorblind' | 'light-colorblind' | (string & Record<never, never>)
 export type WorkspaceChromeKey = 'background' | 'text' | 'surface' | 'border' | 'divider' | 'danger' | 'toolbar' | 'muted' | 'hover' | 'hoverBorder' | 'focus' | 'accent' | 'active' | 'panelBorder' | 'panel' | 'panelShadow' | 'error' | 'colorScheme'
 
 /** The existing scoped workspace variables; host styles and `ui.variables` use these same names. */
@@ -77,8 +80,33 @@ export const WORKSPACE_THEMES: Readonly<Record<'dark' | 'light' | 'dark-colorbli
   'light-colorblind': workspaceTheme('light-colorblind', '0 10px 30px rgba(17, 17, 19, 0.12)')
 })
 
+/** The mode name that follows the system colour scheme. */
+export const AUTO_THEME = 'auto'
+
+/** Whether the page prefers a dark colour scheme. A window without `matchMedia` reads as dark, the default look. */
+export function prefersDark (win: Pick<Window, 'matchMedia'>): boolean {
+  return win.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true
+}
+
+/** The preset a theme name stands for right now: `auto` becomes `dark` or `light`, any other name is itself. */
+export function resolveThemeName (name: WorkspaceThemeName, win: Pick<Window, 'matchMedia'>): string {
+  return name === AUTO_THEME ? (prefersDark(win) ? 'dark' : 'light') : name
+}
+
+/**
+ * Call `onChange` with the new answer each time the page's colour scheme changes. Returns the function that stops
+ * listening; a window without `matchMedia` never changes, so it returns a no-op.
+ */
+export function followColorScheme (win: Pick<Window, 'matchMedia'>, onChange: (dark: boolean) => void): () => void {
+  const query = win.matchMedia?.('(prefers-color-scheme: dark)')
+  if (query === undefined) return () => {}
+  const listener = (event: MediaQueryListEvent): void => { onChange(event.matches) }
+  query.addEventListener('change', listener)
+  return () => { query.removeEventListener('change', listener) }
+}
+
 const registry = new Map<string, WorkspaceTheme>(Object.entries(WORKSPACE_THEMES))
-const BUILT_IN_THEMES = new Set(Object.keys(WORKSPACE_THEMES))
+const BUILT_IN_THEMES = new Set([...Object.keys(WORKSPACE_THEMES), AUTO_THEME])
 const THEME_NAME = /^[a-z][a-z0-9-]{0,63}$/
 
 export interface WorkspaceThemeInput {
@@ -98,10 +126,10 @@ export interface WorkspaceThemeInput {
  */
 export function registerWorkspaceTheme (name: string, input: WorkspaceThemeInput): WorkspaceTheme {
   if (typeof name !== 'string' || !THEME_NAME.test(name)) throw new TypeError('A theme name is lowercase letters, digits and hyphens, starting with a letter')
-  if (BUILT_IN_THEMES.has(name)) throw new RangeError('The built-in themes dark, light, dark-colorblind and light-colorblind cannot be replaced')
+  if (BUILT_IN_THEMES.has(name)) throw new RangeError('The built-in themes dark, light, dark-colorblind and light-colorblind, and the mode auto, cannot be replaced')
   if (input === null || typeof input !== 'object') throw new TypeError('Theme input must be an object')
   const base = registry.get(input.extends ?? 'dark')
-  if (base === undefined) throw new RangeError(`Unknown base theme ${JSON.stringify(input.extends)}`)
+  if (base === undefined) throw new RangeError(`${input.extends === AUTO_THEME ? 'Pick a preset to extend, not the mode auto: unknown base theme' : 'Unknown base theme'} ${JSON.stringify(input.extends)}`)
   for (const [group, values] of [['chrome', input.chrome], ['render', input.render]] as const) {
     for (const [key, value] of Object.entries(values ?? {})) {
       if (typeof value !== 'string' || value.trim() === '') throw new TypeError(`Theme ${group}.${key} must be a nonempty string`)

@@ -26,11 +26,16 @@ for (const pkg of PACKAGES) {
     target: 'es2022', mainFields: ['module', 'main'], external: [`${pkg.name.split('/')[0]}/*`, ...(pkg.external ?? []), ...Object.keys(pkg.peers ?? {})], logLevel: 'warning', sourcemap: false
   })
   console.log(`js   ${pkg.name}: ${Object.keys(entryPoints).join(', ')}`)
+  // The self-contained scripts read the workspace packages from source, not from their built chunks: a chunk keeps every
+  // module's top-level statements together, so the bundler cannot drop what this entry never calls (about 4 KB gzip of core
+  // in the engine script). Source modules are side-effect free, so unused ones go. The ESM build above is unaffected.
+  const alias = {}
+  for (const other of PACKAGES) for (const [subpath, [src]] of Object.entries(other.entries)) alias[`${other.name}${subpath === '.' ? '' : subpath.slice(1)}`] = join(root, other.path, src)
   for (const global of [...(pkg.global === undefined ? [] : [pkg.global]), ...(pkg.additionalGlobals ?? [])]) {
     // One self-contained script for pages without a bundler: window.<globalName>, core included.
     await build({
       entryPoints: { [global.file]: join(dir, global.entry) }, outdir: join(dir, 'dist'), bundle: true, format: 'iife', globalName: global.name,
-      platform: 'browser', target: 'es2022', mainFields: ['module', 'main'], minify: true, logLevel: 'warning'
+      platform: 'browser', target: 'es2022', mainFields: ['module', 'main'], alias, minify: true, logLevel: 'warning'
     })
     console.log(`js   ${pkg.name}: ${global.file}.js (window.${global.name})`)
   }

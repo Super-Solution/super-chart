@@ -88,9 +88,40 @@ NaN and infinities become `null`). Results come back in request order.
 | 411 | `length_required` (Python's built-in server only: send a `Content-Length`) |
 | 413 | `body_too_large`, `too_many_bars`, `too_many_indicators` |
 
+## Volume flow, trend and level indicators (0.13)
+
+Nine more catalog entries, with their kernels in both backends and in `conformance/indicators.v1.json`:
+
+| `fn` | Inputs (default source) | Params (default) | Outputs |
+| --- | --- | --- | --- |
+| `aroon` | `high`, `low` | `len` 14 | `up`, `down` |
+| `cmf` | `high`, `low`, `close`, `volume` | `len` 20 | `value` |
+| `adl` | `high`, `low`, `close`, `volume` | none | `value` |
+| `forceIndex` | `close`, `volume` | `len` 13 | `value` |
+| `vortex` | `high`, `low`, `close` | `len` 14 | `plus`, `minus` |
+| `tsi` | `src` (`close`) | `long` 25, `short` 13, `signal` 13 | `tsi`, `signal` |
+| `ultimate` | `high`, `low`, `close` | `fast` 7, `mid` 14, `slow` 28 | `value` |
+| `zigzag` | `high`, `low` | `deviation` 5 (percent) | `line`, `pivot` |
+| `chandelier` | `high`, `low`, `close` | `len` 22, `mult` 3 | `long`, `short` |
+
+Things a caller needs to know:
+
+* **`zigzag` repaints.** A pivot is only known once price has reversed by `deviation` percent, so earlier legs of
+  `line` move as bars arrive and the last leg ends at the latest extreme, not at the last bar. `pivot` holds only
+  confirmed pivots, at the bar where the extreme occurred, which was not knowable then. Neither is a historical signal;
+  do not backtest on them. A series with no confirmed pivot gives all `null`.
+* A bar missing a high, low or close (or holding a value that is not finite) is a gap in these indicators: windows
+  restart after it, and `adl` adds nothing for it. A missing `volume` counts as 0.
+* `cmf`, `vortex`, `ultimate` and `tsi` return `null` where their denominator is zero (no volume, no range, no
+  movement) rather than inventing a value.
+* **Pivot Points are a kernel in both backends (`PivotPoints`, `pivot_points`) but not a catalog entry.** The levels need
+  a period key per bar (a day, a week, a month) and a request carries no timestamps, so there is nothing honest to group
+  by. Compute them where the timestamps are: `ta.pivotPoints` with `ta.periodBucket` in TypeScript, or the kernels directly
+  in Go and Python.
+
 ## Keeping the three in step
 
-The catalog is written out three times: `backends/go/server/catalog.go`, `backends/python/src/super_chart/server.py`
+The catalog is written out three times (Pivot Points excepted, see above): `backends/go/server/catalog.go`, `backends/python/src/super_chart/server.py`
 and the private Rust backend. When a kernel is added or a default changes, change all of them, then compare the
 two public servers: `GET /v1/indicators` must return the same document, and every case in
 `conformance/indicators.v1.json` must give the same series through `POST /v1/indicators` (inputs mapped to

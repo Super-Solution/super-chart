@@ -559,7 +559,7 @@ class Evaluator implements BuiltinContext {
     this.poisoned = new Set(program.poisoned)
   }
 
-  series (name: PriceSeries): Series {
+  series (name: PriceSeries | 'time'): Series {
     return this.base(name)
   }
 
@@ -764,8 +764,9 @@ class Evaluator implements BuiltinContext {
       return v
     }
     const min = p.kind === 'count' ? 0 : p.min ?? 1
-    if (!Number.isInteger(v) || v < min) {
-      fail('BAD_LENGTH', `${b.name}()'s ${p.name} must be a whole number >= ${min}, got ${Number.isNaN(v) ? 'na' : v}`, e.at)
+    if (!Number.isInteger(v) || v < min || (p.max !== undefined && v > p.max)) {
+      const range = p.max === undefined ? `>= ${min}` : `from ${min} to ${p.max}`
+      fail('BAD_LENGTH', `${b.name}()'s ${p.name} must be a whole number ${range}, got ${Number.isNaN(v) ? 'na' : v}`, e.at)
     }
     return v
   }

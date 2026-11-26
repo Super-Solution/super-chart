@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/promise-function-async -- Load methods validate synchronously and return the shared queue promise without an async wrapper. */
 import { EngineChart, type EngineChartOptions, type EngineConfiguration } from './chart'
-import { ENGINE_CHART_TYPES, DRAWING_TYPES, DERIVED_STYLES, createDerivedSeriesPort, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, parseWorkspaceDocument, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type DerivedSeriesPort, type DerivedStyle, type DerivedStyleOptions, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1 } from '@supersolutions/super-chart-core'
+import { ENGINE_CHART_TYPES, DRAWING_TYPES, DERIVED_STYLES, createDerivedSeriesPort, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, compileSymbolSession, sessionBarClose, sessionKindAt, parseWorkspaceDocument, checkTimeZone, formatUtcOffset, timeZoneChoices, localTimeZone, COMMON_TIME_ZONES, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type DerivedSeriesPort, type DerivedStyle, type DerivedStyleOptions, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1, type SessionIssue, type TradingSession } from '@supersolutions/super-chart-core'
+import { DatafeedMarks, MARKS_LAYER, type WorkspaceMarksState } from './datafeedMarks'
 import { EngineAnnotations, attachAnnotationIntents, type AnnotationIntentEvent, type EngineAnnotationTheme } from './annotations'
 import { themeName } from './tokens'
 import type { HoldDrawEvent } from './holdDraw'
-import { WORKSPACE_CHROME_VARS, getWorkspaceTheme, listWorkspaceThemes, type WorkspaceChromeKey, type WorkspaceThemeName } from './theme'
+import { AUTO_THEME, WORKSPACE_CHROME_VARS, followColorScheme, getWorkspaceTheme, listWorkspaceThemes, resolveThemeName, type WorkspaceChromeKey, type WorkspaceThemeName } from './theme'
 import { createTranslator, resolveLocale, type Translator } from './i18n'
 import { resolveLayout, resolveIntervalControl, validLayoutMode, validIntervalControl, type WorkspaceLayoutMode, type WorkspaceLayoutClass, type WorkspaceIntervalControl } from './layout'
 import { CommandRegistry, validateCommand, type WorkspaceCommand } from './commands'
@@ -107,8 +108,9 @@ export interface ChartWorkspaceOptions {
   periods?: readonly Period[]
   chart?: EngineChartOptions
   /**
-   * `light` or `dark` for the chrome and the canvas colours; `chart.render` colours still win. Leave it out to keep the
-   * dark default and restyle through the existing `--sc-*` CSS custom properties (see `WORKSPACE_CHROME_VARS`).
+   * `light` or `dark` for the chrome and the canvas colours; `chart.render` colours still win. `auto` follows the page's
+   * `prefers-color-scheme` and switches live. Leave it out to keep the dark default and restyle through the existing
+   * `--sc-*` CSS custom properties (see `WORKSPACE_CHROME_VARS`).
    */
   theme?: WorkspaceThemeName
   /** Language of the chrome text: a registered locale tag (see `registerLocale`). Default `en`. */
@@ -122,13 +124,20 @@ export interface ChartWorkspaceOptions {
   contextMenu?: boolean | WorkspaceContextMenuOptions
   /** Host persistence for completed edits; only acknowledged documents are evicted from memory. */
   drawingCache?: WorkspaceDrawingCacheOptions
-  /** Period-close estimate. Disable or supply the exchange's real session close. */
+  /** Bar-close countdown: the period estimate, or the real close when the symbol has a `session`. Disable it, or supply the exchange's own close, which wins. */
   countdown?: { enabled?: boolean, closeTimestamp?: (market: WorkspaceMarket, lastBar: MarketBar) => number | null }
 }
 
 /** What the price-mode control offers: the real bars, Heikin Ashi, and the price-driven styles. */
 export type WorkspacePriceMode = 'raw' | 'heikin-ashi' | DerivedStyle
 const PRICE_MODES: readonly WorkspacePriceMode[] = Object.freeze(['raw', 'heikin-ashi', ...DERIVED_STYLES] as const)
+/** The result of `getSessionState()`. */
+export type WorkspaceSessionState =
+  | { readonly status: 'none' }
+  | { readonly status: 'active', readonly timezone: string, readonly newestBar: 'regular' | 'pre' | 'post' | 'closed' | null }
+  | { readonly status: 'invalid', readonly issues: readonly SessionIssue[] }
+/** Event marks listed in the Objects menu; the rest are counted. */
+const MARK_ROWS = 50
 const EMPTY_DRAWINGS = '{"version":1,"drawings":[]}'
 const DEFAULT_PERIODS: readonly Period[] = [
   { multiplier: 1, timespan: 'minute', text: '1m' }, { multiplier: 5, timespan: 'minute', text: '5m' },
@@ -138,7 +147,7 @@ const DEFAULT_PERIODS: readonly Period[] = [
 const pairKey = (symbol: SymbolInfo, period: Period): string => `${symbolKey(symbol)}:${periodKey(period)}`
 const label = (value: string): string => value.replace(/-/g, ' ')
 function validTheme (theme: unknown): WorkspaceThemeName {
-  if (typeof theme !== 'string' || getWorkspaceTheme(theme) === undefined) throw new TypeError(`Workspace theme must be one of ${listWorkspaceThemes().map(name => JSON.stringify(name)).join(', ')} (see registerWorkspaceTheme)`)
+  if (typeof theme !== 'string' || (theme !== AUTO_THEME && getWorkspaceTheme(theme) === undefined)) throw new TypeError(`Workspace theme must be "auto" or one of ${listWorkspaceThemes().map(name => JSON.stringify(name)).join(', ')} (see registerWorkspaceTheme)`)
   return theme
 }
 function validSymbol (symbol: SymbolInfo): SymbolInfo {
@@ -180,6 +189,9 @@ export class ChartWorkspace {
    * person's drawings and undo history, and listed under Overlays in the object tree.
    */
   readonly annotations: EngineAnnotations
+  private marks!: DatafeedMarks
+  /** The symbol's trading schedule once checked; `null` when it has none or it was refused. */
+  private tradingSession: { session: TradingSession | null, issues: readonly SessionIssue[] } = { session: null, issues: [] }
   /** Constructor load outcome; same-tick market changes share its final request. */
   readonly ready: Promise<WorkspaceLoadResult>
   private readonly doc: Document
@@ -211,6 +223,7 @@ export class ChartWorkspace {
   private ui: { headless: boolean, layout: WorkspaceLayoutMode, intervals: WorkspaceIntervalControl, parts: Partial<Record<WorkspacePart, boolean>> }
   private layoutClass: WorkspaceLayoutClass = 'regular'
   private themeName: WorkspaceThemeName | null
+  private stopFollowingScheme: (() => void) | null = null
   private toolsOpen = false
   private readonly slots = new Map<WorkspaceSlotName, HTMLElement>()
   private readonly toolbar: HTMLDivElement
@@ -222,7 +235,10 @@ export class ChartWorkspace {
   private readonly toolsToggle: HTMLButtonElement
   private readonly paletteButton: HTMLButtonElement
   private readonly autoButton: HTMLButtonElement
-  private readonly utcButton: HTMLButtonElement
+  private readonly zoneSelect: HTMLSelectElement
+  private zoneListFull = false
+  private marksToggle: HTMLButtonElement | null = null
+  private zoneId: string
   private readonly intervalBar: HTMLDivElement
   private readonly intervalField: HTMLLabelElement
   private readonly countdownNode: HTMLSpanElement
@@ -348,7 +364,7 @@ export class ChartWorkspace {
       parts: validParts(options.ui?.parts)
     }
     this.themeName = options.theme ?? null
-    if (options.theme !== undefined) this.applyChromeTheme(validTheme(options.theme))
+    if (options.theme !== undefined) this.applyChromeTheme(resolveThemeName(validTheme(options.theme), this.win))
     for (const [name, value] of Object.entries(options.ui?.variables ?? {})) {
       if (!/^--sc-[a-z0-9-]+$/.test(name) || typeof value !== 'string') throw new TypeError('Workspace variables must use --sc- names and string values')
       this.root.style.setProperty(name, value)
@@ -376,8 +392,8 @@ export class ChartWorkspace {
     const toolbar = this.row('bar.chart'), drawingBar = this.row('bar.drawing'), footer = this.row('bar.playback')
     this.toolbar = toolbar; this.drawingBar = drawingBar; this.footer = footer
     toolbar.classList.add('sc-marketbar'); drawingBar.classList.add('sc-drawingbar'); footer.classList.add('sc-footer')
-    const presentation = this.menu('presentation', 'presentation.description'), indicators = this.menu('indicators', 'indicators.manage')
-    const objects = this.menu('objects', 'objects.description'), more = this.menu('more', 'more.description')
+    const presentation = this.menu('presentation', 'presentation.description', 'chart'), indicators = this.menu('indicators', 'indicators.manage', 'indicators')
+    const objects = this.menu('objects', 'objects.description', 'objects'), more = this.menu('more', 'more.description', 'more')
     this.parts = { presentation: presentation.root, indicators: indicators.root, objects: objects.root, more: more.root }
     this.symbolButton = this.node('button'); this.symbolButton.type = 'button'; this.symbolButton.className = 'sc-button sc-symbol'
     this.symbolButton.textContent = this.symbol.ticker
@@ -414,9 +430,16 @@ export class ChartWorkspace {
     })
     reverse.setAttribute('aria-pressed', String(this.scale.reversed === true))
     this.autoButton = this.control('scale.auto', () => { this.fitPriceScale(); }, { title: 'scale.auto.title' })
-    this.utcButton = this.control('scale.utc', () => { this.toggleTimeZone(); })
+    this.zoneId = options.chart?.render?.timeZone ?? 'UTC'
+    this.zoneSelect = this.node('select'); this.zoneSelect.className = 'sc-select sc-zone-select'
+    this.bind(() => { const name = this.t('timezone'); this.zoneSelect.setAttribute('aria-label', name); this.zoneSelect.title = name; this.fillTimeZones(this.zoneListFull) })
+    this.listen(this.zoneSelect, 'change', () => { this.run(() => { this.setTimeZone(this.zoneSelect.value) }) })
+    // The full list (about 420 options) is built when the menu is about to open, not at mount: until then the picker holds
+    // only the zone in use. Offsets are read at that moment too, so a daylight-saving change shows as it is today.
+    this.listen(this.zoneSelect, 'focus', () => { this.fillTimeZones(true) })
+    this.listen(this.zoneSelect, 'pointerdown', () => { if (!this.zoneListFull) this.fillTimeZones(true) })
     this.scaleBar = this.row('bar.scale'); this.scaleBar.classList.add('sc-scalebar')
-    this.scaleBar.append(this.autoButton, this.utcButton)
+    this.scaleBar.append(this.autoButton, this.zoneSelect)
     this.syncPresentation = () => {
       const layout = this.chart.getLayoutOptions(), render = this.chart.getRenderOptions()
       this.scale = { ...layout.priceScale }
@@ -424,15 +447,20 @@ export class ChartWorkspace {
       mode.value = this.getPriceMode()
       scale.value = this.scale.mode ?? 'linear'
       reverse.setAttribute('aria-pressed', String(this.scale.reversed === true))
-      const auto = this.scale.range === undefined, utc = (render.timeZone ?? 'UTC') === 'UTC'
+      const auto = this.scale.range === undefined
       this.autoButton.setAttribute('aria-pressed', String(auto))
-      this.utcButton.setAttribute('aria-pressed', String(utc))
-      this.setLabel(this.utcButton, this.t(utc ? 'scale.utc' : 'scale.local'), this.t(utc ? 'scale.local.title' : 'scale.utc.title'))
+      this.showTimeZone(render.timeZone ?? 'UTC')
       // A restored document can carry its own base colours; host marks follow the canvas they sit on.
       ;(this.annotations as EngineAnnotations | undefined)?.setTheme(this.annotationTheme())
     }
     presentation.panel.classList.add('sc-settings-grid')
     presentation.panel.append(this.field('chartType', chartType), this.field('priceMode', mode), this.field('priceScale', scale), reverse)
+    // Only a feed that can supply marks gets the switch; without getMarks there is nothing to show or hide.
+    if (typeof options.datafeed.getMarks === 'function') {
+      this.marksToggle = this.control('marks.toggle', () => { this.setMarksVisible(!this.marks.visible) }, { title: 'marks.toggle.title' })
+      this.marksToggle.setAttribute('aria-pressed', 'true')
+      presentation.panel.append(this.marksToggle)
+    }
     toolbar.append(this.slots.get('header-start')!, this.toolsToggle, this.symbolButton, this.intervalBar, this.intervalField, presentation.root, indicators.root, objects.root, more.root, this.paletteButton, this.slots.get('header-end')!)
 
     this.indicatorSelect = this.select('indicators.add', [], '')
@@ -686,10 +714,11 @@ export class ChartWorkspace {
           bar: text => this.t('a11y.bar', {
             ...text,
             change: text.change === '' ? '' : this.t('a11y.barChange', { change: text.change }),
-            volume: text.volume === '' ? '' : this.t('a11y.barVolume', { volume: text.volume })
+            volume: text.volume === '' ? '' : this.t('a11y.barVolume', { volume: text.volume }),
+            session: text.session === '' ? '' : this.t(`a11y.barSession.${text.session}`)
           })
         },
-        render: { ...(options.theme === undefined ? {} : getWorkspaceTheme(options.theme)?.render), ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone },
+        render: { ...(options.theme === undefined ? {} : getWorkspaceTheme(resolveThemeName(options.theme, this.win))?.render), ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone, session: this.compileSession(this.symbol), locale: this.locale },
         onToolComplete: reason => {
           const again = reason === 'completed' && this.stayInDrawing ? this.lastTool : null
           this.setToolValue(null)
@@ -704,6 +733,7 @@ export class ChartWorkspace {
         const size = this.derived.getStyle()?.size
         if (this.chart.getRenderOptions().chartType === 'point-figure' && size !== null && size !== undefined) this.chart.setRenderOptions({ pointFigureBox: size })
       })
+      this.followScheme()
       this.annotations = new EngineAnnotations({ symbol: null, theme: this.annotationTheme(), onChange: () => { this.chart.requestPaint(); this.objectsDirty = true; this.renderObjects() } })
       this.chart.addLayer(this.annotations)
       this.drawingToolbar = new DrawingToolbar({
@@ -719,7 +749,24 @@ export class ChartWorkspace {
       })
       this.unsubscribe.push(this.chart.onFrame(() => { this.drawingToolbar.refresh() }), this.chart.drawings.subscribe(() => { this.drawingToolbar.refresh() }))
       this.unsubscribe.push(attachAnnotationIntents(this.chartHost, this.annotations, event => { for (const listener of [...this.intentListeners]) listener(event) }))
-    } catch (error) { this.abort.abort(); this.root.remove(); throw error }
+      this.marks = new DatafeedMarks({
+        feed: this.datafeed,
+        annotations: this.annotations,
+        win: this.win,
+        host: this.chartHost,
+        stage,
+        symbol: () => this.symbol,
+        period: () => this.period,
+        scopeKey: () => symbolKey(this.symbol),
+        pairKey: () => this.requestedPair(),
+        ready: () => this.getStatus().state === 'ready' && this.shownMatches() && this.displayedPair === this.requestedPair() && this.applyError === null,
+        bars: () => this.chart.dataPort.getDataList(),
+        view: () => { const range = this.chart.view.getSnapshot().viewport; return { i0: range.i0, i1: range.i1 } },
+        format: time => this.formatMarkTime(time),
+        changed: () => { this.objectsDirty = true; this.renderObjects() }
+      })
+      this.unsubscribe.push(this.chart.onFrame(() => { this.marks.frame() }), () => { this.marks.dispose() })
+    } catch (error) { this.stopFollowingScheme?.(); this.abort.abort(); this.root.remove(); throw error }
     this.loader = this.createLoader()
     this.timedReplay = this.createReplay()
     this.countdown = createBarCountdown({
@@ -729,6 +776,9 @@ export class ChartWorkspace {
         let closeTimestamp: number | null | undefined
         if (lastBar !== null && options.countdown?.closeTimestamp !== undefined) {
           try { closeTimestamp = options.countdown.closeTimestamp(this.market(), lastBar) } catch { return null }
+        } else if (lastBar !== null && this.tradingSession.session !== null) {
+          // The host's own close wins; otherwise the schedule says where this bar really ends (undefined: it cannot, keep the estimate).
+          closeTimestamp = sessionBarClose(this.tradingSession.session, lastBar.timestamp, this.period, this.symbol.timezone)
         }
         return { marketKey: this.requestedPair(), lastBar, period: this.period, symbolTimezone: this.symbol.timezone, replaying: this.loader.replaying, closeTimestamp }
       },
@@ -812,6 +862,7 @@ export class ChartWorkspace {
       this.scale = { ...this.chart.getLayoutOptions().priceScale, range: undefined }
       this.chart.setLayout({ priceScale: this.scale })
     }
+    if (JSON.stringify(nextSymbol.session) !== JSON.stringify(this.symbol.session) || nextSymbol.timezone !== this.symbol.timezone) this.chart.setRenderOptions({ session: this.compileSession(nextSymbol) })
     if (nextPeriod.timespan !== this.period.timespan || nextSymbol.timezone !== this.symbol.timezone || (!changed && nextSymbol.pricePrecision !== this.symbol.pricePrecision)) {
       this.chart.setRenderOptions({
         timespan: nextPeriod.timespan,
@@ -930,7 +981,7 @@ export class ChartWorkspace {
     this.assertLive()
     const state = this.getLoadState()
     if (state.loaded === null || !['ready', 'empty'].includes(state.status)) throw new Error('Load a market before saving its workspace')
-    const { formatPrice, showTimeAxis, timespan, symbolTimezone, pointFigureBox, ...render } = this.chart.getRenderOptions()
+    const { formatPrice, showTimeAxis, timespan, symbolTimezone, session, pointFigureBox, locale, ...render } = this.chart.getRenderOptions()
     // A price-driven style is not saved, so neither is the chart type it borrowed (step line for Kagi, X/O for point and figure).
     if (this.typeBeforeStyle !== null && (render.chartType === 'step-line' || render.chartType === 'point-figure')) render.chartType = this.typeBeforeStyle
     const document: WorkspaceDocumentV1 = {
@@ -969,7 +1020,7 @@ export class ChartWorkspace {
       if (this.disposed) return { status: 'disposed' }
       if (generation !== this.restoreGeneration) return { status: 'superseded', by: this.market() }
       const configuration: EngineConfiguration = {
-        render: { ...document.render, formatPrice: this.chart.getRenderOptions().formatPrice, timespan: period.timespan, symbolTimezone: document.symbol.timezone },
+        render: { ...document.render, formatPrice: this.chart.getRenderOptions().formatPrice, timespan: period.timespan, symbolTimezone: document.symbol.timezone, session: this.compileSession(document.symbol), locale: this.locale },
         layout: document.layout,
         mode: document.mode ?? 'raw',
         indicators: document.indicators,
@@ -1010,9 +1061,22 @@ export class ChartWorkspace {
   setTheme (theme: WorkspaceThemeName): void {
     if (this.disposed) return
     const name = validTheme(theme)
-    this.applyChromeTheme(name)
-    this.chart.setRenderOptions({ ...getWorkspaceTheme(name)!.render })
     this.themeName = name
+    this.applyTheme()
+    this.followScheme()
+  }
+
+  /** Listen for system colour-scheme changes exactly while the theme is `auto`; dispose removes the listener. */
+  private followScheme (): void {
+    this.stopFollowingScheme?.(); this.stopFollowingScheme = null
+    if (this.themeName === AUTO_THEME) this.stopFollowingScheme = followColorScheme(this.win, () => { if (!this.disposed && this.themeName === AUTO_THEME) this.applyTheme() })
+  }
+
+  /** Paint the chrome and canvas with the preset the current theme name stands for (`auto` reads the system now). */
+  private applyTheme (): void {
+    const preset = resolveThemeName(this.themeName ?? 'dark', this.win)
+    this.applyChromeTheme(preset)
+    this.chart.setRenderOptions({ ...getWorkspaceTheme(preset)!.render })
     this.annotations.setTheme(this.annotationTheme())
   }
 
@@ -1025,6 +1089,55 @@ export class ChartWorkspace {
     if (typeof listener !== 'function') throw new TypeError('Annotation intent listener must be a function')
     this.intentListeners.add(listener)
     return () => { this.intentListeners.delete(listener) }
+  }
+
+  /**
+   * What the event marks are doing: `unsupported` when the datafeed has no `getMarks`, `hidden`, `idle`, `loading`,
+   * `ready` or `error`, how many marks sit on bars, and every mark left out by its stable code (`validateMarks` and
+   * `placeMarks` in core list them). A failed answer is not retried until the view leaves the window it covered or
+   * `refreshMarks()` is called.
+   */
+  /**
+   * What the symbol's `session` is doing: `none` (the symbol has no schedule), `active` (its zone and the kind of the
+   * newest bar: `regular`, `pre`, `post` or `closed`), or `invalid` with every fault by stable code (see
+   * `SessionIssueCode`); an invalid schedule is ignored as a whole, so the chart shows no bands and the countdown
+   * keeps its estimate.
+   */
+  getSessionState (): WorkspaceSessionState {
+    this.assertLive()
+    const { session, issues } = this.tradingSession
+    if (session === null) return issues.length === 0 ? { status: 'none' } : { status: 'invalid', issues }
+    const last = this.chart.getLastBar()
+    // A bar of a day or more has no time of day to classify.
+    const intraday = ['second', 'minute', 'hour'].includes(this.period.timespan)
+    return { status: 'active', timezone: session.timezone, newestBar: last === null || !intraday ? null : sessionKindAt(session, last.timestamp) }
+  }
+
+  private compileSession (symbol: SymbolInfo): TradingSession | null {
+    this.tradingSession = compileSymbolSession(symbol)
+    return this.tradingSession.session
+  }
+
+  getMarksState (): WorkspaceMarksState { this.assertLive(); return this.marks.getState() }
+
+  /** Asks the datafeed for marks again for the current view (after a new filing or headline, say). */
+  refreshMarks (): void { this.assertLive(); this.marks.refresh() }
+
+  /** Shows or hides the event marks; the choice is the viewer's and is not saved in the workspace document. */
+  setMarksVisible (visible: boolean): void {
+    this.assertLive()
+    if (typeof visible !== 'boolean') throw new TypeError('setMarksVisible needs true or false')
+    this.marks.setEnabled(visible); this.syncMarksControl()
+  }
+
+  private syncMarksControl (): void {
+    this.marksToggle?.setAttribute('aria-pressed', String(this.marks.visible))
+  }
+
+  private formatMarkTime (time: number): string {
+    const dateOnly = ['day', 'week', 'month', 'year'].includes(this.period.timespan)
+    const base: Intl.DateTimeFormatOptions = dateOnly ? { dateStyle: 'medium' } : { dateStyle: 'medium', timeStyle: 'short' }
+    try { return new Intl.DateTimeFormat(this.locale, { ...base, timeZone: dateOnly ? this.symbol.timezone ?? 'UTC' : this.zoneId }).format(time) } catch { return new Date(time).toISOString() }
   }
 
   /** The annotation layer follows the active preset's base colours, the host's own `render.theme` included. */
@@ -1042,6 +1155,7 @@ export class ChartWorkspace {
     this.saveDrawings();
     this.disposed = true; this.cancelSearch(); this.abort.abort()
     this.restoreGeneration++; this.pendingRestore = null
+    this.stopFollowingScheme?.(); this.stopFollowingScheme = null
     this.timedReplay.dispose(); this.countdown.dispose(); this.resizeObserver?.disconnect(); this.resizeObserver = null
     this.commandRegistry.clear(); this.bindings.length = 0
     this.loads.dispose(); this.events.clear()
@@ -1161,6 +1275,7 @@ export class ChartWorkspace {
     this.chart.setDrawingTool(null); this.setToolValue(null)
     this.chart.drawings.importJson(EMPTY_DRAWINGS); this.chart.setData([], false)
     this.annotations.setScope(null)
+    this.marks.sync()
     this.holdNote.textContent = ''
     this.notice.textContent = ''; this.updateStatus()
   }
@@ -1244,6 +1359,7 @@ export class ChartWorkspace {
     const key = symbolKey(this.symbol)
     this.annotations.setPricePrecision(this.symbol.pricePrecision === undefined ? undefined : resolvePricePrecision(this.symbol.pricePrecision, this.chart.dataPort.getDataList()))
     this.annotations.setScope(key)
+    this.marks.sync()
     if (this.drawingSymbol === key) return
     this.chart.drawings.importJson(this.drawingDocuments.get(key) ?? EMPTY_DRAWINGS); this.drawingSymbol = key
   }
@@ -1458,6 +1574,7 @@ export class ChartWorkspace {
     if (typeof locale !== 'string' || locale.trim() === '') throw new TypeError('A locale tag is required')
     this.locale = resolveLocale(locale); this.tr = createTranslator(this.locale)
     this.root.lang = this.locale
+    this.chart.setRenderOptions({ locale: this.locale })
     for (const apply of this.bindings) apply()
     this.buildToolOptions(); this.syncPeriodControls(); this.refreshIndicatorsUi(); this.updateDrawingControls(); this.syncPresentation()
     this.fullscreenSync(); this.objectsDirty = true; this.renderObjects(); this.palette.applyText(); this.contextMenu.close(false)
@@ -1606,7 +1723,8 @@ export class ChartWorkspace {
     this.drawingBar.hidden = !show('drawingBar') || (this.layoutClass === 'narrow' && !this.toolsOpen) || (rail && !slotted)
     // Secondary actions (view history, latest, PNG, fullscreen) sit inline when there is room and in the More menu otherwise.
     // With the rail, undo and redo lead the right of the market bar and lock and delete sit at the foot of the rail.
-    const arrangement = `${rail}|${compact}`
+    const narrow = this.layoutClass === 'narrow', paletteInMore = narrow && !this.parts.more.hidden
+    const arrangement = `${rail}|${compact}|${narrow}|${paletteInMore}`
     if (arrangement !== this.arrangement) {
       this.arrangement = arrangement
       const inMenu = this.parts.more.querySelector<HTMLElement>('.sc-menu-panel')!, end = this.slots.get('drawing-end')!
@@ -1619,12 +1737,33 @@ export class ChartWorkspace {
         this.drawingBar.insertBefore(this.history, end); this.drawingBar.insertBefore(this.drawingModes, end); this.drawingBar.insertBefore(this.drawingActions, end)
         if (compact) inMenu.append(this.secondary); else this.drawingBar.insertBefore(this.secondary, end)
       }
+      // A phone's footer keeps the status and the playback buttons; the price-range and time-zone controls join the Chart
+      // settings, and the command-palette button joins More, so the market bar stays one row.
+      if (narrow) this.parts.presentation.querySelector('.sc-menu-panel')!.append(this.scaleBar)
+      else this.footer.insertBefore(this.scaleBar, this.replayButtons.start)
+      if (paletteInMore) inMenu.append(this.paletteButton)
+      else this.toolbar.insertBefore(this.paletteButton, this.slots.get('header-end')!)
     }
+    this.fitIntervals(show('intervals'))
     this.footer.hidden = !show('footer')
     const marketBarEmpty = !show('symbol') && !show('intervals') && !show('presentation') && !show('indicators') && !show('objects') && !show('commands') && !(compact && show('drawingBar')) && !rail &&
       ![this.slots.get('header-start'), this.slots.get('header-end')].some(slot => slot !== undefined && slot.childNodes.length > 0)
     this.toolbar.hidden = headless || marketBarEmpty
     if (headless) this.closeFloating()
+  }
+
+  /**
+   * `auto` intervals show the bar while it fits. In the compact layout the market bar never wraps, so a bar that does not
+   * fit would be clipped or scrolled out of sight: look, and give it the dropdown instead. Measured after the other
+   * parts are placed, and only where the bar is the candidate, so a resize costs one layout read there.
+   */
+  private fitIntervals (shown: boolean): void {
+    if (!shown || this.ui.intervals !== 'auto' || this.layoutClass !== 'compact' || this.root.dataset.intervals !== 'bar') return
+    // The bar shrinks and scrolls itself before the market bar overflows, so both are read.
+    const fits = this.intervalBar.scrollWidth <= this.intervalBar.clientWidth + 1 && this.toolbar.scrollWidth <= this.toolbar.clientWidth + 1
+    const intervals = resolveIntervalControl(this.ui.intervals, this.layoutClass, fits)
+    if (intervals === 'bar') return
+    this.root.dataset.intervals = intervals; this.intervalBar.hidden = true; this.intervalField.hidden = false
   }
 
   private setToolsOpen (open: boolean): void {
@@ -1636,12 +1775,47 @@ export class ChartWorkspace {
     this.syncPresentation()
   }
 
-  private toggleTimeZone (): void {
-    const utc = (this.chart.getRenderOptions().timeZone ?? 'UTC') === 'UTC'
-    let local = 'UTC'
-    try { local = new Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' } catch { /* keep UTC */ }
-    this.run(() => { this.chart.setRenderOptions({ timeZone: utc ? local : 'UTC' }) })
+  /** Time zone of the axis and crosshair labels for intraday bars: an IANA id, `UTC` unless the host or the person chose. */
+  getTimeZone (): string { this.assertLive(); return this.zoneId }
+
+  /**
+   * Show intraday times in an IANA zone (`Asia/Taipei`, `America/New_York`, `UTC`). Day-and-larger bars keep reading
+   * in the symbol's own zone. A name Intl does not know throws a `RangeError` whose `code` is `time_zone_unknown`
+   * (`time_zone_type` for a non-string); the picker offers the zones from `listTimeZones()`.
+   */
+  setTimeZone (timeZone: string): void {
+    this.assertLive()
+    const check = checkTimeZone(timeZone)
+    if (!check.ok) throw Object.assign(new RangeError(check.hint), { code: check.code })
+    this.chart.setRenderOptions({ timeZone: check.id })
+    this.showTimeZone(check.id)
     this.syncPresentation()
+  }
+
+  /** Make the picker read `id`; the list is rebuilt only when the zone is not already the one it shows. */
+  private showTimeZone (id: string): void {
+    this.zoneId = id
+    if (this.zoneSelect.value !== id) { this.zoneSelect.value = id; if (this.zoneSelect.value !== id) this.fillTimeZones(this.zoneListFull) }
+  }
+
+  private toggleTimeZone (): void {
+    this.run(() => { this.setTimeZone(this.zoneId === 'UTC' ? localTimeZone() : 'UTC') })
+  }
+
+  /** The zone picker: this device and the common zones, then all the others, offsets as of now. */
+  private fillTimeZones (full: boolean): void {
+    this.zoneListFull = full
+    const local = localTimeZone(), groups = new Map<string, HTMLOptGroupElement>()
+    const choices = full ? timeZoneChoices({ extra: [this.zoneId], local }) : [{ id: this.zoneId, offset: formatUtcOffset(this.zoneId, Date.now()), group: 'common' as const }]
+    for (const choice of choices) {
+      let group = groups.get(choice.group)
+      if (group === undefined) { group = this.node('optgroup'); group.label = this.t(choice.group === 'common' ? 'timezone.common' : 'timezone.all'); groups.set(choice.group, group) }
+      const option = this.node('option'); option.value = choice.id
+      option.textContent = choice.id === 'UTC' ? 'UTC' : `${choice.id} (${choice.id === local ? `${this.t('timezone.device')}, ` : ''}UTC${choice.offset})`
+      group.append(option)
+    }
+    this.zoneSelect.replaceChildren(...groups.values())
+    this.zoneSelect.value = this.zoneId
   }
 
   private renderObjects (): void {
@@ -1673,14 +1847,30 @@ export class ChartWorkspace {
       [this.t('objects.delete'), () => { this.chart.drawings.remove(drawing.id) }, drawing.locked]
     ], () => { this.chart.drawings.select(drawing.id) }))
     const overlays = this.renderOverlayRows(row)
-    const children = [...section(this.t('objects.drawings'), drawings), ...section(this.t('objects.indicators'), indicators), ...section(this.t('objects.overlays'), overlays)]
+    const children = [...section(this.t('objects.drawings'), drawings), ...section(this.t('objects.indicators'), indicators), ...section(this.t('objects.overlays'), overlays), ...section(this.t('objects.marks'), this.renderMarkRows(row))]
     if (children.length === 0) { const empty = this.node('p'); empty.className = 'sc-hint'; empty.textContent = this.t('objects.none'); children.push(empty) }
     this.objectList.replaceChildren(...children)
   }
 
   /** Host annotations are read-only here: the host owns them, so the tree lists them without edit actions. */
   private renderOverlayRows (row: (name: string, actions: ReadonlyArray<readonly [string, () => void, boolean?]>, select?: () => void) => HTMLElement): HTMLElement[] {
-    return this.annotations.getSnapshot().annotations.map(item => row(item.spec.text === undefined || item.spec.text === '' ? `${item.spec.kind} · ${item.spec.key}` : `${item.spec.kind} · ${item.spec.text}`, []))
+    return this.annotations.getSnapshot().annotations.filter(item => item.layer !== MARKS_LAYER).map(item => row(item.spec.text === undefined || item.spec.text === '' ? `${item.spec.kind} · ${item.spec.key}` : `${item.spec.kind} · ${item.spec.text}`, []))
+  }
+
+  /** The event marks as words, newest first and capped, for the keyboard and screen readers (the canvas markers carry only a label). */
+  private renderMarkRows (row: (name: string, actions: ReadonlyArray<readonly [string, () => void, boolean?]>, select?: () => void) => HTMLElement): HTMLElement[] {
+    if (!this.marks.visible) return []
+    const marks = this.marks.list(), shown = marks.slice(-MARK_ROWS).reverse()
+    // Read-only text, not a disabled button: a disabled control cannot take keyboard focus, and these rows exist to be read.
+    const rows = shown.map(mark => {
+      const text = `${this.formatMarkTime(mark.time)} · ${mark.label}${mark.text === undefined || mark.text === '' ? '' : ` — ${mark.text}`}`
+      const item = row(text, []), label = item.firstElementChild as HTMLElement
+      const note = this.node('div'); note.className = 'sc-mark-row'; note.tabIndex = 0; note.textContent = text
+      label.replaceWith(note)
+      return item
+    })
+    if (marks.length > shown.length) { const more = this.node('p'); more.className = 'sc-hint'; more.textContent = this.t('objects.marks.more', { count: marks.length - shown.length }); rows.push(more) }
+    return rows
   }
 
   private onContextMenu (event: MouseEvent): void {
@@ -1718,7 +1908,7 @@ export class ChartWorkspace {
     const add = (id: string, title: string, group: string, run: () => void | Promise<void>, extra: Partial<WorkspaceCommand> = {}): void => { commands.push({ id, title, group: t(group), run, ...extra }) }
     add('workspace.search', t('palette.search'), 'palette.group.general', () => { this.openSearch('', 'command') }, { keywords: ['symbol', 'ticker'] })
     add('workspace.reload', t('palette.reload'), 'palette.group.general', () => { void this.reload() })
-    for (const name of listWorkspaceThemes()) add(`theme.${name}`, t('palette.theme', { name: t(`theme.${name}`) }), 'palette.group.general', () => { this.setTheme(name) }, { keywords: ['theme', 'dark', 'light'], when: () => this.themeName !== name })
+    for (const name of [AUTO_THEME, ...listWorkspaceThemes()]) add(`theme.${name}`, t('palette.theme', { name: t(`theme.${name}`) }), 'palette.group.general', () => { this.setTheme(name) }, { keywords: ['theme', 'dark', 'light'], when: () => this.themeName !== name })
     for (const period of this.periods) add(`interval.${periodKey(period)}`, t('palette.interval', { name: period.text }), 'palette.group.interval', () => { void this.setPeriod(period) }, { keywords: ['interval', 'timeframe', 'period'], when: () => periodKey(period) !== periodKey(this.period) })
     // Point and figure belongs to the price mode (it needs a box size), so it is not offered as a plain chart type.
     for (const type of ENGINE_CHART_TYPES.filter(type => type !== 'point-figure')) add(`chartType.${type}`, t('palette.chartType', { name: t(`chartType.${type}`) }), 'palette.group.chart', () => { this.chart.setRenderOptions({ chartType: type }); this.syncPresentation() })
@@ -1726,10 +1916,12 @@ export class ChartWorkspace {
     for (const name of PRICE_MODES) add(`priceMode.${name}`, t('palette.priceMode', { name: t(name === 'raw' ? 'priceMode.raw' : name === 'heikin-ashi' ? 'priceMode.heikin' : `priceMode.${name}`) }), 'palette.group.chart', () => { this.setPriceMode(name); this.syncPresentation() }, { keywords: ['renko', 'kagi', 'range', 'line break', 'point and figure', 'x o', 'price mode'], when: () => this.getPriceMode() !== name })
     add('chart.heikin', t('palette.heikin'), 'palette.group.chart', () => { this.setPriceMode(this.getPriceMode() === 'heikin-ashi' ? 'raw' : 'heikin-ashi'); this.syncPresentation() })
     add('chart.reverse', t('palette.reverse'), 'palette.group.chart', () => { const current = this.chart.getLayoutOptions().priceScale; this.chart.setLayout({ priceScale: { ...current, reversed: current?.reversed !== true } }); this.syncPresentation() })
+    if (typeof this.datafeed.getMarks === 'function') add('chart.marks', t('palette.marks'), 'palette.group.chart', () => { this.setMarksVisible(!this.marks.visible) }, { keywords: ['events', 'earnings', 'dividend', 'split', 'news'] })
     add('view.fit', t('context.fit'), 'palette.group.view', () => { this.fitPriceScale() })
     add('view.reset', t('context.reset'), 'palette.group.view', () => { this.chart.view.resetViewport() })
     add('view.latest', t('nav.latest.title'), 'palette.group.view', () => { this.chart.view.followLatest() })
-    add('view.timezone', t(((this.chart.getRenderOptions().timeZone ?? 'UTC') === 'UTC') ? 'scale.local.title' : 'scale.utc.title'), 'palette.group.view', () => { this.toggleTimeZone() })
+    add('view.timezone', t(this.zoneId === 'UTC' ? 'scale.local.title' : 'scale.utc.title'), 'palette.group.view', () => { this.toggleTimeZone() })
+    for (const id of new Set([localTimeZone(), ...COMMON_TIME_ZONES])) add(`view.timezone.${id}`, t('palette.timezone', { name: id }), 'palette.group.view', () => { this.setTimeZone(id) }, { keywords: ['time', 'zone', 'timezone', 'utc'], when: () => this.zoneId !== id })
     add('draw.pan', t('palette.tool', { name: t('draw.none') }), 'palette.group.draw', () => { this.chart.setDrawingTool(null); this.setToolValue(null) })
     for (const type of DRAWING_TYPES) add(`draw.${type}`, t('palette.tool', { name: this.toolLabel(type) }), 'palette.group.draw', () => { this.chart.setDrawingTool(type); this.setToolValue(type) }, { keywords: ['draw', type] })
     add('draw.undo', t('draw.undo'), 'palette.group.draw', () => { this.chart.drawings.undo() }, { shortcut: 'Ctrl+Z', when: () => this.chart.drawings.getSnapshot().canUndo })
@@ -1832,8 +2024,10 @@ export class ChartWorkspace {
     }))
   }
 
-  private menu (nameKey: string, descriptionKey: string): { root: HTMLDetailsElement, summary: HTMLElement, panel: HTMLDivElement } {
+  /** A dropdown of the market bar. `icon` is what the narrow layout shows in place of the name (the text stays for assistive technology). */
+  private menu (nameKey: string, descriptionKey: string, icon?: string): { root: HTMLDetailsElement, summary: HTMLElement, panel: HTMLDivElement } {
     const root = this.node('details'); root.className = 'sc-menu'
+    if (icon !== undefined) root.dataset.icon = icon
     const summary = this.node('summary')
     const panel = this.node('div'); panel.className = 'sc-menu-panel'; panel.setAttribute('role', 'group')
     this.bind(() => {

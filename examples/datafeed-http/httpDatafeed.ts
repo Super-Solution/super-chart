@@ -1,4 +1,4 @@
-import type { Datafeed, DatafeedSubscribeCallback, HistoryRequest, HistoryResult, MarketBar, Period, SymbolInfo } from '@supersolutions/super-chart-core'
+import type { Datafeed, DatafeedMark, DatafeedSubscribeCallback, HistoryRequest, HistoryResult, MarketBar, MarksRequest, Period, SymbolInfo } from '@supersolutions/super-chart-core'
 
 /** A Datafeed over the HTTP contract in docs/DATAFEED-HTTP.md. Point `baseUrl` at your own server or the Super Solution relay. */
 export interface HttpDatafeedOptions {
@@ -90,6 +90,12 @@ export function createHttpDatafeed (options: HttpDatafeedOptions): Datafeed {
       const body = await get<{ bars: MarketBar[], noData?: boolean }>(
         '/v1/bars', { ...identity(symbol, period), from, to, limit: request?.countBack }, request?.signal)
       return { bars: body.bars, noData: body.noData === true }
+    },
+
+    // Optional on the contract: a server without /v1/marks answers 404 and the chart shows no marks (and says why in getMarksState()).
+    async getMarks (symbol: SymbolInfo, _period: Period, from: number, to: number, request?: MarksRequest): Promise<DatafeedMark[]> {
+      const body = await get<{ marks: DatafeedMark[] }>('/v1/marks', { ticker: symbol.ticker, market: symbol.market, exchange: symbol.exchange, from, to }, request?.signal)
+      return body.marks
     },
 
     // Polling keeps the contract usable behind any proxy; a relay may also offer a stream (see the doc).
