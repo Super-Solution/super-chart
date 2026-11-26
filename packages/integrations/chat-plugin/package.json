@@ -1,6 +1,6 @@
 {
   "name": "@supersolutions/super-chart-chat-plugin",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "super-chat plugin: shows and drives Super Chart charts as chat cards, with an agent tool surface.",
   "license": "GPL-3.0-or-later",
   "type": "module",
@@ -36,9 +36,9 @@
     "tag": "latest"
   },
   "dependencies": {
-    "@supersolutions/super-chart-core": "0.13.0",
-    "@supersolutions/super-chart-web": "0.13.0",
-    "@supersolutions/super-protocol": "0.3.0"
+    "@supersolutions/super-chart-core": "0.13.1",
+    "@supersolutions/super-chart-web": "0.13.1",
+    "@supersolutions/super-protocol": "0.4.1"
   },
   "author": "SUPER SOLUTION LABS INC"
 }
