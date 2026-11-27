@@ -5,6 +5,8 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- `render.watermark` (`{ title, subtitle? }` or `null`): a faint background ticker like TradingView's. The workspace sets it to the symbol and "name, interval" by default; pass `render: { watermark: null }` to switch it off. Indicator panes do not paint it.
+
 Changed (default behaviour; every item has a setting to get the old look back)
 
 * **The price axis is on the right** (`layout.axisSide`, `'left'` restores it) and the time axis keeps its row.

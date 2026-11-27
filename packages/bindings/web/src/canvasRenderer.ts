@@ -3,7 +3,7 @@ import { paintPriceSeries } from './seriesRenderer'
 import { typicalPrice, halfBarWidth } from './geometry'
 import { timeLabelCentre } from './badge'
 import { paintLegend, seriesColors, type LegendPalette } from './legend'
-import { colors, withAlpha, CANVAS_FONT, CANVAS_LABEL_FONT } from './tokens'
+import { colors, withAlpha, CANVAS_FONT, CANVAS_LABEL_FONT, FONT_SANS } from './tokens'
 
 export type { EngineRenderOptions } from '@supersolutions/super-chart-core'
 
@@ -298,6 +298,18 @@ export function paintEngineFrame (
         ctx.moveTo(g.left, y); ctx.lineTo(g.right, y)
       }
       ctx.stroke()
+
+      if (frame.indicatorPane !== true && options.watermark !== undefined && options.watermark !== null && options.watermark.title !== '') {
+        // Behind everything: the symbol and what it is, faint enough that no candle or line loses to it.
+        const mark = options.watermark, size = Math.max(14, Math.min(g.plotHeight * 0.22, g.plotWidth * 0.1, 96))
+        ctx.save()
+        try {
+          ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = p.ink; ctx.globalAlpha = 0.04
+          const cx = (g.left + g.right) / 2, cy = (g.top + g.bottom) / 2 + (mark.subtitle === undefined ? size * 0.35 : -size * 0.05)
+          ctx.font = `700 ${size}px ${FONT_SANS}`; ctx.fillText(mark.title, cx, cy, g.plotWidth - 24)
+          if (mark.subtitle !== undefined && mark.subtitle !== '') { ctx.font = `500 ${Math.max(11, size * 0.3)}px ${FONT_SANS}`; ctx.fillText(mark.subtitle, cx, cy + size * 0.5, g.plotWidth - 24) }
+        } finally { ctx.restore() }
+      }
 
       const type = options.chartType ?? 'candles'
       const span = frame.snapshot.viewport.i1 - frame.snapshot.viewport.i0

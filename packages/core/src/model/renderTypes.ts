@@ -54,6 +54,8 @@ export interface EngineRenderOptions {
   legend?: boolean
   /** The legend's first words, usually "name · interval · exchange". The workspace sets it from the symbol; empty shows none. */
   legendTitle?: string
+  /** A large faint name behind the candles, with an optional smaller line under it; `null` or absent draws none. */
+  watermark?: { readonly title: string, readonly subtitle?: string } | null
   /** Internal pane composition can omit repeated time labels. */
   showTimeAxis?: boolean
   formatPrice?: (price: number, precision: number) => string

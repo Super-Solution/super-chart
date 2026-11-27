@@ -164,6 +164,12 @@ function legendTitleOf (symbol: SymbolInfo, period: Period): string {
   const name = symbol.name !== undefined && symbol.name !== '' ? symbol.name : symbol.ticker
   return [name, period.text ?? `${period.multiplier}${period.timespan}`, symbol.exchange].filter(part => part !== undefined && part !== '').join(' · ')
 }
+/** The faint name behind the candles: the ticker, and under it the name and the interval. */
+function watermarkOf (symbol: SymbolInfo, period: Period): { title: string, subtitle?: string } {
+  const text = period.text ?? `${period.multiplier}${period.timespan}`
+  const subtitle = [symbol.name !== undefined && symbol.name !== '' && symbol.name !== symbol.ticker ? symbol.name : undefined, text].filter(part => part !== undefined).join(', ')
+  return { title: symbol.ticker, subtitle }
+}
 function validSymbol (symbol: SymbolInfo): SymbolInfo {
   if (typeof symbol?.ticker !== 'string' || symbol.ticker.trim() === '') throw new TypeError('A symbol ticker is required')
   return { ...symbol }
@@ -322,6 +328,7 @@ export class ChartWorkspace {
   private symbol: SymbolInfo
   /** Whether the legend's title follows the symbol; a host that passed its own `render.legendTitle` keeps it. */
   private readonly ownLegendTitle: boolean
+  private readonly ownWatermark: boolean
   private period: Period
   private readonly periods: Period[]
   private scale: PriceScaleOptions
@@ -359,6 +366,7 @@ export class ChartWorkspace {
     this.persistentDrawings = options.drawingCache !== undefined
     this.datafeed = options.datafeed
     this.ownLegendTitle = options.chart?.render?.legendTitle === undefined
+    this.ownWatermark = options.chart?.render?.watermark === undefined
     this.symbol = validSymbol(options.symbol); this.period = validPeriod(options.period)
     this.recentLimit = options.search?.recentLimit ?? 8
     if (!Number.isSafeInteger(this.recentLimit) || this.recentLimit < 0 || this.recentLimit > 50) throw new RangeError('Recent-symbol limit must be from 0 to 50')
@@ -837,7 +845,7 @@ export class ChartWorkspace {
             session: text.session === '' ? '' : this.t(`a11y.barSession.${text.session}`)
           })
         },
-        render: { ...(options.theme === undefined ? {} : getWorkspaceTheme(resolveThemeName(options.theme, this.win))?.render), ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone, session: this.compileSession(this.symbol), locale: this.locale, ...(options.chart?.render?.legendTitle === undefined ? { legendTitle: legendTitleOf(this.symbol, this.period) } : {}) },
+        render: { ...(options.theme === undefined ? {} : getWorkspaceTheme(resolveThemeName(options.theme, this.win))?.render), ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone, session: this.compileSession(this.symbol), locale: this.locale, ...(options.chart?.render?.legendTitle === undefined ? { legendTitle: legendTitleOf(this.symbol, this.period) } : {}), ...(options.chart?.render?.watermark === undefined ? { watermark: watermarkOf(this.symbol, this.period) } : {}) },
         onToolComplete: reason => {
           const again = reason === 'completed' && this.stayInDrawing ? this.lastTool : null
           this.setToolValue(null)
@@ -993,6 +1001,7 @@ export class ChartWorkspace {
     if (!this.periods.some(item => periodKey(item) === periodKey(nextPeriod))) this.periods.push(nextPeriod)
     this.symbol = nextSymbol; this.period = nextPeriod
     if (this.ownLegendTitle) this.chart.setRenderOptions({ legendTitle: legendTitleOf(nextSymbol, nextPeriod) })
+    if (this.ownWatermark) this.chart.setRenderOptions({ watermark: watermarkOf(nextSymbol, nextPeriod) })
     this.symbolButton.textContent = nextSymbol.ticker; this.syncPeriodControls()
     const result = changed ? this.request(true) : this.loads.current(this.market()) ?? Promise.resolve(this.currentResult())
     if (changed) this.events.emit('marketChange', { previous, requested: this.market() })
