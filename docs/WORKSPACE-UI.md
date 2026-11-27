@@ -662,3 +662,22 @@ Limits, deliberately:
 - The point and figure render type (`chartType: 'point-figure'`) needs `pointFigureBox`, the price height of a box, and is
   refused without it; the price mode sets both. It is left out of the chart-type select and is not saved in workspace
   documents, which also keep the chart type that Kagi borrowed (step line) out of the file.
+
+## The default layout
+
+A chart with no options looks and behaves like the charting tools people already know, and every part can be changed.
+
+- **Price axis on the right** (`layout.axisSide: 'left' | 'right'`, default `'right'`). The strip is as wide as the widest
+  label needs, at least 52px. `axisStrip(geometry)` in core says where it is; the labels, the last-price tag, the cursor
+  tag, annotation tags and the axis hit area all read it, so a host layer that paints beside the axis should too.
+- **Volume as a band** at the foot of the price pane (`pane: 'overlay'`, `layout.overlayRatio`), on its own scale and
+  never part of the price range, drawn behind the candles. Any indicator that returns bars can use `'overlay'`.
+- **Legend** over the plot (`render.legend`, `render.legendTitle`): title, O H L C and the change for the latest bar or
+  the bar under the pointer, then one row per price-pane indicator. Below 400px of plot width it keeps the close only.
+  It is drawn on the cursor layer, so a pointer move repaints only it. Real prices, whatever the axis mode.
+- **Market bar**: symbol, intervals, chart-type menu (with a picture per type), Chart settings, Indicators (search, then
+  add), Replay, Objects. **Footer**: quick ranges, a live clock, time zone, `%`, `log`, Auto, and Load older.
+- **Context menus**: over the plot — copy the price, draw a horizontal line there, fit, reset, latest, palette,
+  search; over the price axis — automatic range, linear / log / percentage, invert.
+- **Dragging** the plot moves time and, once the drag is clearly vertical, the price range (it turns manual); dragging the
+  axis scales it; a double click on the axis returns to automatic.

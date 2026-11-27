@@ -34,7 +34,8 @@ export function attachPaneInteraction (
   const area = (value: EngineFrame, x: number, y: number): Area | undefined => {
     for (let i = 1; i < value.panes.length; i++) if (Math.abs(y - value.panes[i].top) <= 5) return i
     const g = value.model.geometry
-    if (x >= 0 && x < g.left && y >= g.top && y <= g.bottom) return null
+    const onAxis = g.axisSide === 'right' ? x > g.right && x <= g.width : x >= 0 && x < g.left
+    if (onAxis && y >= g.top && y <= g.bottom) return null
     const last = value.panes[value.panes.length - 1]
     if (view !== undefined && last !== undefined && x >= g.left && x <= g.right &&
       y >= last.top + last.frame.model.geometry.bottom && y <= last.top + last.height) return 'time'

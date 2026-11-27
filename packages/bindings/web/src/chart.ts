@@ -1,6 +1,6 @@
 import { attachChartSpeech, barReadoutText, chartSummaryText, defaultBar, defaultSummary, priceDigits, type ChartDescriptions } from './a11y'
-import { RealtimeSeries, RealtimeView, derivePrecision, normalizeBars, normalizeBar, ENGINE_CHART_TYPES, buildEngineFrame, validateEngineLayout, validatePriceScale, EngineIndicators, DrawingStore, DRAWING_TYPES, projectDrawing, viewportLimitsForWidth, financialGeometry, type CandleMode, type MarketBar, type ChartDataPort, type EngineRenderOptions, type EngineFrame, type EngineLayout, type EngineInspection, type EngineIndicatorSpec, type IndicatorDefinition, type Drawing, type DrawingType, type DrawingGeometry, type DrawingBounds } from '@supersolutions/super-chart-core'
-import { paintEngineFrame, paintEngineCursor } from './canvasRenderer'
+import { RealtimeSeries, RealtimeView, derivePrecision, axisStrip, normalizeBars, normalizeBar, ENGINE_CHART_TYPES, buildEngineFrame, validateEngineLayout, validatePriceScale, EngineIndicators, DrawingStore, DRAWING_TYPES, projectDrawing, viewportLimitsForWidth, financialGeometry, type CandleMode, type MarketBar, type ChartDataPort, type EngineRenderOptions, type EngineFrame, type EngineLayout, type EngineInspection, type EngineIndicatorSpec, type IndicatorDefinition, type Drawing, type DrawingType, type DrawingGeometry, type DrawingBounds } from '@supersolutions/super-chart-core'
+import { paintEngineFrame, paintEngineCursor, paintEngineLegend, paintEngineLastCaption } from './canvasRenderer'
 import { attachEngineGestures } from './gestures'
 import { attachDrawingInteraction, type ToolEnd } from './drawingInteraction'
 import { resolveHoldDraw, type DrawByHoldingOptions, type HoldDrawEvent, type ResolvedHoldDraw } from './holdDraw'
@@ -135,6 +135,8 @@ export class EngineChart {
   private paintDirty = true
   private drawingDirty = true
   private cursorDirty = true
+  private lastCaption = ''
+  private pricePan: { scale: { value: (y: number) => number }, top: number, bottom: number } | null = null
   private disposed = false
   private readonly invalidateDrawings = (): void => { if (!this.disposed) { this.drawingDirty = true; this.schedule() } }
   private readonly viewportOptions: NonNullable<EngineChartOptions['viewport']>
@@ -235,6 +237,11 @@ export class EngineChart {
     })
     this.stopGestures = attachEngineGestures(this.root, this.view, () => this.frame?.model.geometry ?? null, (x, y) => { this.moveCursor(x, y ?? null) }, {
       inertia: options.inertia !== false,
+      verticalPan: {
+        begin: (x, y) => this.beginPricePan(x, y),
+        move: dy => { this.movePricePan(dy) },
+        end: () => { this.pricePan = null }
+      },
       frameScheduler
     })
     this.resizeObserver = new this.win.ResizeObserver(() => this.schedule())
@@ -394,6 +401,33 @@ export class EngineChart {
     this.paintDirty = true; this.drawingDirty = true; this.cursorDirty = true; this.schedule()
   }
 
+  /** Dragging the plot up or down: remember how the price pane maps pixels to prices when the drag started. */
+  private beginPricePan (x: number, y: number): boolean {
+    const frame = this.frame
+    if (frame === null || frame.panes.length === 0) return false
+    const pane = frame.panes[0], g = pane.frame.model.geometry, local = y - pane.top
+    if (x < g.left || x > g.right || local < g.top || local > g.bottom) return false
+    this.pricePan = { scale: pane.scale, top: g.top, bottom: g.bottom }
+    return true
+  }
+
+  private movePricePan (dy: number): void {
+    const base = this.pricePan
+    if (base === null || this.disposed) return
+    const a = base.scale.value(base.top - dy), b = base.scale.value(base.bottom - dy)
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a === b) return
+    if (this.layout.priceScale?.mode === 'log' && Math.min(a, b) <= 0) return
+    this.setLayout({ priceScale: { ...this.layout.priceScale, range: [Math.min(a, b), Math.max(a, b)] } })
+  }
+
+  /** Text for a small tag under the last-price tag (the workspace puts the bar-close countdown there); an empty string removes it. */
+  setLastPriceCaption (text: string): void {
+    this.assertLive()
+    if (typeof text !== 'string') throw new TypeError('The last-price caption must be text')
+    if (text === this.lastCaption) return
+    this.lastCaption = text; this.cursorDirty = true; this.schedule()
+  }
+
   setLayout (options: EngineLayout): void {
     this.assertLive()
     const next = copyLayout({ ...this.layout, ...options })
@@ -460,6 +494,19 @@ export class EngineChart {
     if (x < g.left || x > g.right || y < g.top || y > g.bottom) return null
     const point = frame.unproject(x, y)
     return point !== null && Number.isFinite(point.timestamp) && Number.isFinite(point.price) ? { timestamp: point.timestamp, price: point.price } : null
+  }
+
+  /** Which part of the chart a client position is over: the plot, the price axis strip, the time axis, or none. */
+  zoneAt (clientX: number, clientY: number): 'plot' | 'price-axis' | 'time-axis' | null {
+    this.assertLive()
+    const frame = this.frame
+    if (frame === null) return null
+    const rect = this.root.getBoundingClientRect(), x = clientX - rect.left, y = clientY - rect.top, g = frame.model.geometry
+    if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null
+    const strip = axisStrip(g)
+    if (x >= strip.from && x <= strip.from + strip.width && y >= g.top && y <= g.bottom) return 'price-axis'
+    if (x >= g.left && x <= g.right && y > g.bottom) return 'time-axis'
+    return x >= g.left && x <= g.right && y >= g.top && y <= g.bottom ? 'plot' : null
   }
 
   /** The retained drawing under a client position (the same tolerance as selection), or null. */
@@ -780,7 +827,7 @@ export class EngineChart {
     const pixelBudget = this.resolution.maxCanvasPixels
     const ratio = Math.min(this.win.devicePixelRatio || 1, this.resolution.maxPixelRatio ?? Infinity,
       pixelBudget === undefined || rect.width <= 0 || rect.height <= 0 ? Infinity : Math.sqrt(pixelBudget / (rect.width * rect.height)))
-    const plotWidth = rect.width > 0 ? financialGeometry(rect.width, rect.height, this.layout.axisGutter, 12).plotWidth : 0
+    const plotWidth = rect.width > 0 ? financialGeometry(rect.width, rect.height, this.layout.axisGutter, 12, this.layout.axisSide ?? 'right').plotWidth : 0
     if (plotWidth > 0 && plotWidth !== this.densityWidth) {
       this.densityWidth = plotWidth; this.view.setLimits(viewportLimitsForWidth(plotWidth, this.viewportOptions))
     }
@@ -801,7 +848,14 @@ export class EngineChart {
     let repainted = false
     if (this.geometryDirty || this.frame === null) {
       const bars = this.series.getDataList()
-      const indicators = this.indicators.compute(bars).map(result => ({ ...result, pane: result.pane === 'price' ? 'price' : `indicator:${result.paneId ?? result.id}` }))
+      const instances = new Map(this.indicators.list().map(instance => [instance.id, instance]))
+      const indicators = this.indicators.compute(bars).map(result => {
+        const instance = instances.get(result.id)
+        const label = result.name === 'VOL' ? 'Volume' : instance === undefined || instance.params.length === 0 ? result.name : `${result.name} ${instance.params.join(' ')}`
+        return result.pane === 'separate'
+          ? { ...result, label, pane: `indicator:${result.paneId ?? result.id}` }
+          : { ...result, label, pane: 'price', overlay: result.pane === 'overlay' }
+      })
       const snapshot = this.view.getSnapshot(), from = snapshot.dataStart ?? snapshot.viewport.i0
       const previousClose = from > 0 ? this.series.snapshot(from - 1, from, snapshot.mode).bars[0]?.close : undefined
       this.frame = buildEngineFrame(snapshot, bars, indicators, this.width, this.height, this.layout, previousClose, this.series.version)
@@ -863,6 +917,12 @@ export class EngineChart {
         })
         this.cursorContext.restore()
       } }
+      // The legend is always there: the latest bar at rest, the bar under the pointer while it is over the plot.
+      this.cursorContext.save(); this.cursorContext.translate(0, this.frame.panes[0].top)
+      // The legend reads real prices even when the axis shows percentages or a log scale.
+      paintEngineLegend(this.cursorContext, this.frame.panes[0].frame, crosshair === null ? null : crosshair.x, this.renderOptions)
+      if (this.lastCaption !== '') paintEngineLastCaption(this.cursorContext, this.frame.panes[0].frame, this.lastCaption, this.renderOptions)
+      this.cursorContext.restore()
       this.cursorDirty = false; this.counters.cursorPaints++
       this.onInspect?.(crosshair === null ? null : this.frame.inspect(crosshair.x))
     }

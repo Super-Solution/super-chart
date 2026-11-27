@@ -3,6 +3,32 @@
 Releases of the five `@supersolutions/super-chart-*` packages, which share one version. Older releases are in the git
 history (`git log --oneline`, one commit per release). Nothing here is published by this repository's commits.
 
+## Unreleased
+
+Changed (default behaviour; every item has a setting to get the old look back)
+
+* **The price axis is on the right** (`layout.axisSide`, `'left'` restores it) and the time axis keeps its row.
+* **Volume is a bottom band of the price pane** (indicator pane `'overlay'`, `layout.overlayRatio` 0.05–0.5, default
+  0.2) with its own scale, not a separate pane. `{ pane: 'separate' }` on the VOL indicator restores the pane.
+* **A legend sits over the plot at all times**: symbol and interval, open, high, low, close and the change for the latest
+  bar (or the bar under the pointer), then one row per price-pane indicator in the colour of its line. It reads real
+  prices in log and percentage scales. `render.legend: false` removes it; `render.legendTitle` names the chart.
+* **Candles are solid** (hollow styles stay available as chart types).
+* **Replay moved to the market bar**; the footer holds the quick ranges, a live clock, the time-zone menu and the
+  `%` / `log` / `auto` scale switches.
+* The bar-close countdown is a second tag under the last-price tag (`chart.setLastPriceCaption(text)`).
+
+Added
+
+* **Quick ranges** (1D, 5D, 1M, 3M, 6M, YTD, 1Y, 5Y, All): `workspace.showRange(range)`, `WORKSPACE_RANGES`,
+  `isWorkspaceRange`, palette commands `view.range.*`. Month and year ranges are calendar ranges; older pages are
+  requested until the range is covered.
+* **Chart-type menu** with a picture of each type, **searchable indicator list**, `Copy price` and `Draw a horizontal line
+  at <price>` in the plot's context menu, a context menu for the price axis (automatic range, scale mode, invert).
+* **Dragging the plot up or down moves the price range** (the range turns manual; the Auto switch or a double click on the
+  axis brings it back).
+* `chart.zoneAt(clientX, clientY)` names the part of the chart under a point (`plot`, `price-axis`, `time-axis`).
+
 ## 0.13.1
 
 Changed

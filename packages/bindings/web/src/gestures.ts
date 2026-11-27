@@ -5,7 +5,9 @@ interface Point { x: number, y: number }
 interface Frame { length: number, left: number, width: number, observed: Readonly<Viewport> }
 /** tan(22.5 degrees): the weaker wheel axis below this share of the stronger one is ignored. */
 const AXIS_SNAP = 0.4142
-interface Drag extends Frame { start: Viewport, x: number, distance: number }
+interface Drag extends Frame { start: Viewport, x: number, y: number, distance: number }
+/** How far, in pixels, a drag must travel vertically before it also moves the price range, so a slightly tilted pan stays a pan. */
+const VERTICAL_START = 10
 
 /** Browser input for the owned engine. Native hosts retain their native gestures. */
 export function attachEngineGestures (
@@ -17,6 +19,8 @@ export function attachEngineGestures (
   options: {
     inertia?: boolean
     reducedMotion?: boolean
+    /** Dragging the plot up or down moves the price range. `begin` may refuse (return false); `move` gets the distance since the start of the drag. */
+    verticalPan?: { begin: (x: number, y: number) => boolean, move: (dy: number) => void, end: () => void }
     frameScheduler?: { request: (callback: (time: number) => void) => number, cancel: (id: number) => void }
   } = {}
 ): (() => void) & { cancelInput: () => void } {
@@ -127,16 +131,19 @@ export function attachEngineGestures (
     const iterator = pointers.values(), a = iterator.next().value as Point, b = iterator.next().value as Point | undefined
     return b === undefined ? { x: a.x, y: a.y, distance: 0 } : { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, distance: Math.hypot(b.x - a.x, b.y - a.y) }
   }
+  let vertical: 'idle' | 'refused' | 'active' = 'idle'
+  const endVertical = (): void => { if (vertical === 'active') options.verticalPan?.end(); vertical = 'idle' }
   const rebase = (): void => {
     const frame = readFrame()
     if (pointers.size === 0 || frame === null) { drag = null; return }
     const p = position()
     view.beginNavigation()
-    drag = { ...frame, start: { ...frame.observed }, x: p.x, distance: p.distance }
+    drag = { ...frame, start: { ...frame.observed }, x: p.x, y: p.y, distance: p.distance }
+    endVertical()
     sample = { x: p.x, time: win.performance.now() }; velocity = 0
   }
   const clear = (): void => {
-    stop(); cancelHold(); drag = null; inspection = false
+    stop(); cancelHold(); endVertical(); drag = null; inspection = false
     const ids = [...pointers.keys()]
     pointers.clear()
     for (const id of ids) if (element.hasPointerCapture(id)) element.releasePointerCapture(id)
@@ -188,6 +195,11 @@ export function attachEngineGestures (
     const zoomed = zoomViewport(drag.start, drag.length, factor, anchor, view.getLimits())
     const delta = (drag.x - p.x) / drag.width * Math.max(0, viewportSpan(zoomed) - 1)
     pending = { next: { i0: zoomed.i0 + delta, i1: zoomed.i1 + delta }, frame: drag }
+    if (pointers.size === 1 && options.verticalPan !== undefined && vertical !== 'refused') {
+      const dy = p.y - drag.y
+      if (vertical === 'idle' && Math.abs(dy) >= VERTICAL_START && Math.abs(dy) > Math.abs(p.x - drag.x) * 0.5) vertical = options.verticalPan.begin(drag.x, drag.y) ? 'active' : 'refused'
+      if (vertical === 'active') options.verticalPan.move(dy)
+    }
     const elapsed = now - sample.time
     if (pointers.size === 1 && elapsed > 0) {
       const instantaneous = Math.max(-3, Math.min(3, (p.x - sample.x) / elapsed))
@@ -210,7 +222,7 @@ export function attachEngineGestures (
     if (last.x !== e.clientX - r.left || last.y !== e.clientY - r.top) movePointer(e)
     const wasSingle = pointers.size === 1, recent = win.performance.now() - sample.time < 80
     const currentDrag = drag !== null && valid(drag)
-    flush(); cancelHold(); pointers.delete(e.pointerId)
+    flush(); cancelHold(); endVertical(); pointers.delete(e.pointerId)
     if (element.hasPointerCapture(e.pointerId)) element.releasePointerCapture(e.pointerId)
     if (pointers.size > 0) { rebase(); return }
     const frame = readFrame(), speed = velocity

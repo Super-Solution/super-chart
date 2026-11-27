@@ -224,4 +224,35 @@ export const WORKSPACE_STYLE = `
 .sc-workspace .sc-dt-item:disabled{opacity:.4;cursor:not-allowed}
 .sc-workspace .sc-dt-item[aria-selected=true]{color:var(--sc-accent,${DARK.accent});background:var(--sc-active-background,${DARK.active})}
 .sc-workspace[data-headless=true] .sc-dt{display:none!important}
+
+.sc-workspace .sc-footer{gap:6px;padding:2px 8px;min-height:32px}
+.sc-workspace .sc-ranges{padding:0;border:0;min-height:0;background:transparent;gap:0;flex:none}
+.sc-workspace .sc-footer .sc-ranges .sc-button,.sc-workspace .sc-footer .sc-scalebar .sc-button{border-color:transparent;background:transparent;color:var(--sc-muted,${DARK.muted});padding:2px 8px;min-height:24px;font-size:12px;border-radius:var(--sc-radius-small,4px)}
+.sc-workspace .sc-footer .sc-ranges .sc-button:hover:not(:disabled),.sc-workspace .sc-footer .sc-scalebar .sc-button:hover:not(:disabled){background:var(--sc-hover-background,${DARK.hover});color:var(--sc-text,${DARK.text});border-color:transparent}
+.sc-workspace .sc-footer .sc-scalebar .sc-button[aria-pressed=true]{background:var(--sc-active-background,${DARK.active});color:var(--sc-accent,${DARK.accent});border-color:transparent}
+.sc-workspace .sc-clock{font-size:12px;font-variant-numeric:tabular-nums;color:var(--sc-muted,${DARK.muted});white-space:nowrap;padding:0 4px}
+.sc-workspace .sc-clock:empty{display:none}
+.sc-workspace .sc-footer .sc-zone-select{border-color:transparent;background:transparent;color:var(--sc-muted,${DARK.muted});width:auto;max-width:170px;padding:2px 2px}
+.sc-workspace .sc-footer .sc-zone-select:hover:not(:disabled){background:var(--sc-hover-background,${DARK.hover});border-color:transparent;color:var(--sc-text,${DARK.text})}
+.sc-workspace .sc-status .sc-ticker,.sc-workspace .sc-status .sc-interval{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.sc-workspace[data-layout=narrow] .sc-clock{display:none}
+.sc-workspace .sc-type-menu>summary::after{font-size:10px}
+.sc-workspace .sc-type-menu>summary{padding:4px 8px;gap:4px}
+.sc-workspace .sc-type-menu>summary .sc-icon{display:block;width:18px;height:18px}
+.sc-workspace .sc-type-menu>summary .sc-label{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.sc-workspace .sc-type-panel{right:auto;left:auto;width:228px;padding:6px;display:flex;flex-direction:column;gap:1px}
+.sc-workspace .sc-type-item{display:flex;align-items:center;gap:10px;min-height:32px;padding:4px 10px;border-color:transparent!important;background:transparent!important}
+.sc-workspace .sc-type-item .sc-icon{display:block;flex:none;width:18px;height:18px}
+.sc-workspace .sc-type-item:hover:not(:disabled){background:var(--sc-hover-background,${DARK.hover})!important}
+.sc-workspace .sc-type-item[aria-pressed=true]{color:var(--sc-accent,${DARK.accent});background:var(--sc-active-background,${DARK.active})!important}
+.sc-workspace .sc-indicator-add{flex-direction:column;align-items:stretch;gap:8px}
+.sc-workspace .sc-indicator-search{width:100%;max-width:none;box-sizing:border-box}
+.sc-workspace .sc-indicator-results{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:4px;max-height:176px;overflow:auto;overscroll-behavior:contain}
+.sc-workspace .sc-indicator-result{display:flex;align-items:center;justify-content:space-between;gap:6px;text-align:left;font-variant-numeric:tabular-nums}
+.sc-workspace .sc-indicator-result .sc-icon{display:block;opacity:.45;width:14px;height:14px}
+.sc-workspace .sc-indicator-result:hover .sc-icon,.sc-workspace .sc-indicator-result:focus-visible .sc-icon{opacity:1;color:var(--sc-accent,${DARK.accent})}
+.sc-workspace .sc-marketbar>.sc-icon-button:not(.sc-icon-only) .sc-icon,.sc-workspace .sc-footer>.sc-icon-button:not(.sc-icon-only) .sc-icon{display:block;width:16px;height:16px}
+.sc-workspace .sc-footer .sc-button:not([aria-pressed]){border-color:transparent;background:transparent;color:var(--sc-muted,${DARK.muted})}
+.sc-workspace .sc-footer .sc-button:not([aria-pressed]):hover:not(:disabled){background:var(--sc-hover-background,${DARK.hover});color:var(--sc-text,${DARK.text})}
+.sc-workspace:not([data-layout=narrow]) .sc-countdown{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 `

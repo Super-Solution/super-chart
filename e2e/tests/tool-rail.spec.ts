@@ -85,7 +85,7 @@ test('the magnet snaps a placed point to a real open, high, low or close', async
     const pro = (window as any).pro, chart = pro.chart, bar = chart.getBars().at(-2)
     const frame = (chart as any).frame, p = frame.project(bar.timestamp, bar.high)
     const host = document.querySelector('#rail-magnet .sc-chart [tabindex="0"]')!.getBoundingClientRect()
-    return { x: host.x + p.x + 4, y: host.y + p.y - 6, bar }
+    return { x: host.x + p.x + 1, y: host.y + p.y - 6, bar }
   })
   await pickTool(page, '#rail-magnet', 'horizontal')
   await page.mouse.click(near.x, near.y)

@@ -1,6 +1,6 @@
 import type { EngineFrame } from '@supersolutions/super-chart-core'
 import type { EngineLayer } from './layer'
-import { derivePrecision, ENGINE_RENDER_THEMES } from '@supersolutions/super-chart-core'
+import { axisStrip, derivePrecision, ENGINE_RENDER_THEMES } from '@supersolutions/super-chart-core'
 import { colors, CANVAS_FONT, CANVAS_LABEL_FONT, type ThemeName } from './tokens'
 import {
   ANNOTATION_TEMPLATE_LIMITS, ANNOTATION_TEMPLATE_NAME, BUILT_IN_ANNOTATION_TEMPLATES,
@@ -505,7 +505,8 @@ export class EngineAnnotations implements EngineLayer {
     // Each level's price and each zone's top and bottom on the price axis. A tag sits at its
     // exact y; when that spot is taken (the last-price tag, another mark) it moves the least
     // distance needed and a connector runs from the tag to the exact price at the plot edge.
-    if (tags.length === 0 || bounds.left < 36) return
+    const strip = this.frame === null ? null : axisStrip(this.frame.model.geometry)
+    if (tags.length === 0 || strip === null || strip.width < 36) return
     const bars = this.frame?.snapshot.bars ?? []
     const digits = this.pricePrecision ?? derivePrecision(bars)
     const taken: number[] = []
@@ -530,16 +531,18 @@ export class EngineAnnotations implements EngineLayer {
     }
     context.save()
     try {
-      context.font = CANVAS_FONT; context.textAlign = 'right'; context.textBaseline = 'middle'; context.setLineDash([]); context.lineWidth = 1
+      context.font = CANVAS_FONT; context.textAlign = strip.align; context.textBaseline = 'middle'; context.setLineDash([]); context.lineWidth = 1
       context.fillStyle = palette.surface
-      for (const { y } of placed) context.fillRect(0, y - 15, bounds.left, 30)
+      // `into` points from the strip toward the plot, so the connector leans the same way on either side.
+      const into = strip.side === 'right' ? -1 : 1
+      for (const { y } of placed) context.fillRect(strip.from, y - 15, strip.width, 30)
       for (const { tag, y, exact } of placed) {
-        context.fillStyle = palette.surface; context.fillRect(2, y - 9, bounds.left - 4, 18)
-        context.strokeStyle = tag.color; context.strokeRect(2.5, y - 8.5, bounds.left - 5, 17)
+        context.fillStyle = palette.surface; context.fillRect(strip.from + 2, y - 9, strip.width - 4, 18)
+        context.strokeStyle = tag.color; context.strokeRect(strip.from + 2.5, y - 8.5, strip.width - 5, 17)
         if (y !== exact) {
-          context.beginPath(); context.moveTo(bounds.left - 2, y); context.lineTo(bounds.left + 4, exact + 0.5); context.stroke()
+          context.beginPath(); context.moveTo(strip.inner - into * 2, y); context.lineTo(strip.inner + into * 4, exact + 0.5); context.stroke()
         }
-        context.fillStyle = tag.color; context.fillText(tag.price.toFixed(digits), bounds.left - 6, y, Math.max(1, bounds.left - 10))
+        context.fillStyle = tag.color; context.fillText(tag.price.toFixed(digits), strip.textX, y, Math.max(1, strip.width - 10))
       }
     } finally { context.restore() }
   }

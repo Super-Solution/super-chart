@@ -50,6 +50,10 @@ export interface EngineRenderOptions {
    * new local date a faint line, on intraday periods only. The workspace sets it from `SymbolInfo.session`.
    */
   session?: TradingSession | null
+  /** The always-on legend at the top left of the price pane: title, open/high/low/close, change, indicator values. Default true. */
+  legend?: boolean
+  /** The legend's first words, usually "name · interval · exchange". The workspace sets it from the symbol; empty shows none. */
+  legendTitle?: string
   /** Internal pane composition can omit repeated time labels. */
   showTimeAxis?: boolean
   formatPrice?: (price: number, precision: number) => string

@@ -146,10 +146,12 @@ function renderOf (value: unknown): WorkspaceSavedRender {
   return { ...input } as WorkspaceSavedRender
 }
 function layoutOf (value: unknown): EngineLayout {
-  const input = object(value, ['axisGutter', 'priceScale', 'priceRatio', 'paneWeights'], [], 'layout')
+  const input = object(value, ['axisSide', 'axisGutter', 'priceScale', 'priceRatio', 'paneWeights', 'overlayRatio'], [], 'layout')
   const result: EngineLayout = {}
+  if (input.axisSide !== undefined) { if (input.axisSide !== 'left' && input.axisSide !== 'right') throw new RangeError('Axis side must be left or right'); result.axisSide = input.axisSide }
   if (input.axisGutter !== undefined) result.axisGutter = finite(input.axisGutter, 'axis gutter')
   if (input.priceRatio !== undefined) result.priceRatio = finite(input.priceRatio, 'price ratio')
+  if (input.overlayRatio !== undefined) result.overlayRatio = finite(input.overlayRatio, 'overlay ratio')
   if (input.priceScale !== undefined) {
     const scale = object(input.priceScale, ['mode', 'reversed', 'range'], [], 'price scale')
     if (scale.reversed !== undefined) flag(scale.reversed, 'reversed scale')
@@ -186,7 +188,7 @@ function indicatorsOf (value: unknown, options: WorkspaceDocumentOptions): reado
       if (!BUILTINS.has(name) && !custom.has(name)) throw new TypeError(`Indicator is not registered: ${name}`)
       if (!Array.isArray(input.params) || input.params.length > WORKSPACE_DOCUMENT_LIMITS.params) throw new TypeError('Invalid indicator parameters')
       const params = input.params.map(param => finite(param, 'indicator parameter'))
-      if (input.pane !== 'price' && input.pane !== 'separate') throw new TypeError('Invalid indicator pane')
+      if (input.pane !== 'price' && input.pane !== 'separate' && input.pane !== 'overlay') throw new TypeError('Invalid indicator pane')
       const instance: EngineIndicatorInstance = {
         id,
         name,
