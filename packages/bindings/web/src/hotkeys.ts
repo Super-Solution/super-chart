@@ -2,7 +2,7 @@
 import type { DrawingType } from '@supersolutions/super-chart-core'
 
 /** What a hotkey does: arm a drawing tool, or run one of the workspace's own actions. */
-export type HotkeyAction = { readonly tool: DrawingType } | { readonly action: 'resetView' | 'screenshot' }
+export type HotkeyAction = { readonly tool: DrawingType } | { readonly action: 'resetView' | 'screenshot' | 'goToDate' }
 export interface Hotkey { readonly code: string, readonly shift: boolean, readonly action: HotkeyAction, readonly label: string }
 
 const hotkey = (code: string, action: HotkeyAction, shift = false): Hotkey => Object.freeze({ code, shift, action, label: `Alt+${shift ? 'Shift+' : ''}${code.replace(/^Key/, '')}` })
@@ -17,7 +17,8 @@ export const HOTKEYS: readonly Hotkey[] = Object.freeze([
   hotkey('KeyI', { tool: 'pitchfork' }),
   hotkey('KeyR', { tool: 'rectangle' }, true),
   hotkey('KeyR', { action: 'resetView' }),
-  hotkey('KeyS', { action: 'screenshot' })
+  hotkey('KeyS', { action: 'screenshot' }),
+  hotkey('KeyG', { action: 'goToDate' })
 ])
 
 /** The hotkey for a key event (Alt held, no Ctrl or Meta), or null. */

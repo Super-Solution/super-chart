@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/promise-function-async -- Load methods validate synchronously and return the shared queue promise without an async wrapper. */
 import { EngineChart, type EngineChartOptions, type EngineConfiguration } from './chart'
+import { formatDateQuery, parseDateQuery } from './goToDate'
 import { ENGINE_CHART_TYPES, DRAWING_TYPES, DERIVED_STYLES, createDerivedSeriesPort, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, compileSymbolSession, sessionBarClose, sessionKindAt, parseWorkspaceDocument, checkTimeZone, formatUtcOffset, timeZoneChoices, localTimeZone, COMMON_TIME_ZONES, INDICATOR_GROUPS, indicatorInfo, indicatorLabel, searchIndicators, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type DerivedSeriesPort, type DerivedStyle, type DerivedStyleOptions, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1, type SessionIssue, type TradingSession } from '@supersolutions/super-chart-core'
 import { DatafeedMarks, MARKS_LAYER, type WorkspaceMarksState } from './datafeedMarks'
 import { EngineAnnotations, attachAnnotationIntents, type AnnotationIntentEvent, type EngineAnnotationTheme } from './annotations'
@@ -762,6 +763,7 @@ export class ChartWorkspace {
       root: this.root,
       t: () => this.tr,
       commands: () => this.collectCommands(),
+      suggest: query => this.dateSuggestions(query),
       listen: (target, type, listener) => { this.listen(target, type, listener); },
       run: command => { void this.runCommand(command) },
       closeOthers: () => { this.closeFloating('palette'); }
@@ -791,6 +793,7 @@ export class ChartWorkspace {
         key.preventDefault(); key.stopPropagation()
         if ('tool' in hotkey.action) { const tool = hotkey.action.tool; this.run(() => { this.chart.setDrawingTool(tool); this.setToolValue(tool) }) }
         else if (hotkey.action.action === 'resetView') this.run(() => { this.chart.view.resetViewport() })
+        else if (hotkey.action.action === 'goToDate') this.openGoToDate()
         else void this.download()
         return
       }
@@ -2182,6 +2185,7 @@ export class ChartWorkspace {
     if (typeof this.datafeed.getMarks === 'function') add('chart.marks', t('palette.marks'), 'palette.group.chart', () => { this.setMarksVisible(!this.marks.visible) }, { keywords: ['events', 'earnings', 'dividend', 'split', 'news'] })
     for (const range of WORKSPACE_RANGES) add(`view.range.${range}`, t('range.named', { name: t(`range.${range}`) }), 'palette.group.view', () => { this.showRange(range) }, { keywords: ['range', 'zoom', 'period', 'ytd'] })
     add('view.fit', t('context.fit'), 'palette.group.view', () => { this.fitPriceScale() })
+    add('view.goto', t('palette.goto'), 'palette.group.view', () => { this.openGoToDate() }, { shortcut: 'Alt+G', keywords: ['date', 'time', 'jump', 'seek'] })
     add('view.reset', t('context.reset'), 'palette.group.view', () => { this.chart.view.resetViewport() }, { shortcut: 'Alt+R' })
     add('view.latest', t('nav.latest.title'), 'palette.group.view', () => { this.chart.view.followLatest() })
     add('view.timezone', t(this.zoneId === 'UTC' ? 'scale.local.title' : 'scale.utc.title'), 'palette.group.view', () => { this.toggleTimeZone() })
@@ -2328,6 +2332,31 @@ export class ChartWorkspace {
       : event.phase === 'recognized' ? this.t('hold.recognized', { shape: this.toolLabel(event.shape) })
         : event.phase === 'erased' ? this.t('hold.erased', { count: String(event.count) })
           : event.phase === 'removed' ? this.t('hold.removed') : this.t('hold.unrecognized')
+  }
+
+  /** Open the palette on a date to edit: the latest bar's, selected, so typing replaces it and Enter goes there. */
+  private openGoToDate (): void {
+    const zone = this.chart.getRenderOptions().timeZone ?? 'UTC', last = this.chart.getBars({ limit: 1 })[0]
+    if (this.paletteEnabled) this.palette.open(last === undefined ? '' : formatDateQuery(last.timestamp, zone), true)
+  }
+
+  /** A date typed in the palette becomes a command that moves the view to the nearest loaded bar, and says when the date is outside what is loaded. */
+  private dateSuggestions (query: string): WorkspaceCommand[] {
+    const zone = this.chart.getRenderOptions().timeZone ?? 'UTC', timestamp = parseDateQuery(query, zone)
+    if (timestamp === null) return []
+    return [{
+      id: 'view.goto.date',
+      group: this.t('palette.group.view'),
+      title: this.t('palette.goto.to', { date: formatDateQuery(timestamp, zone) }),
+      run: () => {
+        const bars = this.chart.getBars(), first = bars[0], last = bars.at(-1)
+        if (first === undefined || last === undefined) throw new Error(this.t('goto.before', { date: '-' }))
+        this.chart.view.seek(timestamp)
+        // Thrown so the command runner shows it as the notice (it clears the notice after a quiet run).
+        if (timestamp < first.timestamp) throw new Error(this.t('goto.before', { date: formatDateQuery(first.timestamp, zone) }))
+        if (timestamp > last.timestamp) throw new Error(this.t('goto.after', { date: formatDateQuery(last.timestamp, zone) }))
+      }
+    }]
   }
 
   private showNotice (error: unknown): void { if (!this.disposed) this.notice.textContent = this.errorMessage(error) }

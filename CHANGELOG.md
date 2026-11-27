@@ -5,6 +5,10 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- **Go to date** (`Alt+G`, or the palette command): opens the palette on the latest bar's date, selected; type `2026-03-01` or `2026-03-01 14:30` (axis time zone) and Enter to move the view to the nearest loaded bar. A date outside the loaded bars says so. Running any palette command now returns focus to the chart first, so shortcuts keep working afterwards.
+
+- The command palette leads with a **Recent** group (the last five commands run) when the query is empty. The demo workspace takes `?locale=zh-TW`.
+
 - **Hide drawings** (eye button in the rail, and a palette command): hides every drawing at once without changing the document, undo history or export. Arming a drawing tool shows them again. Core: `DrawingStore.setViewHidden()` and `viewHidden` on the snapshot. On windows shorter than 860 px the rail's buttons shrink (34 px, then 30 px) so every tool stays in reach.
 
 - Six more indicators in the technical pack: `SC_PPO`, `SC_CHAIKIN_OSC`, `SC_DPO`, `SC_LINREG` (regression channel), `SC_FISHER`, `SC_STDEV`; kernels in `taExtra.ts`, built on `ta.ts`. The catalogue is now 66 names. They exist in the TypeScript engine only (the Go and Python servers keep their 33 kernels).

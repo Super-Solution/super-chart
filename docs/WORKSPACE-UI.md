@@ -423,7 +423,8 @@ own picker.
   remover; registering the same `id` replaces. A command's `when()` can hide it,
   `run` may be async. `listCommands()` returns what is currently available.
   `commands: { enabled: false }` removes the palette and its shortcut;
-  `shortcut: false` keeps the palette but drops Ctrl/Cmd+K.
+  `shortcut: false` keeps the palette but drops Ctrl/Cmd+K. With an empty query the palette leads
+  with a **Recent** group: the last five commands run in this workspace (not stored across loads). **Go to date** (`Alt+G`) opens it on the latest bar's date; a typed date such as `2026-03-01 14:30` (axis time zone) becomes a `Go to …` command that moves the view to the nearest loaded bar and says when the date is outside the loaded range.
 - Right-click on the chart opens a menu. Over a drawing it offers lock/unlock and
   delete (a locked drawing cannot be deleted); everywhere it offers fit the price
   scale, reset the view, jump to the latest bar, remove all drawings (when there
