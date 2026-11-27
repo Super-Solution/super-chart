@@ -5,6 +5,9 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- `supportResistance(bars, options)` (core): swing pivots clustered into support and resistance levels, ranked by distance from the last close. Pure, OHLC only. It backs the new `SC_SR` indicator (three lines each side, family "levels") and the chat plugin's `chart_levels` read tool, so an agent draws at prices where price turned.
+- Indicator rows in the workspace read `Moving Average (20)` rather than `Moving Average 20`.
+
 - `render.watermark` (`{ title, subtitle? }` or `null`): a faint background ticker like TradingView's. The workspace sets it to the symbol and "name, interval" by default; pass `render: { watermark: null }` to switch it off. Indicator panes do not paint it.
 
 Changed (default behaviour; every item has a setting to get the old look back)

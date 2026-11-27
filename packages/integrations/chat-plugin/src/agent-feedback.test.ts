@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { correctTimeUnits, summarizeData, whyNotShown } from './agent-feedback'
+import { correctTimeUnits, levelsOf, summarizeData, whyNotShown } from './agent-feedback'
 import type { ChartAnnotation } from '@supersolutions/super-protocol'
 
 const level = (key: string, time: number, price: number): ChartAnnotation => ({ key, kind: 'level', anchors: [{ time, price }] }) as ChartAnnotation
@@ -29,4 +29,20 @@ describe('agent feedback', () => {
     expect(whyNotShown(level('x', 1_700_050_000_000, 110), 'unprojectable', data)).toMatch(/milliseconds/)
     expect(whyNotShown(level('x', 1_700_050_000_000, 110), 'offscreen', data)).toMatch(/outside the part of the chart on screen/)
   })
+})
+
+describe('levelsOf', () => {
+  const swing = Array.from({ length: 160 }, (_, i) => {
+    const c = 105 - 5 * Math.cos((i / 36) * Math.PI * 2)
+    return { timestamp: 1_700_000_000_000 + i * 60_000, high: c + 0.5, low: c - 0.5, close: c }
+  })
+  it('gives prices on each side of the last close with when they last held', () => {
+    const { support, resistance, lastClose } = levelsOf(swing, 3)
+    expect(lastClose).toBe(swing[159].close)
+    expect(support.length + resistance.length).toBeGreaterThan(0)
+    for (const level of support) expect(level.price).toBeLessThanOrEqual(lastClose as number)
+    for (const level of resistance) expect(level.price).toBeGreaterThan(lastClose as number)
+    expect(resistance[0].lastTime).toBeGreaterThan(swing[0].timestamp)
+  })
+  it('is empty without bars', () => { expect(levelsOf([])).toEqual({ support: [], resistance: [], lastClose: null }) })
 })

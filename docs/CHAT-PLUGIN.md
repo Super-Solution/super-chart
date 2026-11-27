@@ -63,6 +63,7 @@ Moving a card between places rebuilds the chart; indicators and marks come back 
 | --- | --- | --- |
 | `chart_state` | `read` | symbol, period, chart type, indicators, annotations, bar count, replay |
 | `chart_bars` | `read` | the last N loaded bars (≤ 500) |
+| `chart_levels` | `read` | up to five support and five resistance prices from the recent bars, nearest the last close first, with touch counts; draw lines at these, not at guesses |
 | `chart_set_market` | `draft` | change symbol/period (needs a feed; inline-bar cards refuse) |
 | `chart_annotate` | `draft` | merge or replace the agent's marks by key; returns `applied` / `rejected` with codes, and a `ref:` link per mark |
 | `chart_indicators` | `draft` | add/remove indicators; returns what is shown and what is available |

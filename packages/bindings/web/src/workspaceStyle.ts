@@ -232,7 +232,7 @@ export const WORKSPACE_STYLE = `
 .sc-workspace .sc-footer .sc-scalebar .sc-button[aria-pressed=true]{background:var(--sc-active-background,${DARK.active});color:var(--sc-accent,${DARK.accent});border-color:transparent}
 .sc-workspace .sc-clock{font-size:12px;font-variant-numeric:tabular-nums;color:var(--sc-muted,${DARK.muted});white-space:nowrap;padding:0 4px}
 .sc-workspace .sc-clock:empty{display:none}
-.sc-workspace .sc-footer .sc-zone-select{border-color:transparent;background:transparent;color:var(--sc-muted,${DARK.muted});width:auto;max-width:170px;padding:2px 2px}
+.sc-workspace .sc-footer .sc-zone-select{border-color:transparent;background:transparent;color:var(--sc-muted,${DARK.muted});width:auto;max-width:240px;padding:2px 2px}
 .sc-workspace .sc-footer .sc-zone-select:hover:not(:disabled){background:var(--sc-hover-background,${DARK.hover});border-color:transparent;color:var(--sc-text,${DARK.text})}
 .sc-workspace .sc-status .sc-ticker,.sc-workspace .sc-status .sc-interval{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .sc-workspace[data-layout=narrow] .sc-clock{display:none}
@@ -261,4 +261,6 @@ export const WORKSPACE_STYLE = `
 .sc-workspace .sc-indicator-id{flex:none;color:var(--sc-muted,${DARK.muted});font-size:11px;letter-spacing:.02em}
 .sc-workspace .sc-indicator-result:hover:not(:disabled),.sc-workspace .sc-indicator-result:focus-visible{background:var(--sc-hover-background,${DARK.hover})!important}
 .sc-workspace .sc-indicator-family{padding:8px 10px 2px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--sc-muted,${DARK.muted})}
+.sc-workspace .sc-object-row .sc-object-name:disabled{opacity:1;border-color:transparent;color:var(--sc-text,${DARK.text});cursor:default;background:transparent}
+.sc-workspace .sc-object-row:hover{background:var(--sc-hover-background,${DARK.hover});border-radius:6px}
 `

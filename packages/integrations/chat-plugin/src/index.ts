@@ -4,7 +4,7 @@ import { EngineAnnotations } from '@supersolutions/super-chart-web/annotations'
 import { symbolKey, type Datafeed as CoreDatafeed, type MarketBar as CoreBar, type Period as CorePeriod, type SymbolInfo as CoreSymbol } from '@supersolutions/super-chart-core'
 import { readHostTheme, CHART_CARD_KIND, CHART_LIMITS, chartCardKind, validatePeriod, validateSymbol, formatCardRef, parseChartRef, validateChartAnnotations, validateChartCardSpec as validateChartCard, type CardMount, type CardMountContext, type ChartIndicator, type ChartType, type ChatPlugin, type Datafeed, type MarketBar, type Period, type SymbolInfo, type PluginTool, type PluginToolAuthority, type CardRef, type CardRefEvent, type CardRefResult, type ChartAnnotation, type ChartCardSpec } from '@supersolutions/super-protocol'
 import { chartHostLook } from './host-theme'
-import { correctTimeUnits, summarizeData, whyNotShown, type DataSummary, type MarkPlacement, type MarkWarning } from './agent-feedback'
+import { correctTimeUnits, levelsOf, summarizeData, whyNotShown, type DataSummary, type MarkPlacement, type MarkWarning } from './agent-feedback'
 
 type AuthorizedPluginTool = PluginTool & { authority: PluginToolAuthority }
 
@@ -393,6 +393,18 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
         const chart = find(id)
         const bars = chart.workspace.getBars({ limit: (limit as number | undefined) ?? 100 })
         return { chartId: chart.id, count: bars.length, bars }
+      }
+    },
+    {
+      name: 'chart_levels',
+      authority: 'read',
+      description: 'Read the support and resistance levels price has turned at, from the most recent bars (up to 500): up to five of each, nearest the last close first, with how many times price turned there and when last. Draw lines and zones at these prices instead of guessing; check them against chart_state first.',
+      inputSchema: { type: 'object', properties: { chartId, strength: { type: 'integer', minimum: 1, maximum: 50, description: 'Bars on each side a turning point must out-reach; larger finds fewer, more important levels. Default 5.' } } },
+      run: async (input) => {
+        const { chartId: id, strength } = (input ?? {}) as { chartId?: unknown, strength?: unknown }
+        if (strength !== undefined && !(Number.isInteger(strength) && (strength as number) >= 1 && (strength as number) <= 50)) throw new RangeError('strength must be an integer from 1 to 50')
+        const chart = find(id)
+        return { chartId: chart.id, ...levelsOf(chart.workspace.getBars({ limit: 500 }), strength as number | undefined) }
       }
     },
     {

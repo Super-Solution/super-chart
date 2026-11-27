@@ -6,6 +6,7 @@ import {
   aroon, adl, cmf, forceIndex, vortex, tsi, ultimate, zigzag, pivotPoints, chandelier, periodBucket, type Series
 } from '../ta'
 import { previousRangeHighLow } from '../analysis/previousRangeHighLow'
+import { supportResistance } from '../analysis/supportResistance'
 import type { EngineIndicators, IndicatorDefinition, IndicatorFigure, IndicatorRow } from './indicators'
 
 /** Optional owned-TA pack; importing this module does not register or activate anything. */
@@ -15,7 +16,7 @@ export const TECHNICAL_INDICATOR_NAMES = Object.freeze([
   'SC_STOCH', 'SC_STOCHRSI', 'SC_MFI', 'SC_BBP', 'SC_SUPERTREND', 'SC_ICHIMOKU', 'SC_PDHL',
   'SC_WMA', 'SC_HMA', 'SC_DEMA', 'SC_TEMA', 'SC_VWMA', 'SC_KAMA',
   'SC_CVD', 'SC_CVD_EST',
-  'SC_AROON', 'SC_CMF', 'SC_ADL', 'SC_FORCE', 'SC_VORTEX', 'SC_TSI', 'SC_ULTIMATE', 'SC_ZIGZAG', 'SC_PIVOTS', 'SC_CHANDELIER'
+  'SC_AROON', 'SC_CMF', 'SC_ADL', 'SC_FORCE', 'SC_VORTEX', 'SC_TSI', 'SC_ULTIMATE', 'SC_ZIGZAG', 'SC_PIVOTS', 'SC_CHANDELIER', 'SC_SR'
 ] as const)
 
 export type TechnicalIndicatorName = typeof TECHNICAL_INDICATOR_NAMES[number]
@@ -354,6 +355,19 @@ export const TECHNICAL_INDICATOR_DEFINITIONS: readonly IndicatorDefinition[] = O
     const { high, low, close } = prices(bars)
     const result = chandelier(high, low, close, p[0], p[1])
     return rows(['long', 'short'], [result.long, result.short])
+  }),
+  define('SC_SR', [5, 500], ['period', 'period'], 'price', tinted(
+    ['r1', 'Resistance 1', DOWN, [6, 4]], ['r2', 'Resistance 2', DOWN, [2, 4]], ['r3', 'Resistance 3', DOWN, [1, 4]],
+    ['s1', 'Support 1', UP, [6, 4]], ['s2', 'Support 2', UP, [2, 4]], ['s3', 'Support 3', UP, [1, 4]]
+  ), (bars, p) => {
+    // Levels come from the swing pivots of the latest `lookback` bars and are measured against the latest close, so the
+    // lines are flat and move only as new bars confirm pivots (a pivot needs `strength` bars after it).
+    const { resistance, support } = supportResistance(bars, { strength: p[0], lookback: p[1] })
+    const at = (side: readonly { price: number }[], n: number): number | null => side[n]?.price ?? null
+    const row = Object.freeze({
+      r1: at(resistance, 0), r2: at(resistance, 1), r3: at(resistance, 2), s1: at(support, 0), s2: at(support, 1), s3: at(support, 2)
+    })
+    return new Array<IndicatorRow>(bars.length).fill(row)
   }),
   define('SC_PDHL', [0], ['range'], 'price', lines(['high', 'Previous High'], ['low', 'Previous Low']), (bars, p) => {
     const range = previousRangeHighLow(bars, p[0] === 1 ? 'week' : 'day', 'UTC')

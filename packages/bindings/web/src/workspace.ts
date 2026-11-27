@@ -602,7 +602,7 @@ export class ChartWorkspace {
       indicatorList.replaceChildren(...currentIndicators.map(indicator => {
         const settings = this.node('details'), title = this.node('summary')
         settings.className = 'sc-indicator'; settings.dataset.indicator = indicator.id; settings.open = expanded.has(indicator.id)
-        title.textContent = `${indicatorLabel(indicator.name)} ${indicator.params.join(',')}${indicator.visible ? '' : ` ${this.t('indicators.hidden')}`}`
+        title.textContent = `${indicatorLabel(indicator.name)}${indicator.params.length === 0 ? '' : ` (${indicator.params.join(', ')})`}${indicator.visible ? '' : ` ${this.t('indicators.hidden')}`}`
         const params = this.node('input'); params.type = 'text'; params.value = indicator.params.join(',')
         params.setAttribute('aria-label', this.t('indicators.params.named', { name: indicator.name })); params.className = 'sc-input'; params.dataset.control = 'params'; params.autocomplete = 'off'; params.spellcheck = false
         const pane = this.select(this.t('indicators.pane.named', { name: indicator.name }), [['price', () => this.t('indicators.pane.price')], ['overlay', () => this.t('indicators.pane.overlay')], ['separate', () => this.t('indicators.pane.separate')]], indicator.pane, true)
@@ -2015,7 +2015,7 @@ export class ChartWorkspace {
       }
       return item
     }
-    const indicators = this.chart.listIndicators().map(indicator => row(`${indicator.name} ${indicator.params.join(',')}`, [
+    const indicators = this.chart.listIndicators().map(indicator => row(`${indicatorLabel(indicator.name)}${indicator.params.length === 0 ? '' : ` (${indicator.params.join(', ')})`}`, [
       [this.t(indicator.visible ? 'objects.hide' : 'objects.show'), () => { this.chart.updateIndicator(indicator.id, { visible: !indicator.visible }) }],
       [this.t('objects.delete'), () => { this.chart.removeIndicator(indicator.id) }]
     ]))
@@ -2142,7 +2142,7 @@ export class ChartWorkspace {
     add('draw.redo', t('draw.redo'), 'palette.group.draw', () => { this.chart.drawings.redo() }, { shortcut: 'Ctrl+Shift+Z', when: () => this.chart.drawings.getSnapshot().canRedo })
     add('draw.clear', t('palette.clearDrawings'), 'palette.group.draw', () => { this.chart.drawings.clear() }, { when: () => this.chart.drawings.getSnapshot().drawings.length > 0 })
     for (const name of searchIndicators(this.chart.getRegisteredIndicatorNames(), '')) add(`indicator.add.${name}`, t('palette.indicator.add', { name: indicatorLabel(name) }), 'palette.group.indicators', () => { this.chart.addIndicator({ name }) }, { keywords: ['indicator', name, name.replace(/^SC_/, ''), ...indicatorInfo(name).keywords.split(' ')] })
-    for (const indicator of this.chart.listIndicators()) add(`indicator.remove.${indicator.id}`, t('palette.indicator.remove', { name: `${indicatorLabel(indicator.name)} ${indicator.params.join(',')}` }), 'palette.group.indicators', () => { this.chart.removeIndicator(indicator.id) })
+    for (const indicator of this.chart.listIndicators()) add(`indicator.remove.${indicator.id}`, t('palette.indicator.remove', { name: `${indicatorLabel(indicator.name)}${indicator.params.length === 0 ? '' : ` (${indicator.params.join(', ')})`}` }), 'palette.group.indicators', () => { this.chart.removeIndicator(indicator.id) })
     const replaying = this.loader.replayInfo !== null
     add('replay.start', t('replay.start'), 'palette.group.replay', () => { if (!this.startReplay()) throw new Error(t('replay.needBars')) }, { when: () => !replaying && this.getStatus().state === 'ready' })
     add('replay.play', t(this.getReplayState().playing ? 'replay.pause' : 'replay.play'), 'palette.group.replay', () => { if (this.getReplayState().playing) this.pauseReplay(); else this.playReplay() }, { when: () => replaying })

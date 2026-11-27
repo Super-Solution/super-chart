@@ -77,6 +77,7 @@ export const INDICATOR_INFO: Readonly<Record<string, IndicatorInfo>> = Object.fr
   SC_ULTIMATE: info('Ultimate Oscillator', 'momentum', 'ultimate uo 終極震盪'),
   SC_ZIGZAG: info('ZigZag', 'trend', 'zigzag 轉折'),
   SC_PIVOTS: info('Pivot Points', 'levels', 'pivot points classic fibonacci 樞軸點 支撐壓力'),
+  SC_SR: info('Support / Resistance', 'levels', 'sr support resistance auto levels 支撐 壓力 支撐壓力 自動'),
   SC_CHANDELIER: info('Chandelier Exit', 'volatility', 'chandelier exit 吊燈停損')
 })
 

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+import { supportResistance } from '@supersolutions/super-chart-core'
 import type { ChartAnnotation } from '@supersolutions/super-protocol'
 
 /** What an agent needs to check its own marks against: how far the loaded data reaches in time and price. */
@@ -60,4 +61,18 @@ export function whyNotShown (mark: Pick<ChartAnnotation, 'anchors'>, status: str
     if (Math.max(...prices) < data.low) return `The price ${Math.max(...prices)} is below the recent range ${data.low} to ${data.high}.`
   }
   return 'The mark is outside the part of the chart on screen; it is kept and shows when the view reaches it.'
+}
+
+export interface PriceLevel { readonly price: number, readonly touches: number, readonly lastTime: number }
+
+/**
+ * Support and resistance read from the bars given (the agent reads the recent ones), nearest the last close first. An agent
+ * that draws a line at one of these prices draws it where price turned, not where a guess landed.
+ */
+export function levelsOf (bars: readonly (BarLike & { readonly timestamp: number })[], strength = 5): { support: PriceLevel[], resistance: PriceLevel[], lastClose: number | null } {
+  if (bars.length === 0) return { support: [], resistance: [], lastClose: null }
+  const found = supportResistance(bars, { strength, lookback: bars.length })
+  const shape = (level: { price: number, touches: number, lastIndex: number }): PriceLevel =>
+    ({ price: Number(level.price.toPrecision(8)), touches: level.touches, lastTime: bars[level.lastIndex].timestamp })
+  return { support: found.support.slice(0, 5).map(shape), resistance: found.resistance.slice(0, 5).map(shape), lastClose: bars[bars.length - 1].close }
 }
