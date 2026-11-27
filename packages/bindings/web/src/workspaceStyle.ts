@@ -271,4 +271,7 @@ export const WORKSPACE_STYLE = `
 .sc-workspace .sc-legend-actions[hidden]{display:none}
 .sc-workspace .sc-legend-actions .sc-button{min-width:22px;min-height:20px;padding:0;border-color:transparent;background:transparent}
 .sc-workspace .sc-legend-actions .sc-button .sc-icon{display:block;width:13px;height:13px}
+/* A short window keeps every rail tool in reach: the buttons shrink before the rail has to scroll. */
+@media(max-height:860px) and (pointer:fine){.sc-workspace{--sc-rail-button:34px;--sc-rail-icon-size:20px}}
+@media(max-height:800px) and (pointer:fine){.sc-workspace{--sc-rail-button:30px;--sc-rail-icon-size:18px}}
 `

@@ -387,6 +387,8 @@ export class EngineChart {
     this.assertLive()
     // An unknown name would arm a tool that swallows every pointer gesture and draws nothing.
     if (tool !== null && !(DRAWING_TYPES as readonly string[]).includes(tool)) throw new RangeError(`Unknown drawing tool ${JSON.stringify(tool)}`)
+    // Arming a tool shows hidden drawings again: drawing into an invisible layer would look broken.
+    if (tool !== null) this.drawings.setViewHidden(false)
     this.drawingInput.setTool(tool)
     this.activeTool = tool === 'brush' || tool === 'highlighter' ? null : tool
     this.cursorDirty = true; this.schedule()

@@ -320,6 +320,7 @@ export class ChartWorkspace {
   private readonly replayInfo: HTMLSpanElement
   private readonly replayButtons: { start: HTMLButtonElement, back: HTMLButtonElement, next: HTMLButtonElement, play: HTMLButtonElement, exit: HTMLButtonElement }
   private readonly replaySpeed: HTMLSelectElement
+  private readonly hideAllButton: HTMLButtonElement
   private readonly drawingButtons: { undo: HTMLButtonElement, redo: HTMLButtonElement, lock: HTMLButtonElement, remove: HTMLButtonElement }
   private readonly unsubscribe: Array<() => void> = []
   private readonly drawingDocuments: DrawingDocuments
@@ -705,7 +706,9 @@ export class ChartWorkspace {
     }, { icon: 'keep', iconOnly: true, title: 'draw.stay.title' })
     stay.setAttribute('aria-pressed', 'false')
     this.drawingModes = this.node('div'); this.drawingModes.className = 'sc-history'; this.drawingModes.setAttribute('role', 'group')
-    this.drawingModes.append(magnet, stay)
+    this.hideAllButton = this.control('draw.hideAll', () => this.run(() => { this.chart.drawings.setViewHidden(!this.chart.drawings.getSnapshot().viewHidden) }), { icon: 'eye', iconOnly: true, title: 'draw.hideAll.title' })
+    this.hideAllButton.setAttribute('aria-pressed', 'false')
+    this.drawingModes.append(magnet, stay, this.hideAllButton)
     const navBack = this.control('nav.back', () => this.run(() => { this.chart.view.undoNavigation() }), { icon: 'back', iconOnly: true, title: 'nav.back.title' })
     const navForward = this.control('nav.forward', () => this.run(() => { this.chart.view.redoNavigation() }), { icon: 'forward', iconOnly: true, title: 'nav.forward.title' })
     const updateNavigation = (): void => { const history = this.chart.view.getNavigationHistory(); navBack.disabled = !history.canUndo; navForward.disabled = !history.canRedo }
@@ -1595,6 +1598,11 @@ export class ChartWorkspace {
     const state = this.chart.drawings.getSnapshot(), selected = state.drawings.find(item => item.id === state.selectedId)
     this.drawingButtons.undo.disabled = !state.canUndo; this.drawingButtons.redo.disabled = !state.canRedo
     const locked = selected?.locked === true
+    const hiddenAll = state.viewHidden
+    this.setLabel(this.hideAllButton, this.t(hiddenAll ? 'draw.showAll' : 'draw.hideAll'), this.t(hiddenAll ? 'draw.showAll.title' : 'draw.hideAll.title'))
+    this.hideAllButton.setAttribute('aria-pressed', String(hiddenAll)); this.hideAllButton.disabled = state.drawings.length === 0
+    const eyeIcon = this.hideAllButton.querySelector('.sc-icon')
+    if (eyeIcon !== null && eyeIcon.getAttribute('data-icon') !== (hiddenAll ? 'eyeOff' : 'eye')) { const next = createIcon(this.doc, hiddenAll ? 'eyeOff' : 'eye'); next.setAttribute('data-icon', hiddenAll ? 'eyeOff' : 'eye'); eyeIcon.replaceWith(next) }
     this.drawingButtons.lock.disabled = selected === undefined
     this.setLabel(this.drawingButtons.lock, this.t(locked ? 'draw.unlock' : 'draw.lock'), this.t(selected === undefined ? 'draw.lock.pick' : locked ? 'draw.unlock.selected' : 'draw.lock.selected'))
     const lockIcon = this.drawingButtons.lock.querySelector('.sc-icon')
@@ -2148,6 +2156,7 @@ export class ChartWorkspace {
       { id: 'view.reset', label: this.t('context.reset'), run: () => { this.chart.view.resetViewport() } },
       { id: 'view.latest', label: this.t('context.latest'), run: () => { this.chart.view.followLatest() } }
     )
+    if (this.chart.drawings.getSnapshot().drawings.length > 0) items.push({ id: 'drawings.toggle', label: this.t(this.chart.drawings.getSnapshot().viewHidden ? 'draw.showAll' : 'draw.hideAll'), run: () => { this.chart.drawings.setViewHidden(!this.chart.drawings.getSnapshot().viewHidden) } })
     if (this.chart.drawings.getSnapshot().drawings.length > 0) items.push({ id: 'drawings.clear', label: this.t('context.removeAll'), danger: true, separator: true, run: () => { this.chart.drawings.clear() } })
     if (this.paletteEnabled) items.push({ id: 'palette', label: this.t('context.palette'), separator: true, run: () => { this.openCommandPalette() } })
     items.push({ id: 'search', label: this.t('context.search'), separator: !this.paletteEnabled, run: () => { this.openSearch('', 'command') } })

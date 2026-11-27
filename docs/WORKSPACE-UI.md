@@ -30,6 +30,7 @@ Below the groups are two modes and the actions on the selection:
 | Control | Does |
 | --- | --- |
 | Magnet | While on, a point you place or drag snaps to the open, high, low or close of a bar within 24 px (`chart.setDrawingMagnet(true)`; off by default). Whole-drawing moves never snap. Holding **Ctrl** (Command on a Mac) flips it while held: snap with the magnet off, place freely with it on. |
+| Hide drawings | The eye button hides every drawing without changing the document: nothing is drawn, hit or selected, and undo history and export stay as they are (`chart.drawings.setViewHidden(true)`; `viewHidden` on the snapshot). Arming a tool shows them again. |
 | Keep drawing | Re-arms the tool after each completed drawing; Escape ends it. Built on `chart.onToolComplete(reason)`, where `reason` is `'completed'` or `'cancelled'`. |
 | Lock / Delete | Act on the selected drawing. |
 | Remove all | Removes every unlocked drawing in one undoable step. |
