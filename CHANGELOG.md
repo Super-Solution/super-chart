@@ -5,6 +5,8 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- **Shift keeps a line straight**: holding Shift while placing or dragging the end of a segment, ray, trend line or arrow snaps it to horizontal, vertical or 45 degrees from its other end.
+
 - `Alt+H`, `Alt+J` and `Alt+V` draw the horizontal line, horizontal ray and vertical line at the mouse position at once (selected), as other charting tools do, instead of arming the tool and waiting for a click. Off the plot they arm the tool as before.
 
 - **Type an interval on the chart**: with the chart focused, a digit now opens the command palette with an interval command (`15`, `240`, `4h`, `1D`, `1W`; a bare number is minutes and 60 or more that divide evenly become hours) and Enter switches to it when the feed supports it. A letter still opens the symbol search. Before, a digit started a symbol search too.

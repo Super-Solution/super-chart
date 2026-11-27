@@ -18,6 +18,8 @@ interface Drag {
 }
 
 let nextId = 0
+/** The drawings that are one straight line between two points, which Shift keeps horizontal, vertical or diagonal. */
+const STRAIGHT_LINES: ReadonlySet<DrawingType> = new Set<DrawingType>(['segment', 'ray', 'trend-line', 'arrow'])
 
 /** Drawing edits are user transactions: previews never enter retained state or undo history. */
 export function attachDrawingInteraction (
@@ -68,6 +70,20 @@ export function attachDrawingInteraction (
   const finishTool = (reason: ToolEnd = 'cancelled'): void => {
     if (tool === null) return
     tool = null; onToolComplete?.(reason)
+  }
+  /**
+   * With Shift held, the end of a straight line snaps to the nearest of horizontal, vertical or 45 degrees from its other end
+   * (in pixels, so it looks right whatever the scales are), as other charting tools do. Other shapes are left alone.
+   */
+  const constrain = (current: EngineFrame, p: DrawingPoint, shift: boolean, type: DrawingType, from: DrawingAnchor | undefined): DrawingPoint => {
+    if (!shift || from === undefined || !STRAIGHT_LINES.has(type)) return p
+    const origin = current.project(from.timestamp, from.price)
+    if (origin === null || !Number.isFinite(origin.x) || !Number.isFinite(origin.y)) return p
+    const dx = p.x - origin.x, dy = p.y - origin.y, ax = Math.abs(dx), ay = Math.abs(dy), edge = Math.tan(Math.PI / 8)
+    if (ay <= ax * edge) return { x: p.x, y: origin.y }
+    if (ax <= ay * edge) return { x: origin.x, y: p.y }
+    const size = (ax + ay) / 2
+    return { x: origin.x + Math.sign(dx) * size, y: origin.y + Math.sign(dy) * size }
   }
   /** The anchor under the pointer; with the magnet on, the open, high, low or close of a bar within reach of it. */
   const anchorAt = (current: EngineFrame, p: DrawingPoint): DrawingAnchor | null => {
@@ -186,14 +202,14 @@ export function attachDrawingInteraction (
     if (value.original !== null && !value.moved) return true
     let anchors: readonly DrawingAnchor[]
     if (value.original === null) {
-      const next = anchorAt(currentFrame, p)
+      const next = anchorAt(currentFrame, constrain(currentFrame, p, event.shiftKey, value.preview.type, value.preview.anchors[0]))
       if (!anchor(next)) return false
       const placed = oneClick(value.preview.type) && drawingAnchorCount(value.preview.type) > 1 ? positionAnchors(currentFrame, value.preview.type, p) : null
       if (oneClick(value.preview.type) && drawingAnchorCount(value.preview.type) > 1 && placed === null) return false
       anchors = placed ?? (drawingAnchorCount(value.preview.type) === 1
         ? [next] : setPlacementAnchor(value.preview, value.anchorIndex ?? 1, next).anchors)
     } else if (value.anchorIndex !== null) {
-      const next = anchorAt(currentFrame, p)
+      const next = anchorAt(currentFrame, constrain(currentFrame, p, event.shiftKey, value.original.type, value.original.anchors[value.anchorIndex === 0 ? 1 : 0]))
       if (!anchor(next)) return false
       anchors = moveDrawingHandle(value.original, value.anchorIndex, next)
     } else {
@@ -231,7 +247,7 @@ export function attachDrawingInteraction (
     const inside = p.x >= g.left && p.x <= g.right && p.y >= g.top && p.y <= g.bottom
     if (tool !== null) {
       if (!inside) return
-      const first = anchorAt(currentFrame, p)
+      const first = anchorAt(currentFrame, placement === null ? p : constrain(currentFrame, p, e.shiftKey, placement.preview.type, placement.preview.anchors[0]))
       if (!anchor(first)) return
       let preview: Drawing, nextAnchor: number | null = null
       if (placement !== null) {
@@ -284,7 +300,7 @@ export function attachDrawingInteraction (
     const e = event as PointerEvent
     if (drag === null) {
       if (placement === null || editable(e.target)) return
-      const p = point(e), currentFrame = frame(), next = currentFrame === null ? null : anchorAt(currentFrame, p)
+      const p = point(e), currentFrame = frame(), next = currentFrame === null ? null : anchorAt(currentFrame, constrain(currentFrame, p, e.shiftKey, placement.preview.type, placement.preview.anchors[0]))
       if (e.pointerType !== 'touch') behavior?.pointer?.(p.x, p.y)
       if (next !== null && anchor(next)) { placement.preview = setPlacementAnchor(placement.preview, placement.nextAnchor, next); onPreview(placement.preview) }
       consume(e); return
