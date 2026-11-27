@@ -455,7 +455,7 @@ export class EngineAnnotations implements EngineLayer {
         if (annotation.status !== 'visible') continue
         const tone = this.applyTone(context, annotation)
         if (annotation.figures !== undefined) {
-          this.paintFigureText(context, annotation, bounds, palette)
+          this.paintFigureText(context, annotation, bounds, palette, chips)
           for (const index of this.templates.get(annotation.spec.kind)?.axisTags ?? []) {
             const point = annotation.spec.anchors[index], projected = point === undefined ? null : this.frame?.project(point.time, point.price!)
             if (point !== undefined && projected != null && Number.isFinite(projected.y)) tags.push({ y: projected.y, price: point.price!, color: tone })
@@ -506,12 +506,7 @@ export class EngineAnnotations implements EngineLayer {
         }
         // Two labels at nearly the same height would sit on each other. The later one moves sideways, past the earlier one,
         // so it stays level with the price it names; when there is no room to its right it keeps its place.
-        for (let attempt = 0; attempt < 8; attempt++) {
-          const blocker = chips.find(chip => left < chip.right && left + width > chip.left && top < chip.top + 18 && top + 18 > chip.top)
-          if (blocker === undefined) break
-          if (blocker.right + 6 + width > bounds.right - 4) break
-          left = blocker.right + 6
-        }
+        left = this.clearOfLabels(left, top, width, 18, chips, bounds)
         chips.push({ left, right: left + width, top })
         context.fillStyle = palette.violetTint; context.fillRect(left, top, width, 18)
         if (this.isEmphasised(annotation)) { context.strokeStyle = tone; context.lineWidth = 1.5; context.strokeRect(left + 0.5, top + 0.5, width - 1, 17) }
@@ -536,9 +531,14 @@ export class EngineAnnotations implements EngineLayer {
     // label is then fully hidden rather than half covered, and the last-price tag is never touched.
     const free = (y: number): boolean => taken.every(other => Math.abs(other - y) >= 25)
     const placed: Array<{ tag: typeof tags[number], y: number, exact: number }> = []
+    let previous: { exact: number, shown: string } | null = null
     for (const tag of [...tags].sort((a, b) => a.y - b.y)) {
       if (tag.y < bounds.top || tag.y > bounds.bottom) continue
       const exact = Math.round(tag.y)
+      // Two marks at one price (a fibonacci end on a support level) share one tag, not a stack of identical ones.
+      const shown = tag.price.toFixed(digits)
+      if (previous !== null && previous.exact === exact && previous.shown === shown) continue
+      previous = { exact, shown }
       let y = exact
       for (let step = 1; !free(y) && step <= 400; step++) {
         if (free(exact + step) && exact + step <= bounds.bottom) { y = exact + step; break }
@@ -710,7 +710,7 @@ export class EngineAnnotations implements EngineLayer {
     }
   }
 
-  private paintFigureText (context: CanvasRenderingContext2D, annotation: EngineProjectedAnnotation, bounds: EngineAnnotationBounds, palette: ReturnType<typeof colors>): void {
+  private paintFigureText (context: CanvasRenderingContext2D, annotation: EngineProjectedAnnotation, bounds: EngineAnnotationBounds, palette: ReturnType<typeof colors>, chips: Array<{ left: number, right: number, top: number }>): void {
     for (const figure of annotation.figures ?? []) {
       if (figure.type !== 'text') continue
       const tone = this.figureColor(context, figure.color, undefined, annotation)
@@ -718,10 +718,30 @@ export class EngineAnnotations implements EngineLayer {
       let left = figure.align === 'right' ? figure.x - width : figure.align === 'center' ? figure.x - width / 2 : figure.x
       left = Math.max(bounds.left + 4, Math.min(left, bounds.right - width - 4))
       const top = Math.max(bounds.top + 2, Math.min(figure.y - 8, bounds.bottom - 18))
+      // Under the legend's text a label would be unreadable: it goes to the right end of the plot, still level with its price.
+      const legendBottom = bounds.top + 6 + (2 + (this.frame?.legend?.length ?? 0)) * 17
+      if (top < legendBottom && left < bounds.left + 380) left = Math.max(bounds.left + 4, bounds.right - width - 8)
+      left = this.clearOfLabels(left, top, width, 16, chips, bounds)
+      chips.push({ left, right: left + width, top })
       context.globalAlpha = 0.88; context.fillStyle = palette.surface; context.fillRect(left, top, width, 16); context.globalAlpha = 1
       context.lineWidth = 1; context.strokeStyle = tone; context.strokeRect(left + 0.5, top + 0.5, width - 1, 15)
       context.fillStyle = palette.ink; context.fillText(figure.text, left + 6, top + 8.5, width - 10)
     }
+  }
+
+  /**
+   * Where a label of this size can sit so it does not cover one already placed at about the same height: moved sideways, to
+   * the right of the blocker, else to its left, so it stays level with the price it names; with room on neither side it keeps its place.
+   */
+  private clearOfLabels (left: number, top: number, width: number, height: number, placed: ReadonlyArray<{ left: number, right: number, top: number }>, bounds: EngineAnnotationBounds): number {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const blocker = placed.find(chip => left < chip.right && left + width > chip.left && top < chip.top + 18 && top + height > chip.top)
+      if (blocker === undefined) return left
+      if (blocker.right + 6 + width <= bounds.right - 4) left = blocker.right + 6
+      else if (blocker.left - 6 - width >= bounds.left + 4) left = blocker.left - 6 - width
+      else return left
+    }
+    return left
   }
 
   /** A figure's own colour or tone, else the annotation's; a malformed value keeps the annotation's colour. */

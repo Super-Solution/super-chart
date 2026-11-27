@@ -132,6 +132,7 @@ can see them. The tools say so instead of hiding it.
 - `chart_swings` gives the swing points and the last leg, so a trend line or retracement starts and ends on real turning bars.
 - `chart_levels` gives the support and resistance prices price has turned at, so lines go where the chart shows a reason.
 - A level whose chip would sit under the legend puts the chip at the right end of its line instead.
+- Labels of template marks (a fibonacci level, a trend caption) keep clear of the legend the same way, and two marks at one price share one axis tag.
 - Labels that would overlap move sideways so each stays level with its own price; the axis price tags stack with connectors.
 
 ## Words that point at the chart

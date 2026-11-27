@@ -5,6 +5,8 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- Agent marks read cleaner: the labels of fibonacci levels and other template marks stay clear of the legend and of each other (moved sideways, level with their price), and two marks at one price share one axis tag instead of a stack of identical ones.
+
 - Chat plugin: new `draft` tool `chart_compare` (`add`, `remove`, `list`) overlays another market on a chart that has a feed.
 
 - **Copy chart image** (right-click menu and palette): the same picture as the camera button, put on the clipboard as a PNG. A browser without image clipboard access says so.
