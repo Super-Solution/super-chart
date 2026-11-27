@@ -125,6 +125,10 @@ can see them. The tools say so instead of hiding it.
 - `chart_annotate` returns `notShown`: for each applied mark that is not on screen, its `status` and a `why` (before the first
   loaded bar, after the last bar, above or below the recent price range, outside the current view). The agent should fix
   those, not tell the reader they are drawn.
+- `warnings` also carries `invalid_plan` (a `plan` whose stop is on the target's side of the entry, which the chart draws as a
+  note, not a plan) and `flat_range` (a `zone` or `fibonacci` with the same price at both ends).
+- `chart_levels` gives the support and resistance prices price has turned at, so lines go where the chart shows a reason.
+- A level whose chip would sit under the legend puts the chip at the right end of its line instead.
 - Labels that would overlap move sideways so each stays level with its own price; the axis price tags stack with connectors.
 
 ## Words that point at the chart

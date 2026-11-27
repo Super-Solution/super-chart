@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { correctTimeUnits, levelsOf, summarizeData, whyNotShown } from './agent-feedback'
+import { checkMarkShapes, correctTimeUnits, levelsOf, summarizeData, whyNotShown } from './agent-feedback'
 import type { ChartAnnotation } from '@supersolutions/super-protocol'
 
 const level = (key: string, time: number, price: number): ChartAnnotation => ({ key, kind: 'level', anchors: [{ time, price }] }) as ChartAnnotation
@@ -45,4 +45,16 @@ describe('levelsOf', () => {
     expect(resistance[0].lastTime).toBeGreaterThan(swing[0].timestamp)
   })
   it('is empty without bars', () => { expect(levelsOf([])).toEqual({ support: [], resistance: [], lastClose: null }) })
+})
+
+describe('checkMarkShapes', () => {
+  const mark = (key: string, kind: string, prices: number[]): ChartAnnotation => ({ key, kind, anchors: prices.map(price => ({ time: 1_700_000_000_000, price })) }) as ChartAnnotation
+  it('flags a plan whose stop is on the target side, and passes a sound long and short', () => {
+    expect(checkMarkShapes([mark('bad', 'plan', [100, 110, 105])]).map(w => w.code)).toEqual(['invalid_plan'])
+    expect(checkMarkShapes([mark('long', 'plan', [100, 110, 95]), mark('short', 'plan', [100, 90, 105])])).toEqual([])
+  })
+  it('flags a zone or retracement with no height', () => {
+    expect(checkMarkShapes([mark('z', 'zone', [100, 100]), mark('f', 'fibonacci', [5, 5])]).map(w => w.code)).toEqual(['flat_range', 'flat_range'])
+    expect(checkMarkShapes([mark('ok', 'zone', [100, 101])])).toEqual([])
+  })
 })

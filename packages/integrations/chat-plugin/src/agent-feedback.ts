@@ -12,7 +12,7 @@ export interface DataSummary {
   readonly lastClose: number | null
 }
 
-export interface MarkWarning { readonly key: string, readonly code: 'time_in_seconds', readonly message: string }
+export interface MarkWarning { readonly key: string, readonly code: 'time_in_seconds' | 'invalid_plan' | 'flat_range', readonly message: string }
 export interface MarkPlacement { readonly key: string, readonly status: 'offscreen' | 'unprojectable' | 'no-data', readonly why: string }
 
 interface BarLike { readonly timestamp: number, readonly high: number, readonly low: number, readonly close: number }
@@ -75,4 +75,23 @@ export function levelsOf (bars: readonly (BarLike & { readonly timestamp: number
   const shape = (level: { price: number, touches: number, lastIndex: number }): PriceLevel =>
     ({ price: Number(level.price.toPrecision(8)), touches: level.touches, lastTime: bars[level.lastIndex].timestamp })
   return { support: found.support.slice(0, 5).map(shape), resistance: found.resistance.slice(0, 5).map(shape), lastClose: bars[bars.length - 1].close }
+}
+
+/**
+ * Shapes the engine accepts but draws as a note or as nothing: a trade plan whose stop is on the wrong side, a zone or a
+ * retracement whose two prices are the same. The agent is told in words, so it corrects the mark instead of reporting it drawn.
+ */
+export function checkMarkShapes (annotations: readonly ChartAnnotation[]): MarkWarning[] {
+  const warnings: MarkWarning[] = []
+  for (const mark of annotations) {
+    const prices = mark.anchors.map(anchor => anchor.price)
+    if (mark.kind === 'plan' && prices.length >= 3 && prices.every(price => typeof price === 'number')) {
+      const [entry, target, stop] = prices as number[]
+      const valid = target !== entry && (target > entry ? stop < entry : stop > entry)
+      if (!valid) warnings.push({ key: mark.key, code: 'invalid_plan', message: `Plan "${mark.key}" is drawn as a note, not a plan: anchors are entry, target, stop in that order, and the stop must be on the other side of the entry from the target (entry ${entry}, target ${target}, stop ${stop}).` })
+    } else if ((mark.kind === 'zone' || mark.kind === 'fibonacci') && prices.length >= 2 && typeof prices[0] === 'number' && prices[0] === prices[1]) {
+      warnings.push({ key: mark.key, code: 'flat_range', message: `"${mark.key}" has the same price at both anchors (${prices[0]}), so it has no height. Give the two ends different prices.` })
+    }
+  }
+  return warnings
 }

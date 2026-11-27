@@ -4,7 +4,7 @@ import { EngineAnnotations } from '@supersolutions/super-chart-web/annotations'
 import { symbolKey, type Datafeed as CoreDatafeed, type MarketBar as CoreBar, type Period as CorePeriod, type SymbolInfo as CoreSymbol } from '@supersolutions/super-chart-core'
 import { readHostTheme, CHART_CARD_KIND, CHART_LIMITS, chartCardKind, validatePeriod, validateSymbol, formatCardRef, parseChartRef, validateChartAnnotations, validateChartCardSpec as validateChartCard, type CardMount, type CardMountContext, type ChartIndicator, type ChartType, type ChatPlugin, type Datafeed, type MarketBar, type Period, type SymbolInfo, type PluginTool, type PluginToolAuthority, type CardRef, type CardRefEvent, type CardRefResult, type ChartAnnotation, type ChartCardSpec } from '@supersolutions/super-protocol'
 import { chartHostLook } from './host-theme'
-import { correctTimeUnits, levelsOf, summarizeData, whyNotShown, type DataSummary, type MarkPlacement, type MarkWarning } from './agent-feedback'
+import { checkMarkShapes, correctTimeUnits, levelsOf, summarizeData, whyNotShown, type DataSummary, type MarkPlacement, type MarkWarning } from './agent-feedback'
 
 type AuthorizedPluginTool = PluginTool & { authority: PluginToolAuthority }
 
@@ -444,7 +444,8 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
         const problem = validateChartAnnotations(annotations)
         if (problem !== null) throw new TypeError(problem)
         const chart = find(id)
-        const { annotations: corrected, warnings } = correctTimeUnits(annotations as ChartAnnotation[])
+        const { annotations: corrected, warnings: unitWarnings } = correctTimeUnits(annotations as ChartAnnotation[])
+        const warnings = [...unitWarnings, ...checkMarkShapes(corrected)]
         const result = applyAnnotations(chart, corrected, replace === true)
         remember(chart)
         changed(chart)

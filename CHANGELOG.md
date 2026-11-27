@@ -5,6 +5,10 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- Chat plugin: `chart_annotate` warns (`invalid_plan`, `flat_range`) about marks that draw as a note or with no height. A level chip that would sit under the legend moves to the right end of its line.
+
+- New colour token `drawing` (TradingView-style blue, `#2962ff` on light and `#4d86ff` on dark; the colour-blind themes keep ink, since blue is their up colour). A drawing with no colour of its own takes it, replacing the ink colour used before. A drawing's own style, the chart's `color` option and a registered theme's token still win. Held at 3:1 on the surface by a test.
+
 - The first tool of the Lines group, and `Alt+T`, now draw a **trend line** (a segment between two points), as in other charting tools. The line that runs on past both points is labelled **Extended line**; both still exist and keep their types (`segment`, `trend-line`).
 - `?` opens the command palette, which lists every command with its shortcut.
 

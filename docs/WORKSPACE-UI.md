@@ -691,3 +691,4 @@ A chart with no options looks and behaves like the charting tools people already
   one beside its command. They do nothing while an input or select has focus.
 - **Watermark.** The symbol sits large and faint behind the candles with the market name and interval under it. It is a render option (`render.watermark`), so a host can replace the text or turn it off.
 - **Shortcuts.** `Alt+T` arms the trend line, `Alt+H` the horizontal line and so on (listed beside each command in the palette). `?` opens the palette, so the list is one key away. Shortcuts do nothing while a field has focus.
+- **Drawing colour.** New drawings are blue (the `drawing` token), not white, so they stand apart from price and from text. Change it for one drawing with the style bar, for all of them with the `color` render option, or per theme through a registered colour set. Violet stays the assistant's colour.

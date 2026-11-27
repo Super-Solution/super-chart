@@ -241,3 +241,18 @@ not execution signals or evidence of profitability.
 already own that trust boundary; registering `JavaScriptLanguage` permits code
 execution. Do not register it for untrusted source. Optional AI helpers remain
 host-invoked; the chart does not make automatic paid model requests.
+
+## Defaults that changed after 0.13 (workspace)
+
+These change what a workspace looks like with no options. Each has an option that brings the old behaviour back.
+
+| Default | Was | Now | To keep the old one |
+|---|---|---|---|
+| Price axis | left | right | `layout.priceScale.side: 'left'` |
+| Volume | its own pane | a band over the bottom of the price pane | add `VOL` with `pane: 'separate'` |
+| Candle body | hollow up candles | solid | `chartType: 'hollow-candles'` |
+| Footer | the clock and zone only | quick ranges (1D … all), clock, zone, `%`, log, Auto | `parts: { footer: false }` or the footer slots |
+| Indicator catalog | the 7 built-ins | built-ins, the technical pack and the classic pack (about 60) | `indicators: { catalog: false }` |
+| Drawing colour | ink (white on dark) | the `drawing` token (blue) | `color` render option, or a theme with `drawing` set to ink |
+| First Lines tool and `Alt+T` | `trend-line` (ran on past both points) | `segment`, labelled Trend line; `trend-line` is labelled Extended line | `chart.setDrawingTool('trend-line')` |
+| Background watermark | none | symbol and "name, interval", very faint | `render: { watermark: null }` |

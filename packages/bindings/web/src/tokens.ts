@@ -30,8 +30,10 @@ export interface SuperChartColors {
   line: string
   /** Control borders, the crosshair, axis lines (3:1 on surface). */
   lineStrong: string
-  /** Primary text, your drawings, the line series, crosshair tag fill. */
+  /** Primary text, the line series, crosshair tag fill. */
   ink: string
+  /** The colour a new drawing takes until its own style says otherwise (3:1 on `surface`). A drawing's style, then the chart's `color` option, win over it. */
+  drawing: string
   /** Axis labels, captions, legend names, the fourth indicator line. */
   inkMuted: string
   /** The assistant's marks and the one primary action. Fill and stroke only. */
@@ -72,6 +74,7 @@ const BASE_COLORS: Readonly<Record<'light' | 'dark', Readonly<SuperChartColors>>
     line: '#e4e4e7',
     lineStrong: '#8a8a94',
     ink: '#111113',
+    drawing: '#2962ff',
     inkMuted: '#5f5f68',
     violet: '#6c4af2',
     violetStrong: '#5a38e0',
@@ -98,6 +101,7 @@ const BASE_COLORS: Readonly<Record<'light' | 'dark', Readonly<SuperChartColors>>
     line: '#2a2a30',
     lineStrong: '#6b6b75',
     ink: '#f4f4f5',
+    drawing: '#4d86ff',
     inkMuted: '#a1a1aa',
     violet: '#a28cff',
     violetStrong: '#b9a8ff',
@@ -127,6 +131,7 @@ const BASE_COLORS: Readonly<Record<'light' | 'dark', Readonly<SuperChartColors>>
 const COLORBLIND_COLORS: Readonly<Record<'light' | 'dark', Readonly<SuperChartColors>>> = Object.freeze({
   light: Object.freeze({
     ...BASE_COLORS.light,
+    drawing: BASE_COLORS.light.ink,
     up: '#0072b2',
     down: '#b34700',
     upBar: 'rgba(0, 114, 178, 0.42)',
@@ -137,6 +142,7 @@ const COLORBLIND_COLORS: Readonly<Record<'light' | 'dark', Readonly<SuperChartCo
   }),
   dark: Object.freeze({
     ...BASE_COLORS.dark,
+    drawing: BASE_COLORS.dark.ink,
     up: '#56b4e9',
     down: '#e69f00',
     upBar: 'rgba(86, 180, 233, 0.38)',

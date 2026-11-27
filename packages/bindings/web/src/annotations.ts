@@ -497,6 +497,13 @@ export class EngineAnnotations implements EngineLayer {
         }
         left = Math.max(bounds.left + 4, Math.min(left, bounds.right - width - 4))
         top = Math.max(bounds.top + 2, Math.min(top, bounds.bottom - 20))
+        // The legend sits at the top left. A level near the top would put its chip under the legend's text, so that chip goes to
+        // the right end of its line instead, still level with the price it names. The legend has a quote row (two if the title
+        // wraps) and a row per indicator on the price pane.
+        if (annotation.spec.kind === 'level' && anchor.side === 'left') {
+          const legendBottom = bounds.top + 6 + (2 + (this.frame?.legend?.length ?? 0)) * 17
+          if (top < legendBottom && left < bounds.left + 380) left = bounds.right - width - 8
+        }
         // Two labels at nearly the same height would sit on each other. The later one moves sideways, past the earlier one,
         // so it stays level with the price it names; when there is no room to its right it keeps its place.
         for (let attempt = 0; attempt < 8; attempt++) {
