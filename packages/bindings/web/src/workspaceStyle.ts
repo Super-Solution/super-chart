@@ -263,4 +263,12 @@ export const WORKSPACE_STYLE = `
 .sc-workspace .sc-indicator-family{padding:8px 10px 2px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--sc-muted,${DARK.muted})}
 .sc-workspace .sc-object-row .sc-object-name:disabled{opacity:1;border-color:transparent;color:var(--sc-text,${DARK.text});cursor:default;background:transparent}
 .sc-workspace .sc-object-row:hover{background:var(--sc-hover-background,${DARK.hover});border-radius:6px}
+.sc-workspace .sc-replay-controls{gap:4px}
+.sc-workspace .sc-replay-controls .sc-icon-only{min-width:30px}
+.sc-workspace .sc-replay-controls .sc-icon-only .sc-icon{width:14px;height:14px}
+.sc-workspace .sc-replay-controls .sc-icon-button:not(.sc-icon-only) .sc-icon{display:block;width:14px;height:14px}
+.sc-workspace .sc-legend-actions{position:absolute;z-index:3;display:flex;gap:2px;padding:1px;border-radius:6px;background:var(--sc-toolbar-background,${DARK.toolbar});border:1px solid var(--sc-border,${DARK.divider});box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.sc-workspace .sc-legend-actions[hidden]{display:none}
+.sc-workspace .sc-legend-actions .sc-button{min-width:22px;min-height:20px;padding:0;border-color:transparent;background:transparent}
+.sc-workspace .sc-legend-actions .sc-button .sc-icon{display:block;width:13px;height:13px}
 `

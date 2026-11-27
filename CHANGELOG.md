@@ -5,6 +5,10 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- Hovering an indicator's row in the legend shows **settings** (opens the Indicators menu) and **remove** beside it. Core: price-pane legend entries now carry the indicator `id`. The replay bar uses icon buttons (previous, next, play or pause) and a clearer Exit.
+
+- Quick measure: hold **Shift** and drag on the plot to measure between two bars: price change, percentage, bars and time, in a tinted box with a label. It stays (glued to its bars when the view moves) until the next ordinary press or Escape. Nothing is drawn into the document.
+
 - Chat plugin: `chart_annotate` warns (`invalid_plan`, `flat_range`) about marks that draw as a note or with no height. A level chip that would sit under the legend moves to the right end of its line.
 
 - New colour token `drawing` (TradingView-style blue, `#2962ff` on light and `#4d86ff` on dark; the colour-blind themes keep ink, since blue is their up colour). A drawing with no colour of its own takes it, replacing the ink colour used before. A drawing's own style, the chart's `color` option and a registered theme's token still win. Held at 3:1 on the surface by a test.

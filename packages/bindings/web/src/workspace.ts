@@ -312,6 +312,10 @@ export class ChartWorkspace {
   private searchShownQuery = ''
   private searchLoading = false
   private readonly retryButton: HTMLButtonElement
+  /** Settings and remove, shown beside the legend row of the indicator the pointer is on. */
+  private readonly legendActions: HTMLDivElement
+  private legendTarget: string | null = null
+  private legendHideTimer = 0
   private readonly olderButton: HTMLButtonElement
   private readonly replayInfo: HTMLSpanElement
   private readonly replayButtons: { start: HTMLButtonElement, back: HTMLButtonElement, next: HTMLButtonElement, play: HTMLButtonElement, exit: HTMLButtonElement }
@@ -808,17 +812,24 @@ export class ChartWorkspace {
     this.notice = this.node('div'); this.notice.className = 'sc-notice'; this.notice.setAttribute('role', 'alert')
     this.holdNote = this.node('div'); this.holdNote.className = 'sc-holdnote'; this.holdNote.setAttribute('role', 'status')
     this.statusNode = this.node('div'); this.statusNode.className = 'sc-status'; this.statusNode.setAttribute('role', 'status')
-    stage.append(this.chartHost, this.stageStatus)
+    this.legendActions = this.node('div'); this.legendActions.className = 'sc-legend-actions'; this.legendActions.hidden = true
+    this.legendActions.append(
+      this.control('legend.settings', () => this.run(() => { this.hideLegendActions(); this.parts.indicators.open = true }), { icon: 'gear', iconOnly: true }),
+      this.control('legend.remove', () => this.run(() => { const id = this.legendTarget; this.hideLegendActions(); if (id !== null) this.chart.removeIndicator(id) }), { icon: 'stop', iconOnly: true })
+    )
+    this.listen(this.legendActions, 'pointerenter', () => { this.win.clearTimeout(this.legendHideTimer) })
+    this.listen(this.legendActions, 'pointerleave', () => { this.scheduleLegendHide() })
+    stage.append(this.chartHost, this.stageStatus, this.legendActions)
     const body = this.node('div'); body.className = 'sc-body'; body.append(this.rail.element, this.rail.flyoutElement, stage)
     this.retryButton = this.control('status.retry', () => this.reload())
     this.olderButton = this.control('status.loadOlder', () => this.run(() => { this.chart.view.requestMore(); }), { title: 'status.loadOlder.title' })
     this.replayInfo = this.node('span')
     this.replayButtons = {
       start: this.control('replay.start', () => this.run(() => { if (!this.startReplay()) throw new Error(this.t('replay.needBars')) }), { icon: 'replay', title: 'replay.start.title' }),
-      back: this.control('replay.back', () => this.run(() => { this.stepReplay(-1) })),
-      next: this.control('replay.next', () => this.run(() => { this.stepReplay(1) })),
-      play: this.control('replay.play', () => this.run(() => { if (this.getReplayState().playing) this.pauseReplay(); else this.playReplay() })),
-      exit: this.control('replay.exit', () => this.run(() => { this.exitReplay() }))
+      back: this.control('replay.back', () => this.run(() => { this.stepReplay(-1) }), { icon: 'stepBack', iconOnly: true }),
+      next: this.control('replay.next', () => this.run(() => { this.stepReplay(1) }), { icon: 'stepForward', iconOnly: true }),
+      play: this.control('replay.play', () => this.run(() => { if (this.getReplayState().playing) this.pauseReplay(); else this.playReplay() }), { icon: 'play', iconOnly: true }),
+      exit: this.control('replay.exit', () => this.run(() => { this.exitReplay() }), { icon: 'stop', iconOnly: false })
     }
     this.replaySpeed = this.select('replay.speed.label', [0.25, 0.5, 1, 2, 4, 8, 16].map(speed => [String(speed), () => `${speed}×`] as const), '1')
     this.listen(this.replaySpeed, 'change', () => this.run(() => { this.setReplaySpeed(Number(this.replaySpeed.value)); }))
@@ -881,6 +892,22 @@ export class ChartWorkspace {
         changed: () => { this.objectsDirty = true }
       })
       this.unsubscribe.push(this.chart.onFrame(() => { this.drawingToolbar.refresh() }), this.chart.drawings.subscribe(() => { this.drawingToolbar.refresh() }))
+      // Hovering an indicator's row in the legend shows its settings and remove buttons, as in other charting tools.
+      this.listen(this.chartHost, 'pointermove', event => {
+        const e = event as PointerEvent
+        if (e.pointerType !== 'mouse' || e.buttons !== 0 || this.ui.headless) return
+        const near = this.chartHost.getBoundingClientRect()
+        if (e.clientX - near.left > 520 || e.clientY - near.top > 320) { this.scheduleLegendHide(); return }
+        const row = this.chart.legendRowAt(e.clientX, e.clientY)
+        if (row === null) { this.scheduleLegendHide(); return }
+        this.win.clearTimeout(this.legendHideTimer)
+        const stageBox = stage.getBoundingClientRect()
+        this.legendTarget = row.id
+        this.legendActions.style.left = `${Math.round(row.right - stageBox.left + 4)}px`
+        this.legendActions.style.top = `${Math.round(row.top - stageBox.top - 3)}px`
+        this.legendActions.hidden = false
+      })
+      this.listen(this.chartHost, 'pointerleave', () => { this.scheduleLegendHide() })
       this.unsubscribe.push(attachAnnotationIntents(this.chartHost, this.annotations, event => { for (const listener of [...this.intentListeners]) listener(event) }))
       this.marks = new DatafeedMarks({
         feed: this.datafeed,
@@ -1541,6 +1568,8 @@ export class ChartWorkspace {
     const playback = this.timedReplay?.getState()
     this.replayButtons.play.disabled = info === null || this.loader.replayAtEnd
     this.setLabel(this.replayButtons.play, this.t(playback?.playing ? 'replay.pause' : 'replay.play'))
+    const playIcon = this.replayButtons.play.querySelector('.sc-icon')
+    if (playIcon !== null && playIcon.getAttribute('data-icon') !== (playback?.playing ? 'pause' : 'play')) { const next = createIcon(this.doc, playback?.playing ? 'pause' : 'play'); next.setAttribute('data-icon', playback?.playing ? 'pause' : 'play'); playIcon.replaceWith(next) }
     this.replayButtons.play.setAttribute('aria-pressed', String(playback?.playing))
     this.replayControls.hidden = info === null
     this.replayButtons.start.hidden = info !== null
@@ -1789,6 +1818,13 @@ export class ChartWorkspace {
     if (except !== 'context') this.contextMenu?.close(false)
     if (except !== 'menu') for (const menu of this.root.querySelectorAll<HTMLDetailsElement>('.sc-menu[open]')) menu.open = false
   }
+
+  private scheduleLegendHide (): void {
+    this.win.clearTimeout(this.legendHideTimer)
+    this.legendHideTimer = this.win.setTimeout(() => { this.hideLegendActions() }, 220)
+  }
+
+  private hideLegendActions (): void { this.legendActions.hidden = true; this.legendTarget = null }
 
   private toolLabel (type: DrawingType): string { return this.t(`tool.${type}`) }
 

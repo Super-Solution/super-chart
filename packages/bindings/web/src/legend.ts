@@ -42,7 +42,7 @@ function valueAt (points: ReadonlyArray<{ readonly index: number, readonly value
  * The legend's rows for one bar: the title and open, high, low, close with the change from the bar before, then one row
  * per indicator on the price pane with its current values. `index` is a position in the frame's bars.
  */
-export function legendRows (frame: EngineRenderFrame, index: number, options: EngineRenderOptions, p: LegendPalette, digits: number, availableWidth: number, measure: (font: string, text: string) => number): Span[][] {
+export function legendRows (frame: EngineRenderFrame, index: number, options: EngineRenderOptions, p: LegendPalette, digits: number, availableWidth: number, measure: (font: string, text: string) => number, ids?: Array<string | null>): Span[][] {
   const bars = frame.snapshot.bars, bar = bars[index]
   if (bar === undefined) return []
   const label = `500 11px ${FONT_SANS}`, mono = p.font
@@ -64,6 +64,8 @@ export function legendRows (frame: EngineRenderFrame, index: number, options: En
   const spanWidth = (spans: readonly Span[]): number => spans.reduce((sum, span) => sum + (span.gapBefore ?? 0) + measure(span.font, span.text), 0)
   if (title.length > 0 && spanWidth(title) + 12 + spanWidth(head) <= availableWidth) rows.push([...title, ...head.map((span, i) => i === 0 ? { ...span, gapBefore: 12 } : span)])
   else { if (title.length > 0) rows.push(title); rows.push(head) }
+  // `ids`, when given, says for each row which indicator it belongs to (null for the quote rows), for the chart to find a row under the pointer.
+  if (ids !== undefined) for (let i = 0; i < rows.length; i++) ids.push(null)
 
   const model = frame.model, colors = seriesColors.get(model)
   for (const entry of frame.legend ?? []) {
@@ -80,7 +82,7 @@ export function legendRows (frame: EngineRenderFrame, index: number, options: En
         gapBefore: 8
       })
     }
-    if (spans.length > 1) rows.push(spans)
+    if (spans.length > 1) { rows.push(spans); ids?.push(entry.id) }
   }
   return rows
 }
@@ -133,4 +135,26 @@ export function paintLegend (ctx: CanvasRenderingContext2D, frame: EngineRenderF
     })
   } finally { ctx.restore() }
   ctx.font = CANVAS_FONT
+}
+
+/** Where one indicator's row sits in the legend, in pixels from the pane's top left: for putting buttons beside it. */
+export interface LegendRowBox { readonly id: string, readonly left: number, readonly right: number, readonly top: number, readonly bottom: number }
+
+/** The legend's indicator rows with their boxes, for the latest bar (the legend at rest). */
+export function legendRowBoxes (ctx: CanvasRenderingContext2D, frame: EngineRenderFrame, options: EngineRenderOptions, p: LegendPalette, digits: number): LegendRowBox[] {
+  const m = frame.model, g = m.geometry, bars = frame.snapshot.bars
+  if (bars.length === 0 || options.legend === false || frame.indicatorPane === true) return []
+  const available = Math.max(0, g.plotWidth - PAD_X * 2)
+  const measure = (font: string, text: string): number => { ctx.font = font; return ctx.measureText(text).width }
+  const ids: Array<string | null> = []
+  const rows = legendRows(frame, bars.length - 1, options, p, digits, available, measure, ids)
+  const boxes: LegendRowBox[] = []
+  rows.forEach((spans, row) => {
+    const id = ids[row]
+    if (id === null || id === undefined) return
+    const width = spans.reduce((sum, span) => sum + (span.gapBefore ?? 0) + measure(span.font, span.text), 0)
+    const top = g.top + PAD_Y + row * ROW
+    boxes.push({ id, left: g.left + PAD_X - 4, right: g.left + PAD_X + Math.min(available, width) + 4, top, bottom: top + ROW })
+  })
+  return boxes
 }

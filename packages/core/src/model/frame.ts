@@ -68,7 +68,7 @@ export interface EngineRenderFrame {
   title?: string
   figureStyles?: ReadonlyMap<string, IndicatorFigure>
   /** Price-pane indicators, for the legend: each one's label and the ids of the series it draws. */
-  legend?: ReadonlyArray<{ readonly label: string, readonly seriesIds: readonly string[], readonly overlay: boolean }>
+  legend?: ReadonlyArray<{ readonly id: string, readonly label: string, readonly seriesIds: readonly string[], readonly overlay: boolean }>
   /** Derived once from this immutable snapshot, shared by panes and cursor paints. */
   pricePrecision?: number
 }
@@ -255,10 +255,10 @@ export function buildEngineFrame (
     paneTop += paneHeight
     const series: FinancialSeries[] = []
     const figureStyles = new Map<string, IndicatorFigure>()
-    const legend: Array<{ label: string, seriesIds: string[], overlay: boolean }> = []
+    const legend: Array<{ id: string, label: string, seriesIds: string[], overlay: boolean }> = []
     for (const indicator of indicators) {
       if (indicator.pane !== id) continue
-      const entry = { label: indicator.label ?? indicator.name, seriesIds: [] as string[], overlay: indicator.overlay === true }
+      const entry = { id: indicator.id, label: indicator.label ?? indicator.name, seriesIds: [] as string[], overlay: indicator.overlay === true }
       if (primary) legend.push(entry)
       for (const figure of indicator.figures) {
         const points: Array<readonly [number, number]> = []

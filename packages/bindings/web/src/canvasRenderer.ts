@@ -2,7 +2,7 @@ import { nearestChartIndex, axisStrip, derivePrecision, formatBarDate, timeAxisT
 import { paintPriceSeries } from './seriesRenderer'
 import { typicalPrice, halfBarWidth } from './geometry'
 import { timeLabelCentre } from './badge'
-import { paintLegend, seriesColors, type LegendPalette } from './legend'
+import { paintLegend, legendRowBoxes, seriesColors, type LegendPalette, type LegendRowBox } from './legend'
 import { colors, withAlpha, CANVAS_FONT, CANVAS_LABEL_FONT, FONT_SANS } from './tokens'
 
 export type { EngineRenderOptions } from '@supersolutions/super-chart-core'
@@ -433,6 +433,14 @@ export function paintEngineLegend (ctx: CanvasRenderingContext2D, frame: EngineR
   const p = palette(options)
   const legend: LegendPalette = { background: p.background, ink: p.ink, muted: p.inkMuted, up: p.up, down: p.down, flat: p.flat, font: p.font }
   paintLegend(ctx, frame, x, options, legend, precision(options.pricePrecision ?? frame.pricePrecision ?? derivePrecision(frame.snapshot.bars)))
+}
+
+/** The boxes of the legend's indicator rows at rest, in pane pixels, so the workspace can put actions beside them. */
+export function engineLegendRowBoxes (ctx: CanvasRenderingContext2D, frame: EngineRenderFrame, options: EngineRenderOptions = {}): LegendRowBox[] {
+  if (!ready(frame.model)) return []
+  const p = palette(options)
+  const legend: LegendPalette = { background: p.background, ink: p.ink, muted: p.inkMuted, up: p.up, down: p.down, flat: p.flat, font: p.font }
+  return legendRowBoxes(ctx, frame, options, legend, precision(options.pricePrecision ?? frame.pricePrecision ?? derivePrecision(frame.snapshot.bars)))
 }
 
 /** A small second tag under the last-price tag (the bar-close countdown), on the cursor layer so it can change every second at no cost to the plot. */

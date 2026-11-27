@@ -1,7 +1,8 @@
 import { attachChartSpeech, barReadoutText, chartSummaryText, defaultBar, defaultSummary, priceDigits, type ChartDescriptions } from './a11y'
 import { RealtimeSeries, RealtimeView, derivePrecision, axisStrip, indicatorShortName, normalizeBars, normalizeBar, ENGINE_CHART_TYPES, buildEngineFrame, validateEngineLayout, validatePriceScale, EngineIndicators, DrawingStore, DRAWING_TYPES, projectDrawing, viewportLimitsForWidth, financialGeometry, type CandleMode, type MarketBar, type ChartDataPort, type EngineRenderOptions, type EngineFrame, type EngineLayout, type EngineInspection, type EngineIndicatorSpec, type IndicatorDefinition, type Drawing, type DrawingType, type DrawingGeometry, type DrawingBounds } from '@supersolutions/super-chart-core'
-import { paintEngineFrame, paintEngineCursor, paintEngineLegend, paintEngineLastCaption } from './canvasRenderer'
+import { paintEngineFrame, paintEngineCursor, paintEngineLegend, paintEngineLastCaption, engineLegendRowBoxes } from './canvasRenderer'
 import { attachEngineGestures } from './gestures'
+import { measureBetween, measureLines, paintMeasure, nearestBarTime, type MeasurePoint } from './measure'
 import { attachDrawingInteraction, type ToolEnd } from './drawingInteraction'
 import { resolveHoldDraw, type DrawByHoldingOptions, type HoldDrawEvent, type ResolvedHoldDraw } from './holdDraw'
 import { paintDrawings } from './drawingRenderer'
@@ -127,6 +128,9 @@ export class EngineChart {
   private keyboardBar: number | null = null
   private keyboardMoving = false
   private cursorX: number | null = null
+  /** The quick measure (Shift and drag): both ends as bar time and price, so it stays on the same bars when the view moves. */
+  private measure: { from: MeasurePoint, to: MeasurePoint } | null = null
+  private measuringNow = false
   private cursorY: number | null = null
   private width = 0
   private height = 0
@@ -241,6 +245,12 @@ export class EngineChart {
         begin: (x, y) => this.beginPricePan(x, y),
         move: dy => { this.movePricePan(dy) },
         end: () => { this.pricePan = null }
+      },
+      measure: {
+        begin: (x, y) => this.beginMeasure(x, y),
+        move: (x, y) => { this.moveMeasure(x, y) },
+        end: () => { this.measuringNow = false },
+        dismiss: () => { this.dismissMeasure() }
       },
       frameScheduler
     })
@@ -411,6 +421,49 @@ export class EngineChart {
     return true
   }
 
+  /** Shift and drag on the plot: start a measure at the pointer. */
+  private beginMeasure (x: number, y: number): boolean {
+    const frame = this.frame
+    if (frame === null || frame.panes.length === 0 || this.activeTool !== null) return false
+    const pane = frame.panes[0], g = pane.frame.model.geometry, local = y - pane.top
+    if (x < g.left || x > g.right || local < g.top || local > g.bottom) return false
+    const point = frame.unproject(x, y)
+    if (point === null) return false
+    const start = { timestamp: nearestBarTime(this.series.getDataList(), point.timestamp), price: point.price }
+    this.measure = { from: start, to: start }; this.measuringNow = true
+    this.cursorDirty = true; this.schedule()
+    return true
+  }
+
+  private moveMeasure (x: number, y: number): void {
+    const frame = this.frame
+    if (this.measure === null || frame === null) return
+    const g = frame.panes[0].frame.model.geometry
+    const point = frame.unproject(Math.max(g.left, Math.min(g.right, x)), Math.max(g.top, Math.min(g.bottom, y)))
+    if (point === null) return
+    this.measure = { from: this.measure.from, to: { timestamp: nearestBarTime(this.series.getDataList(), point.timestamp), price: point.price } }
+    this.cursorDirty = true; this.schedule()
+  }
+
+  private dismissMeasure (): void {
+    if (this.measure === null) return
+    this.measure = null; this.measuringNow = false; this.cursorDirty = true; this.schedule()
+  }
+
+  /** Paint the measure, if there is one, on the price pane (the context is already moved to the pane's top). */
+  private paintMeasure (ctx: CanvasRenderingContext2D, frame: EngineFrame): void {
+    const measure = this.measure
+    if (measure === null) return
+    const pane = frame.panes[0], a = frame.project(measure.from.timestamp, measure.from.price), b = frame.project(measure.to.timestamp, measure.to.price)
+    if (a === null || b === null) return
+    const g = pane.frame.model.geometry
+    const info = measureBetween(measure.from, measure.to, this.series.getDataList())
+    const bars = (count: number): string => `${count} ${count === 1 ? 'bar' : 'bars'}`
+    const digits = this.renderOptions.pricePrecision ?? pane.frame.pricePrecision ?? derivePrecision(pane.frame.snapshot.bars)
+    const lines = measureLines(info, value => (this.renderOptions.formatPrice?.(value, digits) ?? value.toFixed(digits)), { bars })
+    paintMeasure(ctx, a, b, lines, info.change === 0 ? null : info.change > 0, { left: g.left, right: g.right, top: g.top, bottom: g.bottom }, this.renderOptions.theme)
+  }
+
   private movePricePan (dy: number): void {
     const base = this.pricePan
     if (base === null || this.disposed) return
@@ -507,6 +560,23 @@ export class EngineChart {
     if (x >= strip.from && x <= strip.from + strip.width && y >= g.top && y <= g.bottom) return 'price-axis'
     if (x >= g.left && x <= g.right && y > g.bottom) return 'time-axis'
     return x >= g.left && x <= g.right && y >= g.top && y <= g.bottom ? 'plot' : null
+  }
+
+  /**
+   * The indicator whose legend row is under a client position, with the row's box in client pixels; null elsewhere. Reads the
+   * legend as it rests (the latest bar), which is where it sits when the pointer is on it.
+   */
+  legendRowAt (clientX: number, clientY: number): { id: string, left: number, right: number, top: number, bottom: number } | null {
+    this.assertLive()
+    const frame = this.frame
+    if (frame === null || frame.panes.length === 0) return null
+    const rect = this.root.getBoundingClientRect(), x = clientX - rect.left, y = clientY - rect.top
+    const pane = frame.panes[0]
+    for (const box of engineLegendRowBoxes(this.cursorContext, pane.frame, this.renderOptions)) {
+      const top = box.top + pane.top, bottom = box.bottom + pane.top
+      if (x >= box.left && x <= box.right && y >= top && y <= bottom) return { id: box.id, left: rect.left + box.left, right: rect.left + box.right, top: rect.top + top, bottom: rect.top + bottom }
+    }
+    return null
   }
 
   /** The retained drawing under a client position (the same tolerance as selection), or null. */
@@ -925,6 +995,9 @@ export class EngineChart {
         paintEngineLegend(this.cursorContext, pane.frame, crosshair === null ? null : crosshair.x, this.renderOptions)
         this.cursorContext.restore()
       }
+      this.cursorContext.save(); this.cursorContext.translate(0, this.frame.panes[0].top)
+      this.paintMeasure(this.cursorContext, this.frame)
+      this.cursorContext.restore()
       this.cursorContext.save(); this.cursorContext.translate(0, this.frame.panes[0].top)
       if (this.lastCaption !== '') paintEngineLastCaption(this.cursorContext, this.frame.panes[0].frame, this.lastCaption, this.renderOptions)
       this.cursorContext.restore()
