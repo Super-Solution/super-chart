@@ -445,6 +445,7 @@ export class EngineAnnotations implements EngineLayer {
     if (this.disposed || bounds === null || !annotations.some(item => item.status === 'visible')) return
     const palette = colors(this.currentTheme)
     const tags: Array<{ y: number, price: number, color: string }> = []
+    const chips: Array<{ left: number, right: number, top: number }> = []
     context.save()
     try {
       context.globalCompositeOperation = 'source-over'; context.globalAlpha = 1
@@ -496,6 +497,15 @@ export class EngineAnnotations implements EngineLayer {
         }
         left = Math.max(bounds.left + 4, Math.min(left, bounds.right - width - 4))
         top = Math.max(bounds.top + 2, Math.min(top, bounds.bottom - 20))
+        // Two labels at nearly the same height would sit on each other. The later one moves sideways, past the earlier one,
+        // so it stays level with the price it names; when there is no room to its right it keeps its place.
+        for (let attempt = 0; attempt < 8; attempt++) {
+          const blocker = chips.find(chip => left < chip.right && left + width > chip.left && top < chip.top + 18 && top + 18 > chip.top)
+          if (blocker === undefined) break
+          if (blocker.right + 6 + width > bounds.right - 4) break
+          left = blocker.right + 6
+        }
+        chips.push({ left, right: left + width, top })
         context.fillStyle = palette.violetTint; context.fillRect(left, top, width, 18)
         if (this.isEmphasised(annotation)) { context.strokeStyle = tone; context.lineWidth = 1.5; context.strokeRect(left + 0.5, top + 0.5, width - 1, 17) }
         context.fillStyle = palette.violet; diamond(context, left + 10, top + 9, 3)

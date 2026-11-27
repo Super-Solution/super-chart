@@ -4,6 +4,7 @@ import { EngineAnnotations } from '@supersolutions/super-chart-web/annotations'
 import { symbolKey, type Datafeed as CoreDatafeed, type MarketBar as CoreBar, type Period as CorePeriod, type SymbolInfo as CoreSymbol } from '@supersolutions/super-chart-core'
 import { readHostTheme, CHART_CARD_KIND, CHART_LIMITS, chartCardKind, validatePeriod, validateSymbol, formatCardRef, parseChartRef, validateChartAnnotations, validateChartCardSpec as validateChartCard, type CardMount, type CardMountContext, type ChartIndicator, type ChartType, type ChatPlugin, type Datafeed, type MarketBar, type Period, type SymbolInfo, type PluginTool, type PluginToolAuthority, type CardRef, type CardRefEvent, type CardRefResult, type ChartAnnotation, type ChartCardSpec } from '@supersolutions/super-protocol'
 import { chartHostLook } from './host-theme'
+import { correctTimeUnits, summarizeData, whyNotShown, type DataSummary, type MarkPlacement, type MarkWarning } from './agent-feedback'
 
 type AuthorizedPluginTool = PluginTool & { authority: PluginToolAuthority }
 
@@ -31,6 +32,8 @@ export interface ChartSnapshot {
   /** For each mark, the `ref:` link that makes words in a message point at it. Absent when the chart's id cannot be a ref target. */
   refs: Record<string, string>
   bars: { count: number, first: number | null, last: number | null }
+  /** The loaded data's reach, to check a mark against: first and last time, the price range of the 500 most recent bars and the last close. */
+  data: DataSummary
   replay: { active: boolean }
 }
 
@@ -134,8 +137,13 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
       annotations: [...chart.annotationsByKey.values()],
       refs: refsOf(chart),
       bars: { count: state.data.count, first: state.data.firstTimestamp, last: state.data.lastTimestamp },
+      data: dataOf(chart),
       replay: { active: state.replay.active }
     }
+  }
+  const dataOf = (chart: Mounted): DataSummary => {
+    const state = chart.workspace.getState()
+    return summarizeData(state.data.count, state.data.firstTimestamp, state.data.lastTimestamp, chart.workspace.getBars({ limit: 500 }))
   }
   const refsOf = (chart: Mounted): Record<string, string> => {
     const refs: Record<string, string> = {}
@@ -370,7 +378,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     {
       name: 'chart_state',
       authority: 'read',
-      description: 'Read a chart on screen: symbol, period, chart type, indicators, annotations, how many bars are loaded and whether replay is active.',
+      description: 'Read a chart on screen: symbol, period, chart type, indicators, annotations, how many bars are loaded, the reach of the data (first and last bar time, recent price range, last close) and whether replay is active. Read it before marking a chart.',
       inputSchema: { type: 'object', properties: { chartId } },
       run: async (input) => snapshot(find((input as { chartId?: unknown } | undefined)?.chartId))
     },
@@ -413,7 +421,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     {
       name: 'chart_annotate',
       authority: 'draft',
-      description: 'Mark a chart: level (horizontal price line, one anchor with a price), zone (price band over a time range, two anchors with prices), marker (labelled point, one anchor), trend (line through two priced anchors), ray (a trend line extended to the right), fibonacci (retracement levels between two priced anchors; params.levels is a comma list such as "0,0.5,1") or plan (entry, target and stop: three priced anchors in that order, with the risk-reward ratio). Keys are stable: sending a key again replaces that mark. Returns which keys were applied and which the engine rejected, with a code, and for each applied key a `ref:` link: put it in your message as [words](ref:...) and the reader can hover or focus the words to see that mark light up, or click to jump to it.',
+      description: 'Mark a chart: level (horizontal price line, one anchor with a price), zone (price band over a time range, two anchors with prices), marker (labelled point, one anchor), trend (line through two priced anchors), ray (a trend line extended to the right), fibonacci (retracement levels between two priced anchors; params.levels is a comma list such as "0,0.5,1") or plan (entry, target and stop: three priced anchors in that order, with the risk-reward ratio). Keys are stable: sending a key again replaces that mark. Before drawing, read chart_state: its `data` gives the first and last bar time, the recent price range and the last close, so every price and time you send falls where the bars are. Times are milliseconds since the epoch (not seconds); prices are in the quote units of the symbol; keep text under 24 characters and send a few well-chosen marks, not a dense set. Returns which keys were applied and which the engine rejected, with a code; `notShown` lists applied marks that are not on screen with the reason (fix those rather than telling the reader they are drawn); and for each applied key a `ref:` link: put it in your message as [words](ref:...) and the reader can hover or focus the words to see that mark light up, or click to jump to it.',
       inputSchema: {
         type: 'object',
         required: ['annotations'],
@@ -424,10 +432,19 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
         const problem = validateChartAnnotations(annotations)
         if (problem !== null) throw new TypeError(problem)
         const chart = find(id)
-        const result = applyAnnotations(chart, annotations as ChartAnnotation[], replace === true)
+        const { annotations: corrected, warnings } = correctTimeUnits(annotations as ChartAnnotation[])
+        const result = applyAnnotations(chart, corrected, replace === true)
         remember(chart)
         changed(chart)
-        return { chartId: chart.id, ...result, refs: refsOf(chart), total: chart.annotationsByKey.size }
+        // Say what is not on screen and why, so the agent fixes the mark instead of telling the reader it drew it.
+        const data = dataOf(chart), placement: MarkPlacement[] = []
+        for (const key of result.applied) {
+          const span = chart.annotations.getAnnotationSpan(key, 'agent'), mark = chart.annotationsByKey.get(key)
+          if (span === null || mark === undefined || span.status === 'visible') continue
+          const why = whyNotShown(mark, span.status, data)
+          if (why !== null) placement.push({ key, status: span.status, why })
+        }
+        return { chartId: chart.id, ...result, refs: refsOf(chart), total: chart.annotationsByKey.size, data, ...(warnings.length > 0 ? { warnings: warnings satisfies MarkWarning[] } : {}), ...(placement.length > 0 ? { notShown: placement } : {}) }
       }
     },
     {
