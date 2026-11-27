@@ -34,6 +34,8 @@ export interface ChartSnapshot {
   bars: { count: number, first: number | null, last: number | null }
   /** The loaded data's reach, to check a mark against: first and last time, the price range of the 500 most recent bars and the last close. */
   data: DataSummary
+  /** Marks that are not on screen, each with the reason (present only when there are any). */
+  notShown?: MarkPlacement[]
   replay: { active: boolean }
 }
 
@@ -126,8 +128,20 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     if (kept.size > MAX_KEPT_CHARTS) kept.delete(kept.keys().next().value as string)
   }
 
+  /** Which of these marks are not on screen, and why, so the agent fixes them instead of telling the reader they are drawn. */
+  const notShownOf = (chart: Mounted, keys: Iterable<string>): MarkPlacement[] => {
+    const data = dataOf(chart), placement: MarkPlacement[] = []
+    for (const key of keys) {
+      const span = chart.annotations.getAnnotationSpan(key, 'agent'), mark = chart.annotationsByKey.get(key)
+      if (span === null || mark === undefined || span.status === 'visible') continue
+      const why = whyNotShown(mark, span.status, data)
+      if (why !== null) placement.push({ key, status: span.status, why })
+    }
+    return placement
+  }
   const snapshot = (chart: Mounted): ChartSnapshot => {
     const state = chart.workspace.getState()
+    const notShown = notShownOf(chart, chart.annotationsByKey.keys())
     return {
       chartId: chart.id,
       symbol: chart.workspace.getSymbol(),
@@ -138,6 +152,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
       refs: refsOf(chart),
       bars: { count: state.data.count, first: state.data.firstTimestamp, last: state.data.lastTimestamp },
       data: dataOf(chart),
+      ...(notShown.length > 0 ? { notShown } : {}),
       replay: { active: state.replay.active }
     }
   }
@@ -378,7 +393,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     {
       name: 'chart_state',
       authority: 'read',
-      description: 'Read a chart on screen: symbol, period, chart type, indicators, annotations, how many bars are loaded, the reach of the data (first and last bar time, recent price range, last close) and whether replay is active. Read it before marking a chart.',
+      description: 'Read a chart on screen: symbol, period, chart type, indicators, annotations (and `notShown`: any mark that is not on screen, with the reason), how many bars are loaded, the reach of the data (first and last bar time, recent price range, last close) and whether replay is active. Read it before marking a chart.',
       inputSchema: { type: 'object', properties: { chartId } },
       run: async (input) => snapshot(find((input as { chartId?: unknown } | undefined)?.chartId))
     },
@@ -486,13 +501,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
         remember(chart)
         changed(chart)
         // Say what is not on screen and why, so the agent fixes the mark instead of telling the reader it drew it.
-        const data = dataOf(chart), placement: MarkPlacement[] = []
-        for (const key of result.applied) {
-          const span = chart.annotations.getAnnotationSpan(key, 'agent'), mark = chart.annotationsByKey.get(key)
-          if (span === null || mark === undefined || span.status === 'visible') continue
-          const why = whyNotShown(mark, span.status, data)
-          if (why !== null) placement.push({ key, status: span.status, why })
-        }
+        const data = dataOf(chart), placement = notShownOf(chart, result.applied)
         return { chartId: chart.id, ...result, refs: refsOf(chart), total: chart.annotationsByKey.size, data, ...(warnings.length > 0 ? { warnings: warnings satisfies MarkWarning[] } : {}), ...(placement.length > 0 ? { notShown: placement } : {}) }
       }
     },

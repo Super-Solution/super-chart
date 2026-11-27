@@ -121,6 +121,7 @@ Models draw wrong marks for three reasons: wrong units, prices that were never o
 can see them. The tools say so instead of hiding it.
 
 - `chart_state` returns `data`: the first and last bar time, the price range of the 500 most recent bars and the last close.
+- `chart_state` also returns `notShown` (key, status, reason) for any existing mark that is outside the view, the same list `chart_annotate` gives for the marks it just applied, so an agent that comes back to a chart can fix what is not on screen.
   The tool descriptions tell the agent to read it before marking.
 - Times are milliseconds. A mark whose anchor times are all plausible Unix *seconds* (between 1e8 and 1e11) is corrected by
   ×1000 and the result carries `warnings` with code `time_in_seconds`.

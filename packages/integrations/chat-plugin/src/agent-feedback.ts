@@ -43,6 +43,7 @@ export function correctTimeUnits (annotations: readonly ChartAnnotation[]): { an
   return { annotations: fixed, warnings }
 }
 
+const num = (value: number): number => Number(value.toPrecision(7))
 const iso = (time: number): string => new Date(time).toISOString().slice(0, 16).replace('T', ' ')
 
 /** Why a mark the engine accepted is not on screen, in words an agent can act on; null when it is shown or nothing useful can be said. */
@@ -57,8 +58,8 @@ export function whyNotShown (mark: Pick<ChartAnnotation, 'anchors'>, status: str
     if (Math.min(...times) > data.last) return `Every anchor is after the last bar (${iso(data.last)}).`
   }
   if (data.low !== null && data.high !== null && prices.length > 0) {
-    if (Math.min(...prices) > data.high) return `The price ${Math.min(...prices)} is above the recent range ${data.low} to ${data.high}.`
-    if (Math.max(...prices) < data.low) return `The price ${Math.max(...prices)} is below the recent range ${data.low} to ${data.high}.`
+    if (Math.min(...prices) > data.high) return `The price ${num(Math.min(...prices))} is above the recent range ${num(data.low)} to ${num(data.high)}.`
+    if (Math.max(...prices) < data.low) return `The price ${num(Math.max(...prices))} is below the recent range ${num(data.low)} to ${num(data.high)}.`
   }
   return 'The mark is outside the part of the chart on screen; it is kept and shows when the view reaches it.'
 }
