@@ -425,7 +425,7 @@ own picker.
   `run` may be async. `listCommands()` returns what is currently available.
   `commands: { enabled: false }` removes the palette and its shortcut;
   `shortcut: false` keeps the palette but drops Ctrl/Cmd+K. With an empty query the palette leads
-  with a **Recent** group: the last five commands run in this workspace (not stored across loads). **Go to date** (`Alt+G`) opens it on the latest bar's date; a typed date such as `2026-03-01 14:30` (axis time zone) becomes a `Go to …` command that moves the view to the nearest loaded bar and says when the date is outside the loaded range.
+  with a **Recent** group: the last five commands run in this workspace (not stored across loads). **Go to date** (`Alt+G`) opens it on the latest bar's date; a typed date such as `2026-03-01 14:30` (axis time zone) becomes a `Go to …` command that moves the view to the nearest loaded bar and says when the date is outside the loaded range. **Typing on the chart** starts a search, as on other charts: a letter opens the symbol search, a digit opens this palette with an interval command (`15` is 15 minutes, `240` is 4 hours, `4h`, `1D`, `1W`), and Enter switches to it when the feed supports that interval.
 - Right-click on the chart opens a menu. Over a drawing it offers lock/unlock and
   delete (a locked drawing cannot be deleted); everywhere it offers fit the price
   scale, reset the view, jump to the latest bar, remove all drawings (when there

@@ -771,7 +771,7 @@ export class ChartWorkspace {
       root: this.root,
       t: () => this.tr,
       commands: () => this.collectCommands(),
-      suggest: query => this.dateSuggestions(query),
+      suggest: query => [...this.intervalSuggestions(query), ...this.dateSuggestions(query)],
       listen: (target, type, listener) => { this.listen(target, type, listener); },
       run: command => { void this.runCommand(command) },
       closeOthers: () => { this.closeFloating('palette'); }
@@ -806,7 +806,10 @@ export class ChartWorkspace {
         return
       }
       if (key.ctrlKey || key.metaKey || key.altKey || !/^[a-z0-9]$/i.test(key.key) || !(key.target instanceof this.win.HTMLElement) || !this.chartHost.contains(key.target) || key.target.closest('input,textarea,select,[contenteditable="true"]') !== null) return
-      key.preventDefault(); this.openSearch(key.key, 'keyboard')
+      key.preventDefault()
+      // As on other charts: a letter starts a symbol search, a digit starts an interval ("15", "240", "4h" and Enter).
+      if (/^[0-9]$/.test(key.key) && this.paletteEnabled) this.palette.open(key.key)
+      else this.openSearch(key.key, 'keyboard')
     })
     this.listen(this.doc, 'pointerdown', event => {
       if (!(event.target instanceof this.win.Node)) return
@@ -2436,6 +2439,16 @@ export class ChartWorkspace {
   private openGoToDate (): void {
     const zone = this.chart.getRenderOptions().timeZone ?? 'UTC', last = this.chart.getBars({ limit: 1 })[0]
     if (this.paletteEnabled) this.palette.open(last === undefined ? '' : formatDateQuery(last.timestamp, zone), true)
+  }
+
+  /** An interval typed in the palette ("15", "240", "4h", "1D") becomes a command that switches to it, when the feed supports it. */
+  private intervalSuggestions (query: string): WorkspaceCommand[] {
+    const text = query.trim()
+    if (!/^\d{1,4}\s*[sSmhHdDwWMyY]?$/.test(text)) return []
+    let period: Period
+    try { period = this.resolvePeriod(text.replace(/\s+/g, '')) } catch { return [] }
+    if (periodKey(period) === periodKey(this.period)) return []
+    return [{ id: 'interval.typed', group: this.t('palette.group.interval'), title: this.t('palette.interval', { name: period.text }), run: () => { void this.setPeriod(period) } }]
   }
 
   /** A date typed in the palette becomes a command that moves the view to the nearest loaded bar, and says when the date is outside what is loaded. */

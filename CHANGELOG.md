@@ -5,6 +5,8 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- **Type an interval on the chart**: with the chart focused, a digit now opens the command palette with an interval command (`15`, `240`, `4h`, `1D`, `1W`; a bare number is minutes and 60 or more that divide evenly become hours) and Enter switches to it when the feed supports it. A letter still opens the symbol search. Before, a digit started a symbol search too.
+
 - Chat plugin: `chart_annotate` told an agent that sent a date string as an anchor time only "anchors need a finite time"; it now adds that time is milliseconds since the epoch, as a number.
 
 - **Copy and paste a drawing**: `Ctrl/Cmd+C` with a drawing selected, `Ctrl/Cmd+V` puts a copy 14 px further each time, selected (one undo step per paste). Nothing happens without a selected drawing, so the browser's own copy still works elsewhere.
