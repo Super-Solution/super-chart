@@ -14,6 +14,8 @@ export interface DrawingToolbarHost {
   bind: (apply: () => void) => void
   listen: (target: EventTarget, type: string, listener: EventListener) => void
   /** The drawing as last painted (clipped to the plot) and the plot area, or null when it is not on screen. */
+  /** The anchors moved a few pixels to the side (time and price), so a copy can be told from the original. Optional. */
+  offsetAnchors?: (anchors: Drawing['anchors']) => Drawing['anchors']
   geometryOf: (id: string) => { geometry: DrawingGeometry, plot: DrawingBounds } | null
   /** Called after the toolbar changed a drawing, for the host's own bookkeeping (saving, objects list). */
   changed?: () => void
@@ -335,7 +337,7 @@ export class DrawingToolbar {
     let id = `${drawing.id}-copy`
     for (let n = 2; store.getSnapshot().drawings.some(item => item.id === id); n++) id = `${drawing.id}-copy-${n}`
     try {
-      const copy = store.add({ ...drawing, id, locked: false, anchors: drawing.anchors.map(anchor => ({ ...anchor })) })
+      const copy = store.add({ ...drawing, id, locked: false, anchors: this.host.offsetAnchors?.(drawing.anchors) ?? drawing.anchors.map(anchor => ({ ...anchor })) })
       store.select(copy.id)
     } catch (error) { console.warn('[super-chart] Drawing was not cloned', error) }
     this.host.changed?.()

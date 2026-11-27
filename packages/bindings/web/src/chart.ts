@@ -551,6 +551,20 @@ export class EngineChart {
     return point !== null && Number.isFinite(point.timestamp) && Number.isFinite(point.price) ? { timestamp: point.timestamp, price: point.price } : null
   }
 
+  /**
+   * The anchors moved by a few pixels (right and down by default), as time and price: a copy of a drawing put there can be told from
+   * the original. Anchors that cannot be projected (no data, outside the scale) come back unchanged.
+   */
+  offsetAnchors (anchors: ReadonlyArray<{ readonly timestamp: number, readonly price: number }>, dx = 14, dy = 14): Array<{ timestamp: number, price: number }> {
+    this.assertLive()
+    const frame = this.frame
+    return anchors.map(anchor => {
+      const at = frame === null ? null : frame.project(anchor.timestamp, anchor.price)
+      const moved = at !== null && Number.isFinite(at.x) && Number.isFinite(at.y) ? frame!.unproject(at.x + dx, at.y + dy) : null
+      return moved !== null && Number.isFinite(moved.timestamp) && Number.isFinite(moved.price) ? { timestamp: moved.timestamp, price: moved.price } : { timestamp: anchor.timestamp, price: anchor.price }
+    })
+  }
+
   /** Which part of the chart a client position is over: the plot, the price axis strip, the time axis, or none. */
   zoneAt (clientX: number, clientY: number): 'plot' | 'price-axis' | 'time-axis' | null {
     this.assertLive()

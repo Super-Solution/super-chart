@@ -898,6 +898,7 @@ export class ChartWorkspace {
         t: (key, params) => this.t(key, params),
         bind: apply => { this.bind(apply) },
         listen: (target, type, listener) => { this.listen(target, type, listener) },
+        offsetAnchors: anchors => this.chart.offsetAnchors(anchors),
         geometryOf: id => this.chart.getDrawingGeometry(id),
         changed: () => { this.objectsDirty = true }
       })
@@ -2188,6 +2189,17 @@ export class ChartWorkspace {
       if (drawing !== undefined) {
         items.push(
           { id: 'drawing.lock', label: `${this.t('context.drawing')}: ${this.t(drawing.locked ? 'draw.unlock' : 'draw.lock')}`, run: () => { this.chart.drawings.update(drawing.id, { locked: !drawing.locked }) } },
+          {
+            id: 'drawing.clone',
+            label: `${this.t('context.drawing')}: ${this.t('dt.clone')}`,
+            run: () => {
+              const store = this.chart.drawings
+              let id = `${drawing.id}-copy`
+              for (let n = 2; store.getSnapshot().drawings.some(item => item.id === id); n++) id = `${drawing.id}-copy-${n}`
+              store.select(store.add({ ...drawing, id, locked: false, anchors: this.chart.offsetAnchors(drawing.anchors) }).id)
+            }
+          },
+          { id: 'drawing.hide', label: `${this.t('context.drawing')}: ${this.t('objects.hide')}`, run: () => { this.chart.drawings.update(drawing.id, { hidden: true }) } },
           { id: 'drawing.delete', label: `${this.t('context.drawing')}: ${this.t('objects.delete')}`, disabled: drawing.locked, danger: true, run: () => { this.chart.drawings.remove(drawing.id) } }
         )
       }

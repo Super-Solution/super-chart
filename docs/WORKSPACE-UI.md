@@ -697,7 +697,7 @@ A chart with no options looks and behaves like the charting tools people already
 - **Market bar**: symbol, intervals, chart-type menu (with a picture per type), Chart settings, Indicators (search, then
   add), Replay, Objects. **Footer**: quick ranges, a live clock, time zone, `%`, `log`, Auto, and Load older.
 - **Context menus**: over the plot — copy the price, draw a horizontal line there, fit, reset, latest, palette,
-  search, copy the chart as an image; over the price axis — automatic range, linear / log / percentage, invert; over the time axis — go to date,
+  search, copy the chart as an image (over a drawing, also lock, clone, hide and delete it); over the price axis — automatic range, linear / log / percentage, invert; over the time axis — go to date,
   reset, latest.
 - **Dragging** the plot moves time and, once the drag is clearly vertical, the price range (it turns manual); dragging the
   axis scales it; a double click on the axis returns to automatic.

@@ -5,6 +5,8 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- Drawings: **Clone** and **Hide** are in the drawing's right-click menu, and a clone is now placed 14 px to the side (it used to land exactly on the original, so cloning looked like nothing happened). Web: `chart.offsetAnchors(anchors, dx?, dy?)`.
+
 - Chat plugin: `chart_state` lists `notShown` marks (outside the view, with the reason) too, not only `chart_annotate`.
 
 - A `plan` whose entry and target share one time now says so ("entry and target need different times") instead of blaming the stop; the chat plugin warns `plan_no_width` and the tool description says the plan spans from the entry time to the target time.
