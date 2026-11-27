@@ -54,8 +54,8 @@ describe('built-in annotation templates', () => {
     // y = 400 - 2 * price; level 0.5 of 100..200 is 150, so y = 100.
     expect(horizontal('f')).toHaveLength(7)
     expect(horizontal('f')).toContain(100)
-    // Levels 0, 0.5 and 2 of 100..200 are the prices 100, 150 and 300.
-    expect(horizontal('g')).toEqual([200, 100, -200])
+    // Level 0 is the second anchor (200), level 1 the first (100): levels 0, 0.5 and 2 are the prices 200, 150 and 0.
+    expect(horizontal('g')).toEqual([0, 100, 400])
   })
 
   it('draws a long plan with reward and risk, and refuses a stop on the wrong side', () => {

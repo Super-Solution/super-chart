@@ -109,7 +109,7 @@ anchor of them needs a price.
 | `marker` | 1 | a labelled point |
 | `trend` | 2 | a line through two points |
 | `ray` | 2 | the same line, extended to the right |
-| `fibonacci` | 2 | retracement levels between two points; `params.levels` is a comma list such as `"0,0.5,1"` |
+| `fibonacci` | 2 | retracement levels between two points, as the Fibonacci tool draws them: the first point is where the move began (level 1), the second where it ended (level 0); `params.levels` is a comma list such as `"0,0.5,1"` |
 | `plan` | 3 | entry, target and stop in that order, with the risk-reward ratio |
 
 Scalar `params` are accepted on `trend`, `ray`, `fibonacci` and `plan` only. A mark the engine refuses is reported
