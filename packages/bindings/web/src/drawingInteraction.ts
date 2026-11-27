@@ -264,6 +264,21 @@ export function attachDrawingInteraction (
     try { element.setPointerCapture(e.pointerId) } catch { cancel(); return }
     element.focus({ preventScroll: true })
   })
+  // The pointer says what is under it: a crosshair while a tool is armed or a shape is being placed, a hand over a drawing, a grab
+  // over one of its points. The pane's own handler has just put the axis cursors (or none) back, so only the plot is touched here.
+  const hoverCursor = (e: PointerEvent): void => {
+    if (e.pointerType === 'touch') return
+    const currentFrame = frame()
+    if (currentFrame === null) return
+    const p = point(e), g = currentFrame.model.geometry
+    if (p.x < g.left || p.x > g.right || p.y < g.top || p.y > g.bottom) return
+    if (drag !== null) { element.style.cursor = drag.original === null ? 'crosshair' : drag.moved ? 'grabbing' : 'grab'; return }
+    if (tool !== null || placement !== null) { element.style.cursor = 'crosshair'; return }
+    const hit = store.hitTest(p, currentFrame.project, g, 6, currentFrame.drawingContext)
+    if (hit !== null) element.style.cursor = hit.anchorIndex === null ? 'pointer' : 'grab'
+  }
+  // Not through `on` (capture): the pane's handler is a bubble listener added first, and it puts the cursor back; this one runs after it.
+  element.addEventListener('pointermove', event => { hoverCursor(event) }, { passive: true, signal: abort.signal })
   on('pointermove', event => {
     const e = event as PointerEvent
     if (drag === null) {
