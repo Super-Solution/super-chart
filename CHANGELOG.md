@@ -5,6 +5,8 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- Saving a workspace with more than 64 indicators said only "Invalid workspace indicators"; it now says the limit and how many there are.
+
 - **No more two-row market bar**: between about 780 and 1150px wide the regular layout wrapped its last buttons (the command palette button, then Replay and Objects) onto a second row. The `compact` breakpoint moves from 780 to 1040px, and in the regular layout an `auto` interval bar that would wrap now gives way to the dropdown, so the market bar is one row at every width. Hosts that set `ui.layout` explicitly are unaffected.
 
 - **Fixed: a workspace could not save itself**: `exportDocument()` threw "Unknown or missing render options property" because the legend title, legend fold label and watermark the workspace itself puts on the canvas were treated as unknown saved options, and a restore dropped them. They are now rebuilt for the restored market (and the fold is kept); a saved document carries only the viewer's choices: `gridLines`, `legend` and a hidden watermark (`watermark: null`). A restored document with no `watermark` key shows the watermark.

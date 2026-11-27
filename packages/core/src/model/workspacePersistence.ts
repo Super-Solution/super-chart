@@ -179,7 +179,8 @@ function layoutOf (value: unknown): EngineLayout {
   return result
 }
 function indicatorsOf (value: unknown, options: WorkspaceDocumentOptions): readonly EngineIndicatorInstance[] {
-  if (!Array.isArray(value) || value.length > WORKSPACE_DOCUMENT_LIMITS.indicators) throw new TypeError('Invalid workspace indicators')
+  if (!Array.isArray(value)) throw new TypeError('Invalid workspace indicators')
+  if (value.length > WORKSPACE_DOCUMENT_LIMITS.indicators) throw new RangeError(`A saved workspace holds at most ${WORKSPACE_DOCUMENT_LIMITS.indicators} indicators; this one has ${value.length}. Remove some before saving.`)
   const custom = new Set(options.registeredIndicatorNames ?? [])
   for (const name of custom) text(name, 'registered indicator name')
   const ids = new Set<string>(), builtins = new EngineIndicators()
