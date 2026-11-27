@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/promise-function-async -- Load methods validate synchronously and return the shared queue promise without an async wrapper. */
 import { EngineChart, type EngineChartOptions, type EngineConfiguration } from './chart'
 import { formatDateQuery, parseDateQuery } from './goToDate'
+import { CompareOverlays, type CompareInfo } from './compareOverlay'
 import { ENGINE_CHART_TYPES, DRAWING_TYPES, DERIVED_STYLES, createDerivedSeriesPort, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, compileSymbolSession, sessionBarClose, sessionKindAt, parseWorkspaceDocument, checkTimeZone, formatUtcOffset, timeZoneChoices, localTimeZone, COMMON_TIME_ZONES, INDICATOR_GROUPS, indicatorInfo, indicatorLabel, searchIndicators, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type DerivedSeriesPort, type DerivedStyle, type DerivedStyleOptions, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1, type SessionIssue, type TradingSession } from '@supersolutions/super-chart-core'
 import { DatafeedMarks, MARKS_LAYER, type WorkspaceMarksState } from './datafeedMarks'
 import { EngineAnnotations, attachAnnotationIntents, type AnnotationIntentEvent, type EngineAnnotationTheme } from './annotations'
@@ -322,6 +323,8 @@ export class ChartWorkspace {
   private readonly replayButtons: { start: HTMLButtonElement, back: HTMLButtonElement, next: HTMLButtonElement, play: HTMLButtonElement, exit: HTMLButtonElement }
   private readonly replaySpeed: HTMLSelectElement
   private readonly hideAllButton: HTMLButtonElement
+  private compares!: CompareOverlays
+  private searchPurpose: 'symbol' | 'compare' = 'symbol'
   private readonly drawingButtons: { undo: HTMLButtonElement, redo: HTMLButtonElement, lock: HTMLButtonElement, remove: HTMLButtonElement }
   private readonly unsubscribe: Array<() => void> = []
   private readonly drawingDocuments: DrawingDocuments
@@ -747,7 +750,7 @@ export class ChartWorkspace {
     this.searchPanel.setAttribute('role', 'dialog'); this.bind(() => { this.searchPanel.setAttribute('aria-label', this.t('search.title')); })
     this.searchPanel.className = 'sc-search'
     this.searchInput = this.node('input'); this.searchInput.type = 'search'
-    this.bind(() => { this.searchInput.placeholder = this.t('search.placeholder'); this.searchInput.setAttribute('aria-label', this.t('search.placeholder')) })
+    this.bind(() => { this.syncSearchPlaceholder() })
     this.searchInput.autocomplete = 'off'; this.searchInput.spellcheck = false; this.searchInput.className = 'sc-input sc-search-input'
     this.searchStatus = this.node('div'); this.searchStatus.className = 'sc-search-status'; this.searchStatus.setAttribute('role', 'status')
     this.searchResults = this.node('ul'); this.searchResults.className = 'sc-search-results'
@@ -954,7 +957,9 @@ export class ChartWorkspace {
     })
     this.listen(this.doc, 'visibilitychange', () => { if (this.doc.hidden) this.timedReplay.pause(); this.countdown.refresh() })
     this.unsubscribe.push(this.chart.view.subscribe(updateNavigation)); updateNavigation()
+    this.compares = new CompareOverlays({ datafeed: this.datafeed, chart: this.chart, market: () => ({ symbol: this.symbol, period: this.period }), report: error => { this.showNotice(error) }, now: () => Date.now() })
     this.unsubscribe.push(this.chart.onIndicatorsChanged(refreshIndicators))
+    this.unsubscribe.push(this.chart.onIndicatorsChanged(() => { this.compares.reconcile() }))
     this.unsubscribe.push(this.chart.drawings.subscribe(() => { this.updateDrawingControls(); this.queueDrawingSave(); this.objectsDirty = true; this.renderObjects() }))
     this.unsubscribe.push(this.chart.onLayoutChanged(() => { this.syncPresentation(); }))
     this.loader.attach(this.dataPort())
@@ -1069,6 +1074,16 @@ export class ChartWorkspace {
     this.updateStatus(); this.events.emit('loadResult', result)
     return true
   }
+
+  /**
+   * Lay another market over the chart, rebased to start at the chart's own price so the lines show relative performance.
+   * Resolves with an id for `removeCompare`. The bars come from the datafeed for the range loaded; they are fetched again
+   * when the market changes or older bars load, and every 30 seconds for the latest ones (not streamed live). Shown as a
+   * line indicator, so the Indicators list, legend and Objects tree can hide or remove it. At most 6 at once.
+   */
+  addCompare (symbol: SymbolInfo): Promise<string> { this.assertLive(); return this.compares.add(validSymbol(symbol)) }
+  removeCompare (id: string): boolean { this.assertLive(); return this.compares.remove(id) }
+  listCompares (): CompareInfo[] { this.assertLive(); return this.compares.list() }
 
   on<K extends keyof WorkspaceEvents> (type: K, listener: (event: WorkspaceEvents[K]) => void): () => void {
     this.assertLive(); return this.events.on(type, listener)
@@ -1321,7 +1336,7 @@ export class ChartWorkspace {
   dispose (): void {
     if (this.disposed) return
     this.saveDrawings();
-    this.disposed = true; this.cancelSearch(); this.abort.abort()
+    this.disposed = true; this.cancelSearch(); this.abort.abort(); this.compares.dispose()
     this.restoreGeneration++; this.pendingRestore = null
     this.stopFollowingScheme?.(); this.stopFollowingScheme = null
     if (this.clockTimer !== null) { this.win.clearInterval(this.clockTimer); this.clockTimer = null }
@@ -1484,6 +1499,7 @@ export class ChartWorkspace {
         if (this.loader.status.state !== 'loading') this.pending = false
         this.restoreDrawings(); this.updateStatus(); this.settleLoad()
         this.events.emit('dataChange', { market: this.market(), kind, count: this.chart.view.getSnapshot().length })
+        void this.compares.refresh(kind === 'tail' ? 'tail' : 'range')
       } catch (error) {
         this.applyError = error; this.pending = false
         this.chart.setDrawingTool(null); this.chart.setData([], false); this.updateStatus(); this.settleLoad()
@@ -1616,9 +1632,16 @@ export class ChartWorkspace {
     this.clearButton.disabled = !state.drawings.some(item => !item.locked)
   }
 
-  private openSearch (initialQuery?: string, trigger: SymbolSearchRequest['trigger'] = 'api'): boolean {
+  private syncSearchPlaceholder (): void {
+    const text = this.t(this.searchPurpose === 'compare' ? 'compare.placeholder' : 'search.placeholder')
+    this.searchInput.placeholder = text; this.searchInput.setAttribute('aria-label', text)
+  }
+
+  private openSearch (initialQuery?: string, trigger: SymbolSearchRequest['trigger'] = 'api', purpose: 'symbol' | 'compare' = 'symbol'): boolean {
     if (this.disposed) return false
-    if (this.searchRequest !== undefined) {
+    this.searchPurpose = purpose; this.syncSearchPlaceholder()
+    // The host's own picker (onRequest) is for choosing the chart's market; a comparison always uses the built-in list.
+    if (purpose === 'symbol' && this.searchRequest !== undefined) {
       let handled = false
       try { handled = this.searchRequest({ query: initialQuery ?? '', trigger }) === true } catch (error) { this.showNotice(error) }
       if (handled) return false
@@ -1634,6 +1657,7 @@ export class ChartWorkspace {
 
   private closeSearch (focus = true): void {
     this.cancelSearch(); this.searchPanel.hidden = true; this.symbolButton.setAttribute('aria-expanded', 'false')
+    if (this.searchPurpose !== 'symbol') { this.searchPurpose = 'symbol'; this.syncSearchPlaceholder() }
     if (focus && !this.disposed) this.symbolButton.focus()
   }
 
@@ -1693,6 +1717,11 @@ export class ChartWorkspace {
     const decision = decideEnter({ isComposing: false, shownQuery: this.searchShownQuery, currentQuery: this.searchInput.value.trim(), loading: this.searchLoading, activeIndex: index, resultCount: this.searchSymbols.length })
     if (decision.action !== 'select') return
     const symbol = this.searchSymbols[decision.index]
+    if (this.searchPurpose === 'compare') {
+      this.closeSearch()
+      void this.compares.add(symbol).catch((error: unknown) => { this.showNotice(error) })
+      return
+    }
     if (this.run(() => { void this.setSymbol(symbol) })) {
       this.recents.push(symbolKey(symbol)); this.closeSearch()
     }
@@ -2183,6 +2212,8 @@ export class ChartWorkspace {
     const t = this.t.bind(this), commands: WorkspaceCommand[] = []
     const add = (id: string, title: string, group: string, run: () => void | Promise<void>, extra: Partial<WorkspaceCommand> = {}): void => { commands.push({ id, title, group: t(group), run, ...extra }) }
     add('workspace.search', t('palette.search'), 'palette.group.general', () => { this.openSearch('', 'command') }, { keywords: ['symbol', 'ticker'] })
+    add('workspace.compare', t('palette.compare'), 'palette.group.chart', () => { this.openSearch('', 'command', 'compare') }, { keywords: ['compare', 'overlay', 'symbol', 'versus', 'vs'] })
+    for (const item of this.compares.list()) add(`compare.remove.${item.id}`, t('palette.compare.remove', { name: item.symbol.ticker }), 'palette.group.chart', () => { this.compares.remove(item.id) })
     add('workspace.reload', t('palette.reload'), 'palette.group.general', () => { void this.reload() })
     for (const name of [AUTO_THEME, ...listWorkspaceThemes()]) add(`theme.${name}`, t('palette.theme', { name: t(`theme.${name}`) }), 'palette.group.general', () => { this.setTheme(name) }, { keywords: ['theme', 'dark', 'light'], when: () => this.themeName !== name })
     for (const period of this.periods) add(`interval.${periodKey(period)}`, t('palette.interval', { name: period.text }), 'palette.group.interval', () => { void this.setPeriod(period) }, { keywords: ['interval', 'timeframe', 'period'], when: () => periodKey(period) !== periodKey(this.period) })

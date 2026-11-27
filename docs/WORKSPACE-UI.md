@@ -436,6 +436,23 @@ own picker.
   show/hide, lock and remove. Host annotations are listed read-only: the host owns
   them.
 
+## Compare with another symbol
+
+`addCompare(symbol)` lays another market over the chart (palette: **Compare with another symbol…**, which opens the
+built-in symbol list even when the host handles symbol search itself). The other market's closes are rebased to start at
+the chart's own price at the first bar both have, so the two lines show relative performance on one scale (in percentage
+mode both read as a change from that bar). It is a line indicator named `Compare TICKER · EXCHANGE`: the Indicators list,
+legend and Objects tree hide or remove it, and `removeCompare(id)` / `listCompares()` do the same from code. Up to 6.
+
+- The bars come from the host's datafeed (`getHistoryKLineData`) for the range loaded. They are fetched again when the
+  market changes (a comparison that becomes the chart's own market is dropped), when older bars load, and every 30 seconds
+  for the latest bars. The feed's single live subscription belongs to the chart's own market, so a compare line is
+  refreshed, not streamed.
+- A gap or a slower period carries the last close forward; before the other market's first bar the line is not drawn.
+- The legend shows the rebased value, not the other market's own price. A feed that returns fewer bars than the chart
+  has loaded shows the line only where it has data.
+- Core: `rebaseCompare(main, other)` is the pure alignment and rebasing.
+
 ## Scale bar
 
 Beside the chart-settings panel's percent, log and reverse options, the scale bar
