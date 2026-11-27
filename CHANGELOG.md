@@ -5,6 +5,8 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- **Appearance settings in the Chart menu**: a Grid lines choice (horizontal, vertical, both, none) and Watermark and Legend switches, as in TradingView's chart settings, with matching palette commands and `setWatermarkVisible()` / `setLegendVisible()` on the workspace. New core render option `gridLines` (default `'horizontal'`, the previous look); vertical lines sit at the time-axis ticks and are left off indicator panes. A hidden watermark stays hidden across symbol and interval changes; a watermark the host supplied is not touched.
+
 - **Shift keeps a line straight**: holding Shift while placing or dragging the end of a segment, ray, trend line or arrow snaps it to horizontal, vertical or 45 degrees from its other end.
 
 - `Alt+H`, `Alt+J` and `Alt+V` draw the horizontal line, horizontal ray and vertical line at the mouse position at once (selected), as other charting tools do, instead of arming the tool and waiting for a click. Off the plot they arm the tool as before.

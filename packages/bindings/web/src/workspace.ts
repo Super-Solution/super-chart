@@ -142,6 +142,8 @@ export interface ChartWorkspaceOptions {
 
 /** What the price-mode control offers: the real bars, Heikin Ashi, and the price-driven styles. */
 export type WorkspacePriceMode = 'raw' | 'heikin-ashi' | DerivedStyle
+type GridMode = 'horizontal' | 'vertical' | 'both' | 'none'
+const GRID_MODES: readonly GridMode[] = Object.freeze(['horizontal', 'vertical', 'both', 'none'] as const)
 const PRICE_MODES: readonly WorkspacePriceMode[] = Object.freeze(['raw', 'heikin-ashi', ...DERIVED_STYLES] as const)
 /** The result of `getSessionState()`. */
 export type WorkspaceSessionState =
@@ -266,6 +268,10 @@ export class ChartWorkspace {
   private readonly zoneSelect: HTMLSelectElement
   private zoneListFull = false
   private marksToggle: HTMLButtonElement | null = null
+  private watermarkToggle: HTMLButtonElement | null = null
+  private legendToggle: HTMLButtonElement | null = null
+  private watermarkOn = true
+  private syncAppearance: () => void = () => {}
   private zoneId: string
   private readonly intervalBar: HTMLDivElement
   private readonly intervalField: HTMLLabelElement
@@ -545,12 +551,27 @@ export class ChartWorkspace {
       const auto = this.scale.range === undefined
       this.autoButton.setAttribute('aria-pressed', String(auto))
       this.showTimeZone(render.timeZone ?? 'UTC')
+      this.syncAppearance()
       // A restored document can carry its own base colours; host marks follow the canvas they sit on.
       ;(this.annotations as EngineAnnotations | undefined)?.setTheme(this.annotationTheme())
     }
     presentation.panel.classList.add('sc-settings-grid')
     presentation.panel.append(this.field('chartType', chartType), this.field('priceMode', mode), this.field('priceScale', scale), reverse)
     presentation.panel.append(this.control('compare.button', () => { this.openSearch('', 'button', 'compare') }, { title: 'palette.compare' }))
+    // Appearance, as in TradingView's chart settings: which grid lines, whether the symbol watermark and the legend show.
+    const grid = this.select('gridLines', GRID_MODES.map(name => [name, () => this.t(`gridLines.${name}`)] as const), options.chart?.render?.gridLines ?? 'horizontal')
+    this.listen(grid, 'change', () => { this.run(() => { this.chart.setRenderOptions({ gridLines: grid.value as GridMode }) }) })
+    this.watermarkToggle = this.control('watermark.toggle', () => { this.setWatermarkVisible(!this.watermarkOn) }, { title: 'watermark.toggle.title' })
+    this.legendToggle = this.control('legend.toggle', () => { this.setLegendVisible(this.chart.getRenderOptions().legend === false) }, { title: 'legend.toggle.title' })
+    presentation.panel.append(this.field('gridLines', grid), this.watermarkToggle, this.legendToggle)
+    this.syncAppearance = () => {
+      const render = this.chart.getRenderOptions()
+      grid.value = render.gridLines ?? 'horizontal'
+      this.watermarkToggle?.setAttribute('aria-pressed', String(this.watermarkOn))
+      this.legendToggle?.setAttribute('aria-pressed', String(render.legend !== false))
+    }
+    // The chart does not exist yet while the toolbar is built; syncPresentation runs this once it does.
+    this.watermarkToggle.setAttribute('aria-pressed', 'true'); this.legendToggle.setAttribute('aria-pressed', String(options.chart?.render?.legend !== false))
     // Only a feed that can supply marks gets the switch; without getMarks there is nothing to show or hide.
     if (typeof options.datafeed.getMarks === 'function') {
       this.marksToggle = this.control('marks.toggle', () => { this.setMarksVisible(!this.marks.visible) }, { title: 'marks.toggle.title' })
@@ -1060,7 +1081,7 @@ export class ChartWorkspace {
     if (!this.periods.some(item => periodKey(item) === periodKey(nextPeriod))) this.periods.push(nextPeriod)
     this.symbol = nextSymbol; this.period = nextPeriod
     if (this.ownLegendTitle) this.chart.setRenderOptions({ legendTitle: legendTitleOf(nextSymbol, nextPeriod) })
-    if (this.ownWatermark) this.chart.setRenderOptions({ watermark: watermarkOf(nextSymbol, nextPeriod) })
+    if (this.ownWatermark && this.watermarkOn) this.chart.setRenderOptions({ watermark: watermarkOf(nextSymbol, nextPeriod) })
     this.symbolButton.textContent = nextSymbol.ticker; this.syncPeriodControls()
     const result = changed ? this.request(true) : this.loads.current(this.market()) ?? Promise.resolve(this.currentResult())
     if (changed) this.events.emit('marketChange', { previous, requested: this.market() })
@@ -1327,6 +1348,22 @@ export class ChartWorkspace {
     this.assertLive()
     if (typeof visible !== 'boolean') throw new TypeError('setMarksVisible needs true or false')
     this.marks.setEnabled(visible); this.syncMarksControl()
+  }
+
+  /** Shows or hides the symbol watermark behind the candles. A host-supplied `render.watermark` is left as the host set it. */
+  setWatermarkVisible (visible: boolean): void {
+    this.assertLive()
+    if (typeof visible !== 'boolean') throw new TypeError('setWatermarkVisible needs true or false')
+    this.watermarkOn = visible
+    if (this.ownWatermark) this.chart.setRenderOptions({ watermark: visible ? watermarkOf(this.symbol, this.period) : null })
+    this.syncAppearance()
+  }
+
+  /** Shows or hides the OHLC legend and the indicator titles. */
+  setLegendVisible (visible: boolean): void {
+    this.assertLive()
+    if (typeof visible !== 'boolean') throw new TypeError('setLegendVisible needs true or false')
+    this.chart.setRenderOptions({ legend: visible }); this.syncAppearance()
   }
 
   private syncMarksControl (): void {
@@ -2308,6 +2345,9 @@ export class ChartWorkspace {
     add('draw.toggleHidden', t(this.chart.drawings.getSnapshot().viewHidden ? 'draw.showAll' : 'draw.hideAll'), 'palette.group.draw', () => { this.chart.drawings.setViewHidden(!this.chart.drawings.getSnapshot().viewHidden) }, { keywords: ['hide', 'show', 'visible', 'drawings', 'eye'], when: () => this.chart.drawings.getSnapshot().drawings.length > 0 })
     add('view.goto', t('palette.goto'), 'palette.group.view', () => { this.openGoToDate() }, { shortcut: 'Alt+G', keywords: ['date', 'time', 'jump', 'seek'] })
     add('view.reset', t('context.reset'), 'palette.group.view', () => { this.chart.view.resetViewport() }, { shortcut: 'Alt+R' })
+    add('view.gridLines', t('palette.gridLines'), 'palette.group.view', () => { this.run(() => { const next = GRID_MODES[(GRID_MODES.indexOf(this.chart.getRenderOptions().gridLines ?? 'horizontal') + 1) % GRID_MODES.length]; this.chart.setRenderOptions({ gridLines: next }); this.syncAppearance() }) }, { keywords: ['grid', 'lines', 'vertical', 'horizontal'] })
+    add('view.watermark', t('palette.watermark'), 'palette.group.view', () => { this.setWatermarkVisible(!this.watermarkOn) }, { keywords: ['watermark', 'symbol', 'background'] })
+    add('view.legendVisible', t('palette.legendVisible'), 'palette.group.view', () => { this.setLegendVisible(this.chart.getRenderOptions().legend === false) }, { keywords: ['legend', 'ohlc', 'title', 'hide', 'show'] })
     add('view.legend', t(this.legendCollapsed ? 'legend.unfold' : 'legend.fold'), 'palette.group.view', () => { this.setLegendCollapsed(!this.legendCollapsed) }, { keywords: ['legend', 'indicators', 'fold', 'collapse', 'hide'] })
     add('view.latest', t('nav.latest.title'), 'palette.group.view', () => { this.chart.view.followLatest() })
     add('view.timezone', t(this.zoneId === 'UTC' ? 'scale.local.title' : 'scale.utc.title'), 'palette.group.view', () => { this.toggleTimeZone() })

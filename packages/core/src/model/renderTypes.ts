@@ -31,6 +31,8 @@ export interface EngineRenderOptions {
   theme?: EngineRenderTheme
   background?: string
   grid?: string
+  /** Which grid lines the price pane draws: price levels only (default), time ticks only, both, or none. */
+  gridLines?: 'horizontal' | 'vertical' | 'both' | 'none'
   text?: string
   up?: string
   down?: string

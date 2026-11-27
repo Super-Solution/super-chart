@@ -179,6 +179,15 @@ function paintCandles (ctx: CanvasRenderingContext2D, m: FinancialChartModel, ca
   }
 }
 
+/** Where the time axis puts its ticks (x in pane pixels), the same choice `paintTimeAxis` makes, for a vertical grid to sit on them. */
+function timeTickXs (ctx: CanvasRenderingContext2D, m: FinancialChartModel, options: EngineRenderOptions): number[] {
+  const g = m.geometry, timestamps = m.xKeys as number[]
+  if (!(timestamps.length > 0 && timestamps.every(key => typeof key === 'number'))) return m.xTickIndices.map(index => m.xPositions[index]).filter(Number.isFinite)
+  const sample = ctx.measureText(options.timespan === 'second' ? '00:00:00' : '00:00').width
+  return timeAxisTicks(timestamps, m.xPositions, { timeZone: options.timeZone, symbolTimezone: options.symbolTimezone, timespan: options.timespan, locale: options.locale, minSpacing: sample + 40, left: g.left, right: g.right })
+    .map(tick => m.xPositions[tick.index]).filter(Number.isFinite)
+}
+
 const BOLD_FONT = /^(\d+)\s/
 /** Emphasised (years, months, days) ticks are drawn heavier than times of day. */
 function boldFont (font: string): string { return font.replace(BOLD_FONT, '700 ') }
@@ -290,12 +299,18 @@ export function paintEngineFrame (
     try {
       clipPlot(ctx, m)
       paintSession(ctx, m, p, options)
-      // Horizontal grid only: price levels matter, time is read from the axis.
+      // Price levels by default (time is read from the axis); `gridLines` adds the time ticks or removes either.
+      const grid = options.gridLines ?? 'horizontal'
       ctx.strokeStyle = p.grid
       ctx.beginPath()
-      for (const tick of m.yTicks) {
-        const y = Math.round(m.y(tick)) + 0.5
-        ctx.moveTo(g.left, y); ctx.lineTo(g.right, y)
+      if (grid === 'horizontal' || grid === 'both') {
+        for (const tick of m.yTicks) {
+          const y = Math.round(m.y(tick)) + 0.5
+          ctx.moveTo(g.left, y); ctx.lineTo(g.right, y)
+        }
+      }
+      if ((grid === 'vertical' || grid === 'both') && frame.indicatorPane !== true) {
+        for (const tickX of timeTickXs(ctx, m, options)) { const x = Math.round(tickX) + 0.5; ctx.moveTo(x, g.top); ctx.lineTo(x, g.bottom) }
       }
       ctx.stroke()
 
