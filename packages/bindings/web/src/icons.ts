@@ -107,6 +107,7 @@ const PATHS: Readonly<Record<string, string>> = {
   stop: 'M6 6l12 12M18 6L6 18',
   replay: 'M4 12a8 8 0 1 0 2.6-5.9M4 4v4h4M10.5 9.5l4.5 2.5-4.5 2.5z',
   chevronDown: 'm6 9 6 6 6-6',
+  chevronUp: 'm6 15 6-6 6 6',
   settings: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 4v6M9 14v6',
   magnet: 'M5 4h4v8a3 3 0 0 0 6 0V4h4v8a7 7 0 0 1-14 0zM5 8h4M15 8h4',
   keep: 'M4 12a8 8 0 0 1 14-5.3M20 4v4h-4M20 12a8 8 0 0 1-14 5.3M4 20v-4h4',

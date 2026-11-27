@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compactNumber, legendRows, type LegendPalette } from './legend'
+import { compactNumber, legendRows, LEGEND_FOLDED_ID, type LegendPalette } from './legend'
 import type { EngineRenderFrame } from '@supersolutions/super-chart-core'
 
 const palette: LegendPalette = { background: '#000', ink: '#fff', muted: '#888', up: '#0f0', down: '#f00', flat: '#999', font: '11px mono' }
@@ -48,5 +48,15 @@ describe('legend', () => {
 
   it('returns nothing for a position without a bar', () => {
     expect(legendRows(frame, 5, {}, palette, 2, 900, measure)).toEqual([])
+  })
+
+  it('folds the indicator rows into one line that reports its own id, keeping the quote row', () => {
+    const withLegend = { ...frame, legend: [{ id: 'a', label: 'MA 20', seriesIds: [] }, { id: 'b', label: 'EMA 20', seriesIds: [] }] } as unknown as EngineRenderFrame
+    const ids: Array<string | null> = []
+    const rows = legendRows(withLegend, 1, { legendCollapsed: true, legendCollapsedLabel: '{count} lines' }, palette, 2, 900, measure, ids)
+    expect(text(rows)[1]).toBe('2 lines')
+    expect(rows).toHaveLength(2)
+    expect(ids).toEqual([null, LEGEND_FOLDED_ID])
+    expect(legendRows({ ...withLegend, legend: [] } as unknown as EngineRenderFrame, 1, { legendCollapsed: true }, palette, 2, 900, measure)).toHaveLength(1)
   })
 })

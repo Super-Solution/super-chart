@@ -449,8 +449,10 @@ legend and Objects tree hide or remove it, and `removeCompare(id)` / `listCompar
   for the latest bars. The feed's single live subscription belongs to the chart's own market, so a compare line is
   refreshed, not streamed.
 - A gap or a slower period carries the last close forward; before the other market's first bar the line is not drawn.
-- The legend shows the rebased value, not the other market's own price. A feed that returns fewer bars than the chart
-  has loaded shows the line only where it has data.
+- The legend shows the rebased value, not the other market's own price. A feed that serves fewer bars per request than
+  the chart shows is asked further back (up to 12 requests) until the shown range is covered; where the feed has no
+  history the line is not drawn. While replay runs the other market is not fetched again, and the chart's own times cut
+  its line at the replayed bar.
 - Core: `rebaseCompare(main, other)` is the pure alignment and rebasing.
 
 ## Scale bar
@@ -693,7 +695,10 @@ A chart with no options looks and behaves like the charting tools people already
   never part of the price range, drawn behind the candles. Any indicator that returns bars can use `'overlay'`.
 - **Legend** over the plot (`render.legend`, `render.legendTitle`): title, O H L C and the change for the latest bar or
   the bar under the pointer, then one row per price-pane indicator. Below 400px of plot width it keeps the close only.
-  It is drawn on the cursor layer, so a pointer move repaints only it. Real prices, whatever the axis mode.
+  It is drawn on the cursor layer, so a pointer move repaints only it. Real prices, whatever the axis mode. Many
+  indicators make it tall: the third button beside an indicator's row (or the palette command **Fold the indicator
+  list**, or `workspace.setLegendCollapsed(true)` / `render.legendCollapsed`) folds the rows into one line ("6 indicators")
+  and the same button on that line unfolds them. The quote row always stays.
 - **Market bar**: symbol, intervals, chart-type menu (with a picture per type), Chart settings, Indicators (search, then
   add), Replay, Objects. **Footer**: quick ranges, a live clock, time zone, `%`, `log`, Auto, and Load older.
 - **Context menus**: over the plot — copy the price, draw a horizontal line there, fit, reset, latest, palette,

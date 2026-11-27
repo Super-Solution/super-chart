@@ -2,8 +2,8 @@
 import { rebaseCompare, symbolKey, type CompareBar, type Datafeed, type HistoryResult, type IndicatorDefinition, type MarketBar, type Period, type SymbolInfo } from '@supersolutions/super-chart-core'
 import type { EngineChart } from './chart'
 
-/** Lines of the other markets: distinct from the up and down colours and from each other. */
-export const COMPARE_COLORS: readonly string[] = Object.freeze(['#e040fb', '#ff9800', '#00bcd4', '#ffd54f', '#8d6e63', '#9ccc65'])
+/** Lines of the other markets: distinct from the up and down colours and from each other, each at least 3:1 on both the light and the dark surface. */
+export const COMPARE_COLORS: readonly string[] = Object.freeze(['#e040fb', '#e57200', '#0097a7', '#b8860b', '#8d6e63', '#8e6bd8'])
 /** The most markets laid over one chart. */
 export const MAX_COMPARES = 6
 /** How often the other markets' latest bars are fetched again while the chart is open. */
@@ -51,7 +51,7 @@ export class CompareOverlays {
     const bars = await this.fetch(symbol)
     if (this.disposed) throw new Error('Chart workspace is disposed')
     const name = `Compare ${symbol.ticker}${symbol.exchange === undefined || symbol.exchange === '' ? '' : ` · ${symbol.exchange}`}`
-    const color = COMPARE_COLORS[this.compares.size % COMPARE_COLORS.length]
+    const inUse = new Set([...this.compares.values()].map(item => item.color)), color = COMPARE_COLORS.find(item => !inUse.has(item)) ?? COMPARE_COLORS[this.compares.size % COMPARE_COLORS.length]
     const compare: Compare = {
       id: `compare-${key}`,
       symbol: { ...symbol },

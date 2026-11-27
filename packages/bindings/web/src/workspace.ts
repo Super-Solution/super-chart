@@ -19,6 +19,7 @@ import { DrawingDocuments, type WorkspaceDrawingCacheOptions } from './drawingDo
 import { WORKSPACE_STYLE } from './workspaceStyle'
 import { CHART_TYPE_GROUPS } from './chartTypes'
 import { hotkeyFor, toolHotkey } from './hotkeys'
+import { LEGEND_FOLDED_ID } from './legend'
 import { TECHNICAL_INDICATOR_DEFINITIONS, CLASSIC_INDICATOR_DEFINITIONS } from '@supersolutions/super-chart-core/indicators'
 import { WORKSPACE_RANGES, rangeStart, firstBarFrom, type WorkspaceRange } from './ranges'
 import { moveActiveIndex, decideEnter, createRecentsStore, visibleRecents, type RecentsStore } from './symbolSearchNav'
@@ -317,6 +318,9 @@ export class ChartWorkspace {
   /** Settings and remove, shown beside the legend row of the indicator the pointer is on. */
   private readonly legendActions: HTMLDivElement
   private legendTarget: string | null = null
+  /** Fold or unfold the indicator rows of the legend; its icon and words follow the state. */
+  private readonly legendFoldButton: HTMLButtonElement
+  private legendCollapsed = false
   private legendHideTimer = 0
   private readonly olderButton: HTMLButtonElement
   private readonly replayInfo: HTMLSpanElement
@@ -825,7 +829,8 @@ export class ChartWorkspace {
     this.legendActions = this.node('div'); this.legendActions.className = 'sc-legend-actions'; this.legendActions.hidden = true
     this.legendActions.append(
       this.control('legend.settings', () => this.run(() => { this.hideLegendActions(); this.parts.indicators.open = true }), { icon: 'gear', iconOnly: true }),
-      this.control('legend.remove', () => this.run(() => { const id = this.legendTarget; this.hideLegendActions(); if (id !== null) this.chart.removeIndicator(id) }), { icon: 'stop', iconOnly: true })
+      this.control('legend.remove', () => this.run(() => { const id = this.legendTarget; this.hideLegendActions(); if (id !== null) this.chart.removeIndicator(id) }), { icon: 'stop', iconOnly: true }),
+      this.legendFoldButton = this.control('legend.fold', () => this.run(() => { this.hideLegendActions(); this.setLegendCollapsed(!this.legendCollapsed) }), { icon: 'chevronUp', iconOnly: true })
     )
     this.listen(this.legendActions, 'pointerenter', () => { this.win.clearTimeout(this.legendHideTimer) })
     this.listen(this.legendActions, 'pointerleave', () => { this.scheduleLegendHide() })
@@ -871,7 +876,7 @@ export class ChartWorkspace {
             session: text.session === '' ? '' : this.t(`a11y.barSession.${text.session}`)
           })
         },
-        render: { ...(options.theme === undefined ? {} : getWorkspaceTheme(resolveThemeName(options.theme, this.win))?.render), ...options.chart?.render, timespan: this.period.timespan, symbolTimezone: this.symbol.timezone, session: this.compileSession(this.symbol), locale: this.locale, ...(options.chart?.render?.legendTitle === undefined ? { legendTitle: legendTitleOf(this.symbol, this.period) } : {}), ...(options.chart?.render?.watermark === undefined ? { watermark: watermarkOf(this.symbol, this.period) } : {}) },
+        render: { ...(options.theme === undefined ? {} : getWorkspaceTheme(resolveThemeName(options.theme, this.win))?.render), ...options.chart?.render, legendCollapsedLabel: this.t('legend.folded'), timespan: this.period.timespan, symbolTimezone: this.symbol.timezone, session: this.compileSession(this.symbol), locale: this.locale, ...(options.chart?.render?.legendTitle === undefined ? { legendTitle: legendTitleOf(this.symbol, this.period) } : {}), ...(options.chart?.render?.watermark === undefined ? { watermark: watermarkOf(this.symbol, this.period) } : {}) },
         onToolComplete: reason => {
           const again = reason === 'completed' && this.stayInDrawing ? this.lastTool : null
           this.setToolValue(null)
@@ -914,6 +919,9 @@ export class ChartWorkspace {
         this.win.clearTimeout(this.legendHideTimer)
         const stageBox = stage.getBoundingClientRect()
         this.legendTarget = row.id
+        // The folded line has no indicator of its own: only the unfold button applies to it.
+        const folded = row.id === LEGEND_FOLDED_ID
+        for (const button of this.legendActions.querySelectorAll<HTMLElement>('.sc-button')) button.hidden = folded && button !== this.legendFoldButton
         this.legendActions.style.left = `${Math.round(row.right - stageBox.left + 4)}px`
         this.legendActions.style.top = `${Math.round(row.top - stageBox.top - 3)}px`
         this.legendActions.hidden = false
@@ -1800,7 +1808,7 @@ export class ChartWorkspace {
     for (const apply of this.bindings) apply()
     this.buildToolOptions(); this.syncPeriodControls(); this.refreshIndicatorsUi(); this.updateDrawingControls(); this.syncPresentation()
     this.fullscreenSync(); this.objectsDirty = true; this.renderObjects(); this.palette.applyText(); this.contextMenu.close(false)
-    this.chart.setAriaLabel(this.t('chart.label')); this.reportedStatusUI = ''; this.updateStatus(); this.countdown.refresh()
+    this.chart.setAriaLabel(this.t('chart.label')); this.syncLegendFold(); this.reportedStatusUI = ''; this.updateStatus(); this.countdown.refresh()
   }
 
   /** The chrome size class in effect (`regular`, `compact` or `narrow`), after resolving `auto` against the width. */
@@ -1882,6 +1890,23 @@ export class ChartWorkspace {
   }
 
   private hideLegendActions (): void { this.legendActions.hidden = true; this.legendTarget = null }
+
+  /** Fold the legend's indicator rows into one line (or show them again); the quote row stays. */
+  setLegendCollapsed (collapsed: boolean): void {
+    this.assertLive()
+    this.legendCollapsed = collapsed
+    this.chart.setRenderOptions({ legendCollapsed: collapsed })
+    this.syncLegendFold()
+  }
+
+  isLegendCollapsed (): boolean { return this.legendCollapsed }
+
+  private syncLegendFold (): void {
+    const key = this.legendCollapsed ? 'legend.unfold' : 'legend.fold'
+    this.setLabel(this.legendFoldButton, this.t(key))
+    this.legendFoldButton.querySelector('svg')?.replaceWith(createIcon(this.doc, this.legendCollapsed ? 'chevronDown' : 'chevronUp'))
+    this.chart.setRenderOptions({ legendCollapsedLabel: this.t('legend.folded') })
+  }
 
   private toolLabel (type: DrawingType): string { return this.t(`tool.${type}`) }
 
@@ -2259,6 +2284,7 @@ export class ChartWorkspace {
     add('draw.toggleHidden', t(this.chart.drawings.getSnapshot().viewHidden ? 'draw.showAll' : 'draw.hideAll'), 'palette.group.draw', () => { this.chart.drawings.setViewHidden(!this.chart.drawings.getSnapshot().viewHidden) }, { keywords: ['hide', 'show', 'visible', 'drawings', 'eye'], when: () => this.chart.drawings.getSnapshot().drawings.length > 0 })
     add('view.goto', t('palette.goto'), 'palette.group.view', () => { this.openGoToDate() }, { shortcut: 'Alt+G', keywords: ['date', 'time', 'jump', 'seek'] })
     add('view.reset', t('context.reset'), 'palette.group.view', () => { this.chart.view.resetViewport() }, { shortcut: 'Alt+R' })
+    add('view.legend', t(this.legendCollapsed ? 'legend.unfold' : 'legend.fold'), 'palette.group.view', () => { this.setLegendCollapsed(!this.legendCollapsed) }, { keywords: ['legend', 'indicators', 'fold', 'collapse', 'hide'] })
     add('view.latest', t('nav.latest.title'), 'palette.group.view', () => { this.chart.view.followLatest() })
     add('view.timezone', t(this.zoneId === 'UTC' ? 'scale.local.title' : 'scale.utc.title'), 'palette.group.view', () => { this.toggleTimeZone() })
     for (const id of new Set([localTimeZone(), ...COMMON_TIME_ZONES])) add(`view.timezone.${id}`, t('palette.timezone', { name: id }), 'palette.group.view', () => { this.setTimeZone(id) }, { keywords: ['time', 'zone', 'timezone', 'utc'], when: () => this.zoneId !== id })

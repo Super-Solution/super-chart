@@ -4,6 +4,8 @@ import { nearestChartIndex } from '@supersolutions/super-chart-core'
 import { CANVAS_FONT, FONT_SANS } from './tokens'
 
 /** The colour each line series was painted with, per model, so the legend names it in the same colour. */
+/** The id the folded legend line reports in place of an indicator's. */
+export const LEGEND_FOLDED_ID = '*folded*'
 export const seriesColors = new WeakMap<object, Map<string, string>>()
 
 export interface LegendPalette {
@@ -68,6 +70,11 @@ export function legendRows (frame: EngineRenderFrame, index: number, options: En
   if (ids !== undefined) for (let i = 0; i < rows.length; i++) ids.push(null)
 
   const model = frame.model, colors = seriesColors.get(model)
+  if (options.legendCollapsed === true && (frame.legend?.length ?? 0) > 0) {
+    // One muted line for every indicator; the chart finds it under the pointer by this id, so a click can unfold it.
+    rows.push([{ text: (options.legendCollapsedLabel ?? '{count} indicators').replace('{count}', String(frame.legend?.length ?? 0)), color: p.muted, font: label }]); ids?.push(LEGEND_FOLDED_ID)
+    return rows
+  }
   for (const entry of frame.legend ?? []) {
     const spans: Span[] = [{ text: entry.label, color: p.muted, font: label }]
     for (const id of entry.seriesIds) {
