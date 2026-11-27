@@ -2306,6 +2306,10 @@ export class ChartWorkspace {
           }
         }
       )
+      // Replay from the bar under the pointer, as TradingView's "Select bar" does, instead of counting bars back from the end.
+      if (this.loader.replayInfo === null && this.getStatus().state === 'ready' && this.derived.getStyle() === null) {
+        items.push({ id: 'replay.here', label: this.t('context.replayHere'), run: () => { this.run(() => { if (!this.startReplayAt(point.timestamp)) throw new Error(this.t('replay.needBars')) }) } })
+      }
     }
     items.push(
       { id: 'view.fit', label: this.t('context.fit'), separator: items.length > 0, run: () => { this.fitPriceScale() } },
