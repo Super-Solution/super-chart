@@ -730,17 +730,21 @@ export class EngineAnnotations implements EngineLayer {
   }
 
   /**
-   * Where a label of this size can sit so it does not cover one already placed at about the same height: moved sideways, to
-   * the right of the blocker, else to its left, so it stays level with the price it names; with room on neither side it keeps its place.
+   * Where a label of this size can sit so it does not cover one already placed at about the same height: its own place if that
+   * is free, else the free spot nearest to it beside a label in its way (to its right or left), so it stays level with the
+   * price it names; when the row has no free spot it keeps its own place.
    */
   private clearOfLabels (left: number, top: number, width: number, height: number, placed: ReadonlyArray<{ left: number, right: number, top: number }>, bounds: EngineAnnotationBounds): number {
-    for (let attempt = 0; attempt < 8; attempt++) {
-      const blocker = placed.find(chip => left < chip.right && left + width > chip.left && top < chip.top + 18 && top + height > chip.top)
-      if (blocker === undefined) return left
-      if (blocker.right + 6 + width <= bounds.right - 4) left = blocker.right + 6
-      else if (blocker.left - 6 - width >= bounds.left + 4) left = blocker.left - 6 - width
-      else return left
+    const min = bounds.left + 4, max = bounds.right - width - 4
+    const hits = (x: number): boolean => placed.some(chip => x < chip.right && x + width > chip.left && top < chip.top + 18 && top + height > chip.top)
+    if (!hits(left)) return left
+    const candidates: number[] = []
+    for (const chip of placed) {
+      if (!(top < chip.top + 18 && top + height > chip.top)) continue
+      candidates.push(chip.right + 6, chip.left - 6 - width)
     }
+    candidates.sort((a, b) => Math.abs(a - left) - Math.abs(b - left))
+    for (const x of candidates) if (x >= min && x <= max && !hits(x)) return x
     return left
   }
 

@@ -12,7 +12,7 @@ export interface DataSummary {
   readonly lastClose: number | null
 }
 
-export interface MarkWarning { readonly key: string, readonly code: 'time_in_seconds' | 'invalid_plan' | 'flat_range' | 'near_duplicate', readonly message: string }
+export interface MarkWarning { readonly key: string, readonly code: 'time_in_seconds' | 'invalid_plan' | 'flat_range' | 'near_duplicate' | 'plan_no_width', readonly message: string }
 export interface MarkPlacement { readonly key: string, readonly status: 'offscreen' | 'unprojectable' | 'no-data', readonly why: string }
 
 interface BarLike { readonly timestamp: number, readonly high: number, readonly low: number, readonly close: number }
@@ -103,6 +103,8 @@ export function checkMarkShapes (annotations: readonly ChartAnnotation[]): MarkW
     if (mark.kind === 'plan' && prices.length >= 3 && prices.every(price => typeof price === 'number')) {
       const [entry, target, stop] = prices as number[]
       const valid = target !== entry && (target > entry ? stop < entry : stop > entry)
+      const times = mark.anchors.slice(0, 2).map(anchor => anchor.time)
+      if (valid && times.length === 2 && times[0] === times[1]) warnings.push({ key: mark.key, code: 'plan_no_width', message: `Plan "${mark.key}" has the same time at entry and target, so it has no width and is drawn as a note. Put the target's time after the entry's: the plan spans from one to the other.` })
       if (!valid) warnings.push({ key: mark.key, code: 'invalid_plan', message: `Plan "${mark.key}" is drawn as a note, not a plan: anchors are entry, target, stop in that order, and the stop must be on the other side of the entry from the target (entry ${entry}, target ${target}, stop ${stop}).` })
     } else if ((mark.kind === 'zone' || mark.kind === 'fibonacci') && prices.length >= 2 && typeof prices[0] === 'number' && prices[0] === prices[1]) {
       warnings.push({ key: mark.key, code: 'flat_range', message: `"${mark.key}" has the same price at both anchors (${prices[0]}), so it has no height. Give the two ends different prices.` })

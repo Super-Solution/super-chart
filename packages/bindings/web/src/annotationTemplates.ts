@@ -173,7 +173,8 @@ const plan: AnnotationTemplate = {
     const left = Math.min(entry.x, target.x), right = Math.max(entry.x, target.x), width = right - left
     const long = target.price > entry.price
     const valid = target.price !== entry.price && (long ? stop.price < entry.price : stop.price > entry.price)
-    if (!valid || width < 1) return [{ type: 'text', x: entry.x + 6, y: entry.y - 10, text: 'Invalid plan: the stop must sit opposite the target' }]
+    if (!valid) return [{ type: 'text', x: entry.x + 6, y: entry.y - 10, text: 'Invalid plan: the stop must sit opposite the target' }]
+    if (width < 1) return [{ type: 'text', x: entry.x + 6, y: entry.y - 10, text: 'Invalid plan: entry and target need different times' }]
     const win = Math.abs(target.price - entry.price), risk = Math.abs(entry.price - stop.price)
     const percent = (price: number): string => `${price >= entry.price ? '+' : '-'}${(Math.abs(price - entry.price) / Math.abs(entry.price) * 100).toFixed(2)}%`
     const ratio = risk > 0 ? win / risk : Infinity

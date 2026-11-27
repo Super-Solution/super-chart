@@ -5,6 +5,8 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- A `plan` whose entry and target share one time now says so ("entry and target need different times") instead of blaming the stop; the chat plugin warns `plan_no_width` and the tool description says the plan spans from the entry time to the target time.
+
 - Agent marks read cleaner: the labels of fibonacci levels and other template marks stay clear of the legend and of each other (moved sideways, level with their price), and two marks at one price share one axis tag instead of a stack of identical ones.
 
 - Chat plugin: new `draft` tool `chart_compare` (`add`, `remove`, `list`) overlays another market on a chart that has a feed.

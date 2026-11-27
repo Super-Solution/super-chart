@@ -48,10 +48,14 @@ describe('levelsOf', () => {
 })
 
 describe('checkMarkShapes', () => {
-  const mark = (key: string, kind: string, prices: number[]): ChartAnnotation => ({ key, kind, anchors: prices.map(price => ({ time: 1_700_000_000_000, price })) }) as ChartAnnotation
+  const mark = (key: string, kind: string, prices: number[]): ChartAnnotation => ({ key, kind, anchors: prices.map((price, index) => ({ time: 1_700_000_000_000 + index * 60_000, price })) }) as ChartAnnotation
   it('flags a plan whose stop is on the target side, and passes a sound long and short', () => {
     expect(checkMarkShapes([mark('bad', 'plan', [100, 110, 105])]).map(w => w.code)).toEqual(['invalid_plan'])
     expect(checkMarkShapes([mark('long', 'plan', [100, 110, 95]), mark('short', 'plan', [100, 90, 105])])).toEqual([])
+  })
+  it('flags a valid plan whose entry and target share one time (it has no width)', () => {
+    const same = { key: 'same', kind: 'plan', anchors: [100, 110, 95].map(price => ({ time: 1_700_000_000_000, price })) } as ChartAnnotation
+    expect(checkMarkShapes([same]).map(w => w.code)).toEqual(['plan_no_width'])
   })
   it('flags a zone or retracement with no height', () => {
     expect(checkMarkShapes([mark('z', 'zone', [100, 100]), mark('f', 'fibonacci', [5, 5])]).map(w => w.code)).toEqual(['flat_range', 'flat_range'])
