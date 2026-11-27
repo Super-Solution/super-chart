@@ -5,7 +5,7 @@ import { CompareOverlays, MAX_COMPARES, type CompareHost } from './compareOverla
 const symbol = (ticker: string): SymbolInfo => ({ ticker, pricePrecision: 2 }) as SymbolInfo
 const bar = (i: number, close: number): MarketBar => ({ timestamp: i * 60_000, open: close, high: close, low: close, close, volume: 1 })
 
-function setup (): { overlays: CompareOverlays, calls: string[], definitions: Map<string, IndicatorDefinition>, instances: Map<string, { id: string, name: string, visible: boolean }>, clock: { now: number }, fetches: { count: number } } {
+function setup (options: { feed?: CompareHost['datafeed']['getHistoryKLineData'], replaying?: () => boolean } = {}): { overlays: CompareOverlays, calls: string[], definitions: Map<string, IndicatorDefinition>, instances: Map<string, { id: string, name: string, visible: boolean }>, clock: { now: number }, fetches: { count: number } } {
   const definitions = new Map<string, IndicatorDefinition>(), instances = new Map<string, { id: string, name: string, visible: boolean }>(), calls: string[] = [], clock = { now: 0 }, fetches = { count: 0 }
   let next = 0
   const chart = {
@@ -18,8 +18,8 @@ function setup (): { overlays: CompareOverlays, calls: string[], definitions: Ma
     updateIndicator: (id: string, changes: { visible?: boolean }) => { const item = instances.get(id); if (item === undefined) return false; if (changes.visible !== undefined) item.visible = changes.visible; return true }
   }
   const host = {
-    datafeed: { getHistoryKLineData: async () => { fetches.count++; return [bar(0, 10), bar(1, 11), bar(2, 12)] } },
-    chart, market: () => ({ symbol: symbol('MAIN'), period: { multiplier: 1, timespan: 'minute', text: '1m' } }), report: () => {}, now: () => clock.now
+    datafeed: { getHistoryKLineData: options.feed ?? (async () => { fetches.count++; return [bar(0, 10), bar(1, 11), bar(2, 12)] }) },
+    chart, market: () => ({ symbol: symbol('MAIN'), period: { multiplier: 1, timespan: 'minute', text: '1m' } }), report: () => {}, now: () => clock.now, replaying: options.replaying
   } as unknown as CompareHost
   return { overlays: new CompareOverlays(host), calls, definitions, instances, clock, fetches }
 }
@@ -53,5 +53,24 @@ describe('CompareOverlays', () => {
     clock.now = 10_000; await overlays.refresh('tail'); expect(fetches.count).toBe(1)
     clock.now = 31_000; await overlays.refresh('tail'); expect(fetches.count).toBe(2)
     await overlays.refresh('range'); expect(fetches.count).toBe(3)
+  })
+  it('asks further back when the feed serves fewer bars than the chart shows, and stops when a page adds nothing', async () => {
+    const asked: Array<{ to: number, first: boolean | undefined }> = []
+    // One bar per page, newest first: bars 2, then 1, then 0 (the chart's first), then a feed that repeats itself.
+    const feed: CompareHost['datafeed']['getHistoryKLineData'] = async (_symbol, _period, _from, to, request) => { asked.push({ to, first: request?.firstDataRequest }); return [bar(Math.max(0, Math.min(2, to / 60_000 - 1)), 10)] }
+    const { overlays, definitions } = setup({ feed })
+    await overlays.add(symbol('ETH'))
+    expect(asked.map(item => item.first)).toEqual([true, false, false])
+    const rows = [...definitions.values()][0].calculate([bar(0, 100), bar(1, 100), bar(2, 100)], [])
+    expect(rows.every(row => row.c !== null)).toBe(true)
+    const stuck = setup({ feed: async () => [bar(2, 10)] })
+    await expect(stuck.overlays.add(symbol('ETH'))).resolves.toBeTypeOf('string')
+  })
+  it('does not fetch again while replay shows only part of the history', async () => {
+    const replay = { on: false }
+    const { overlays, fetches } = setup({ replaying: () => replay.on })
+    await overlays.add(symbol('ETH'))
+    replay.on = true; await overlays.refresh('range'); expect(fetches.count).toBe(1)
+    replay.on = false; await overlays.refresh('range'); expect(fetches.count).toBe(2)
   })
 })

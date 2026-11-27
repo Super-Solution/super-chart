@@ -8,6 +8,8 @@ export const COMPARE_COLORS: readonly string[] = Object.freeze(['#e040fb', '#ff9
 export const MAX_COMPARES = 6
 /** How often the other markets' latest bars are fetched again while the chart is open. */
 const TAIL_REFRESH_MS = 30_000
+/** Most requests one fetch may make to cover the range shown. */
+const MAX_PAGES = 12
 
 export interface CompareInfo { readonly id: string, readonly symbol: SymbolInfo }
 
@@ -18,6 +20,8 @@ export interface CompareHost {
   /** Report a failure the person can read (the host shows it as the notice). */
   readonly report: (error: unknown) => void
   readonly now: () => number
+  /** True while replay shows only part of the history: the other market is not fetched again then (it is cut at the replayed bar by the chart's own times). */
+  readonly replaying?: () => boolean
 }
 
 interface Compare { readonly id: string, readonly symbol: SymbolInfo, readonly name: string, readonly color: string, readonly calculate: IndicatorDefinition['calculate'], bars: CompareBar[], indicatorId: string, fetchedAt: number }
@@ -82,7 +86,7 @@ export class CompareOverlays {
 
   /** Fetch every compare's bars again for the range now loaded. `tail` refreshes only when 30 seconds have passed. */
   async refresh (reason: 'range' | 'tail'): Promise<void> {
-    if (this.disposed || this.compares.size === 0) return
+    if (this.disposed || this.compares.size === 0 || this.host.replaying?.() === true) return
     const generation = ++this.generation, now = this.host.now()
     const due = [...this.compares.values()].filter(item => reason === 'range' || now - item.fetchedAt >= TAIL_REFRESH_MS)
     // The market the chart shows may have become one of the compares: it is the chart's own line now.
@@ -109,12 +113,24 @@ export class CompareOverlays {
     const { period } = this.host.market(), main = this.host.chart.getBars()
     const first = main[0], last = main[main.length - 1]
     if (first === undefined || last === undefined) throw new Error('Load the chart before comparing')
-    const controller = new AbortController()
-    const answer: MarketBar[] | HistoryResult = await this.host.datafeed.getHistoryKLineData(symbol, period, first.timestamp, last.timestamp + 1, { signal: controller.signal, firstDataRequest: true, countBack: Math.min(main.length, 5000) })
-    const raw = Array.isArray(answer) ? answer : answer.bars
-    const bars: CompareBar[] = []
-    for (const bar of raw) if (Number.isFinite(bar.timestamp) && Number.isFinite(bar.close)) bars.push({ timestamp: bar.timestamp, close: bar.close })
-    bars.sort((a, b) => a.timestamp - b.timestamp)
+    const controller = new AbortController(), wanted = Math.min(main.length, 5000)
+    const byTime = new Map<number, CompareBar>()
+    // A feed may serve fewer bars per request than the chart shows: ask further back until the first bar shown is covered.
+    let to = last.timestamp + 1, oldest = Infinity
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const answer: MarketBar[] | HistoryResult = await this.host.datafeed.getHistoryKLineData(symbol, period, first.timestamp, to, { signal: controller.signal, firstDataRequest: page === 0, countBack: wanted })
+      const raw = Array.isArray(answer) ? answer : answer.bars
+      let earliest = Infinity
+      for (const bar of raw) {
+        if (!Number.isFinite(bar.timestamp) || !Number.isFinite(bar.close)) continue
+        byTime.set(bar.timestamp, { timestamp: bar.timestamp, close: bar.close })
+        if (bar.timestamp < earliest) earliest = bar.timestamp
+      }
+      const done = !Array.isArray(answer) && answer.noData === true
+      if (!(earliest < oldest) || done || earliest <= first.timestamp) break
+      oldest = earliest; to = earliest
+    }
+    const bars = [...byTime.values()].sort((a, b) => a.timestamp - b.timestamp)
     if (bars.length === 0) throw new Error(`No ${period.text} bars for ${symbol.ticker} in the range shown`)
     return bars
   }

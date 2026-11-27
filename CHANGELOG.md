@@ -5,6 +5,8 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- Compare: a feed that serves fewer bars per request than the chart shows is asked further back until the shown range is covered (the line used to stop short), and starting replay no longer refetches the other market (its line disappeared while replaying). The chart's own times still cut the line at the replayed bar, so nothing from the future shows.
+
 - Drawings: **Clone** and **Hide** are in the drawing's right-click menu, and a clone is now placed 14 px to the side (it used to land exactly on the original, so cloning looked like nothing happened). Web: `chart.offsetAnchors(anchors, dx?, dy?)`.
 
 - Chat plugin: `chart_state` lists `notShown` marks (outside the view, with the reason) too, not only `chart_annotate`.

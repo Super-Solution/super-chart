@@ -959,7 +959,7 @@ export class ChartWorkspace {
     })
     this.listen(this.doc, 'visibilitychange', () => { if (this.doc.hidden) this.timedReplay.pause(); this.countdown.refresh() })
     this.unsubscribe.push(this.chart.view.subscribe(updateNavigation)); updateNavigation()
-    this.compares = new CompareOverlays({ datafeed: this.datafeed, chart: this.chart, market: () => ({ symbol: this.symbol, period: this.period }), report: error => { this.showNotice(error) }, now: () => Date.now() })
+    this.compares = new CompareOverlays({ datafeed: this.datafeed, chart: this.chart, market: () => ({ symbol: this.symbol, period: this.period }), report: error => { this.showNotice(error) }, now: () => Date.now(), replaying: () => this.loader.replaying })
     this.unsubscribe.push(this.chart.onIndicatorsChanged(refreshIndicators))
     this.unsubscribe.push(this.chart.onIndicatorsChanged(() => { this.compares.reconcile() }))
     this.unsubscribe.push(this.chart.drawings.subscribe(() => { this.updateDrawingControls(); this.queueDrawingSave(); this.objectsDirty = true; this.renderObjects() }))
