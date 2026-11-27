@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkMarkShapes, correctTimeUnits, levelsOf, summarizeData, swingsOf, whyNotShown } from './agent-feedback'
+import { checkMarkShapes, correctTimeUnits, explainProblem, levelsOf, summarizeData, swingsOf, whyNotShown } from './agent-feedback'
 import type { ChartAnnotation } from '@supersolutions/super-protocol'
 
 const level = (key: string, time: number, price: number): ChartAnnotation => ({ key, kind: 'level', anchors: [{ time, price }] }) as ChartAnnotation
@@ -83,5 +83,12 @@ describe('swingsOf', () => {
   })
   it('has no leg when there are too few bars', () => {
     expect(swingsOf(bars.slice(0, 4), 3)).toEqual({ swings: [], lastLeg: null })
+  })
+
+  it('adds a hint to the validator\'s complaint only when a time was sent as a string', () => {
+    const problem = 'annotation anchors need a finite time.'
+    expect(explainProblem(problem, [{ anchors: [{ time: '2026-11-27T10:00:00Z', price: 1 }] }])).toMatch(/milliseconds since the epoch/)
+    expect(explainProblem(problem, [{ anchors: [{ price: 1 }] }])).toBe(problem)
+    expect(explainProblem('annotation.kind must be level.', [{ anchors: [{ time: 'x' }] }])).toBe('annotation.kind must be level.')
   })
 })
