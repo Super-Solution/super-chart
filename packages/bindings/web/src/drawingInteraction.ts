@@ -40,6 +40,7 @@ export function attachDrawingInteraction (
   let editor: { input: HTMLTextAreaElement, original: Drawing | null, close: () => void } | null = null
   let media: { abort: AbortController, input: HTMLInputElement } | null = null
   let disposed = false
+  let copied: Drawing | null = null, pastes = 0
 
   const editable = (target: EventTarget | null): boolean => target instanceof win.Element &&
     target.closest('input,textarea,select,button,a,[contenteditable]:not([contenteditable="false"])') !== null
@@ -357,6 +358,24 @@ export function attachDrawingInteraction (
     if (e.key === 'Enter' && placement?.preview.type === 'any-waves') { consume(e); completeWave(); return }
     if (e.key === 'Escape' && (drag !== null || placement !== null || tool !== null)) { consume(e); cancel(); finishTool(); return }
     const snapshot = store.getSnapshot(), modified = e.ctrlKey || e.metaKey
+    if (modified && !e.altKey && !e.shiftKey && (e.key.toLowerCase() === 'c' || e.key.toLowerCase() === 'v')) {
+      // Copy and paste a drawing, as in other charting tools: the copy lands a few pixels further each time, selected.
+      const selected = snapshot.drawings.find(item => item.id === snapshot.selectedId), copying = e.key.toLowerCase() === 'c'
+      if (copying && selected !== undefined) { consume(e); copied = selected; pastes = 0 }
+      else if (!copying && copied !== null) {
+        const current = frame()
+        if (current === null) return
+        consume(e); pastes++
+        const anchors = copied.anchors.map(item => {
+          const at = current.project(item.timestamp, item.price), moved = at !== null && Number.isFinite(at.x) && Number.isFinite(at.y) ? current.unproject(at.x + 14 * pastes, at.y + 14 * pastes) : null
+          return moved !== null && anchor(moved) ? { timestamp: moved.timestamp, price: moved.price } : { timestamp: item.timestamp, price: item.price }
+        })
+        let id = `${copied.id}-copy`
+        for (let n = 2; store.getSnapshot().drawings.some(item => item.id === id); n++) id = `${copied.id}-copy-${n}`
+        try { store.add({ ...copied, id, locked: false, hidden: false, anchors }); store.select(id) } catch { /* the drawing limit was reached */ }
+      }
+      return
+    }
     if (modified && !e.altKey) {
       const key = e.key.toLowerCase(), redo = (key === 'z' && e.shiftKey) || (key === 'y' && !e.shiftKey)
       const undo = key === 'z' && !e.shiftKey

@@ -33,6 +33,7 @@ Below the groups are two modes and the actions on the selection:
 | Hide drawings | The eye button hides every drawing without changing the document: nothing is drawn, hit or selected, and undo history and export stay as they are (`chart.drawings.setViewHidden(true)`; `viewHidden` on the snapshot). Arming a tool shows them again. |
 | Keep drawing | Re-arms the tool after each completed drawing; Escape ends it. Built on `chart.onToolComplete(reason)`, where `reason` is `'completed'` or `'cancelled'`. |
 | Lock / Delete | Act on the selected drawing. |
+| `Ctrl/Cmd+C`, `Ctrl/Cmd+V` | Copy the selected drawing and paste it; each paste lands 14 px further, selected. |
 | Remove all | Removes every unlocked drawing in one undoable step. |
 
 The rail shows at `regular` and `compact` widths; `narrow` keeps the Tools

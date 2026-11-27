@@ -5,6 +5,8 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- **Copy and paste a drawing**: `Ctrl/Cmd+C` with a drawing selected, `Ctrl/Cmd+V` puts a copy 14 px further each time, selected (one undo step per paste). Nothing happens without a selected drawing, so the browser's own copy still works elsewhere.
+
 - The pointer cursor says what is under it: a crosshair while a drawing tool is armed or a shape is being placed, a hand over a drawing, a grab over one of its points (and while one is dragged). The axes keep their resize cursors.
 
 - **Fold the legend**: with many indicators the legend can fold its indicator rows into one line ("6 indicators"): a third button beside an indicator's row, a palette command, `workspace.setLegendCollapsed(collapsed)` / `isLegendCollapsed()`, or `render.legendCollapsed` (core; `legendCollapsedLabel` sets the words, `{count}` for the number).
