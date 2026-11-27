@@ -17,7 +17,8 @@ describe('workspace layout', () => {
   it('keeps the size-class thresholds', () => {
     expect(resolveLayout('auto', 559)).toBe('narrow')
     expect(resolveLayout('auto', 560)).toBe('compact')
-    expect(resolveLayout('auto', 780)).toBe('regular')
+    expect(resolveLayout('auto', 1039)).toBe('compact')
+    expect(resolveLayout('auto', 1040)).toBe('regular')
     expect(resolveLayout('auto', 0)).toBe('regular')
   })
 })

@@ -7,7 +7,7 @@ export type WorkspaceIntervalControl = 'auto' | 'bar' | 'select'
  * Width of the workspace's own box, not the window's: a chart in a side panel can be any width. Below
  * `narrow` the chrome is a phone layout; below `compact` the labelled tools no longer fit beside each other.
  */
-export const LAYOUT_BREAKPOINTS = Object.freeze({ narrow: 560, compact: 780 })
+export const LAYOUT_BREAKPOINTS = Object.freeze({ narrow: 560, compact: 1040 })
 
 export function resolveLayout (mode: WorkspaceLayoutMode, width: number): WorkspaceLayoutClass {
   if (mode !== 'auto') return mode

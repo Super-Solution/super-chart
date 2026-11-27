@@ -2086,13 +2086,16 @@ export class ChartWorkspace {
 
   /**
    * `auto` intervals show the bar while it fits. In the compact layout the market bar never wraps, so a bar that does not
-   * fit would be clipped or scrolled out of sight: look, and give it the dropdown instead. Measured after the other
+   * fit would be clipped or scrolled out of sight, and in the regular layout it would wrap onto a second row: look, and
+   * give it the dropdown instead. Measured after the other
    * parts are placed, and only where the bar is the candidate, so a resize costs one layout read there.
    */
   private fitIntervals (shown: boolean): void {
-    if (!shown || this.ui.intervals !== 'auto' || this.layoutClass !== 'compact' || this.root.dataset.intervals !== 'bar') return
-    // The bar shrinks and scrolls itself before the market bar overflows, so both are read.
-    const fits = this.intervalBar.scrollWidth <= this.intervalBar.clientWidth + 1 && this.toolbar.scrollWidth <= this.toolbar.clientWidth + 1
+    if (!shown || this.ui.intervals !== 'auto' || this.layoutClass === 'narrow' || this.root.dataset.intervals !== 'bar') return
+    // The bar shrinks and scrolls itself before the market bar overflows, so both are read. The regular layout wraps instead:
+    // a second row for the last few buttons is the same failure, so a wrapped bar gets the dropdown too.
+    const tops = new Set([...this.toolbar.children].filter(item => !(item as HTMLElement).hidden && item.getBoundingClientRect().width > 0).map(item => Math.round(item.getBoundingClientRect().top / 8)))
+    const fits = this.intervalBar.scrollWidth <= this.intervalBar.clientWidth + 1 && this.toolbar.scrollWidth <= this.toolbar.clientWidth + 1 && (this.layoutClass !== 'regular' || tops.size <= 1)
     const intervals = resolveIntervalControl(this.ui.intervals, this.layoutClass, fits)
     if (intervals === 'bar') return
     this.root.dataset.intervals = intervals; this.intervalBar.hidden = true; this.intervalField.hidden = false

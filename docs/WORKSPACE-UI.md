@@ -368,14 +368,15 @@ new ChartWorkspace(host, {
   shows icons and moves secondary actions into a More menu, `narrow` also folds
   the drawing tools behind a Tools button, shows the intervals as one dropdown
   and keeps the market bar to one row (see below). `auto` follows the workspace's own width (`LAYOUT_BREAKPOINTS`:
-  narrow below 560px, compact below 780px), not the window's. `getLayout()`
+  narrow below 560px, compact below 1040px, where the labelled bar no longer fits on one row), not the window's. `getLayout()`
   returns the class in effect. With the rail, `compact` also moves undo/redo into
   More; `narrow` has no rail.
 - `intervals: 'select'` renders the period list as a dropdown at any width;
   `'bar'` keeps buttons; `'auto'` picks the bar unless the layout is `narrow` or the
-  bar does not fit: in `compact` the market bar never wraps, so `auto` looks at the
+  bar does not fit: in `compact` the market bar never wraps and in `regular` a bar that wrapped onto a
+  second row would look broken, so `auto` looks at the
   bar after the other parts are placed and uses the dropdown when the buttons would be
-  clipped or scrolled out of sight (`resolveIntervalControl(control, layout, fits)`).
+  clipped, scrolled out of sight or wrapped (`resolveIntervalControl(control, layout, fits)`).
   Only `'bar'` set by the host can still overflow.
 
 **Phone widths (`narrow`).** The market bar is one row: Tools, the symbol (shortened
