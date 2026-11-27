@@ -5,6 +5,8 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- Six more indicators in the technical pack: `SC_PPO`, `SC_CHAIKIN_OSC`, `SC_DPO`, `SC_LINREG` (regression channel), `SC_FISHER`, `SC_STDEV`; kernels in `taExtra.ts`, built on `ta.ts`. The catalogue is now 66 names. They exist in the TypeScript engine only (the Go and Python servers keep their 33 kernels).
+
 - Hovering an indicator's row in the legend shows **settings** (opens the Indicators menu) and **remove** beside it. Core: price-pane legend entries now carry the indicator `id`. The replay bar uses icon buttons (previous, next, play or pause) and a clearer Exit.
 
 - Quick measure: hold **Shift** and drag on the plot to measure between two bars: price change, percentage, bars and time, in a tinted box with a label. It stays (glued to its bars when the view moves) until the next ordinary press or Escape. Nothing is drawn into the document.

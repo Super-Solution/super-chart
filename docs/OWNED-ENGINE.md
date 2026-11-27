@@ -97,6 +97,13 @@ and, except Pivot Points, an entry in both indicator servers (see [INDICATORS-SE
 | SC_ZIGZAG (5) | price | percentage reversal on highs and lows; straight legs between pivots, the last leg ending at the latest extreme |
 | SC_PIVOTS (anchor 0, offset 0, kind 0) | price | classic (`kind` 0) or Fibonacci (`kind` 1) levels PP, R1-R3, S1-S3 from the previous completed period; `anchor` 0 day, 1 week (Sunday to Saturday, UTC), 2 month, 3 quarter, 4 year; `offset` shifts the edges by fixed minutes |
 | SC_CHANDELIER (22, 3) | price | highest high minus `mult` ATR (long exit) and lowest low plus `mult` ATR (short exit); plain levels, no ratchet |
+| SC_SR (5, 500) | price | support and resistance: swing pivots (a bar whose high or low is the extreme of `strength` bars each side) of the latest `lookback` bars, merged when within half the average true range, ranked by distance from the last close; up to three levels each side as flat lines; needs `strength` bars after a pivot, so it lags and can move when new bars confirm one |
+| SC_PPO (12, 26, 9) | separate | `100 * (fast EMA - slow EMA) / slow EMA`, an EMA signal and their histogram; null where the slow EMA is zero |
+| SC_CHAIKIN_OSC (3, 10) | separate | fast EMA minus slow EMA of the accumulation/distribution line |
+| SC_DPO (20) | separate | the close `floor(len / 2) + 1` bars back minus today's SMA; the trend drops out |
+| SC_LINREG (100, 2) | price | least-squares line through the last `len` closes read at the bar, with bands `mult` times the standard deviation of the closes from the line; a window with a gap gives null |
+| SC_FISHER (9) | separate | Fisher transform of the median price's place in its `len`-bar range (0.66 / 0.67 smoothing, clamped to ±0.999) and the previous value as trigger |
+| SC_STDEV (20) | separate | population standard deviation of the close over `len` bars |
 
 Limits stated plainly. SC_ZIGZAG **repaints**: a pivot is only known after price reverses, so earlier legs move as bars
 arrive and the line is not a historical signal; it is a drawing aid and must not be backtested. SC_PIVOTS buckets by fixed

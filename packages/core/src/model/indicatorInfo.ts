@@ -78,6 +78,12 @@ export const INDICATOR_INFO: Readonly<Record<string, IndicatorInfo>> = Object.fr
   SC_ZIGZAG: info('ZigZag', 'trend', 'zigzag 轉折'),
   SC_PIVOTS: info('Pivot Points', 'levels', 'pivot points classic fibonacci 樞軸點 支撐壓力'),
   SC_SR: info('Support / Resistance', 'levels', 'sr support resistance auto levels 支撐 壓力 支撐壓力 自動'),
+  SC_PPO: info('Percentage Price Oscillator', 'momentum', 'ppo percentage price oscillator 價格震盪百分比'),
+  SC_CHAIKIN_OSC: info('Chaikin Oscillator', 'volume', 'chaikin oscillator cho 蔡金震盪'),
+  SC_DPO: info('Detrended Price Oscillator', 'momentum', 'dpo detrended cycle 去趨勢價格震盪'),
+  SC_LINREG: info('Linear Regression Channel', 'trend', 'linreg linear regression channel 線性回歸通道'),
+  SC_FISHER: info('Fisher Transform', 'momentum', 'fisher transform 費雪轉換'),
+  SC_STDEV: info('Standard Deviation', 'volatility', 'stdev standard deviation 標準差'),
   SC_CHANDELIER: info('Chandelier Exit', 'volatility', 'chandelier exit 吊燈停損')
 })
 
