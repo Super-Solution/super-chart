@@ -386,7 +386,7 @@ export function paintEngineFrame (
       }
     } finally { ctx.restore() }
 
-    if (frame.indicatorPane === true && frame.title !== undefined) {
+    if (frame.indicatorPane === true && frame.title !== undefined && options.legend === false) {
       ctx.font = CANVAS_LABEL_FONT; ctx.fillStyle = p.text; ctx.textAlign = 'left'
       ctx.fillText(frame.title, g.left + 4, Math.max(8, g.top - 7), Math.max(1, g.plotWidth - 8))
       ctx.font = p.font
@@ -494,7 +494,7 @@ export function paintEngineCursor (
     ctx.textAlign = 'left'; ctx.textBaseline = 'top'
 
     // Readout: names muted, values in ink, on the canvas colour.
-    if (hit !== null && bar !== undefined && (indicator || options.legend === false)) {
+    if (hit !== null && bar !== undefined && options.legend === false) {
       const parts: Array<[string, string]> = indicator
         ? m.plottedSeries.map(series => {
           // Visible points stay ordered even when warmup/null gaps were filtered.

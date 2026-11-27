@@ -919,9 +919,13 @@ export class EngineChart {
         this.cursorContext.restore()
       } }
       // The legend is always there: the latest bar at rest, the bar under the pointer while it is over the plot.
+      // Each pane has its own legend; the price pane's reads real prices even when the axis shows percentages or a log scale.
+      for (const pane of this.frame.panes) {
+        this.cursorContext.save(); this.cursorContext.translate(0, pane.top)
+        paintEngineLegend(this.cursorContext, pane.frame, crosshair === null ? null : crosshair.x, this.renderOptions)
+        this.cursorContext.restore()
+      }
       this.cursorContext.save(); this.cursorContext.translate(0, this.frame.panes[0].top)
-      // The legend reads real prices even when the axis shows percentages or a log scale.
-      paintEngineLegend(this.cursorContext, this.frame.panes[0].frame, crosshair === null ? null : crosshair.x, this.renderOptions)
       if (this.lastCaption !== '') paintEngineLastCaption(this.cursorContext, this.frame.panes[0].frame, this.lastCaption, this.renderOptions)
       this.cursorContext.restore()
       this.cursorDirty = false; this.counters.cursorPaints++

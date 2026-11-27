@@ -686,3 +686,7 @@ A chart with no options looks and behaves like the charting tools people already
   levels) and searches name, long name, keywords and Chinese names (`searchIndicators`, `indicatorInfo` in core); an
   indicator that only repeats another (`SC_RSI` and `RSI`) is not listed twice. A bare `EngineChart` still registers a pack
   only when told to.
+- **Hotkeys** (hold Alt; by physical key): T trend line, H horizontal line, J horizontal ray, V vertical line, F Fibonacci
+  retracement, I pitchfork, Shift+R rectangle, R reset the view, S save a PNG. `HOTKEYS` lists them; the palette shows each
+  one beside its command. They do nothing while an input or select has focus.
+

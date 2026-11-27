@@ -31,6 +31,13 @@ Added
   built-ins only), grouped by family and searchable by name, long name, keyword or Chinese name. Core exports
   `INDICATOR_INFO`, `indicatorInfo`, `indicatorLabel`, `indicatorShortName`, `searchIndicators`. The chat plugin no longer
   registers the packs itself, and legend rows and pane titles use the short name (`ATR 14`, not `SC_ATR`).
+* **Alt hotkeys** like other charting tools: Alt+T trend line, Alt+H horizontal line, Alt+J horizontal ray, Alt+V vertical
+  line, Alt+F Fibonacci, Alt+I pitchfork, Alt+Shift+R rectangle, Alt+R reset the view, Alt+S save a PNG (by physical key, shown
+  in the palette).
+* **Each indicator pane has a legend** with its short title and the value of every line at the latest bar or under the pointer.
+* **Agent marks**: times written as Unix seconds are corrected to milliseconds (and the agent is told), `chart_annotate`
+  returns `notShown` with a reason for any mark outside the view, `chart_state` returns the reach of the data (`data`: first and
+  last bar, recent price range, last close), and labels that would overlap move sideways so each stays level with its price.
 * `chart.zoneAt(clientX, clientY)` names the part of the chart under a point (`plot`, `price-axis`, `time-axis`).
 
 ## 0.13.1

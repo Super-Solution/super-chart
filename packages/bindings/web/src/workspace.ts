@@ -16,6 +16,7 @@ import { DrawingToolbar } from './drawingToolbar'
 import { DrawingDocuments, type WorkspaceDrawingCacheOptions } from './drawingDocuments'
 import { WORKSPACE_STYLE } from './workspaceStyle'
 import { CHART_TYPE_GROUPS } from './chartTypes'
+import { hotkeyFor, toolHotkey } from './hotkeys'
 import { TECHNICAL_INDICATOR_DEFINITIONS, CLASSIC_INDICATOR_DEFINITIONS } from '@supersolutions/super-chart-core/indicators'
 import { WORKSPACE_RANGES, rangeStart, firstBarFrom, type WorkspaceRange } from './ranges'
 import { moveActiveIndex, decideEnter, createRecentsStore, visibleRecents, type RecentsStore } from './symbolSearchNav'
@@ -763,6 +764,14 @@ export class ChartWorkspace {
       if (this.paletteEnabled && this.paletteShortcut && (key.ctrlKey || key.metaKey) && !key.altKey && !key.shiftKey && key.key.toLowerCase() === 'k') {
         key.preventDefault(); key.stopPropagation()
         if (this.palette.isOpen) this.palette.close(); else this.openCommandPalette()
+        return
+      }
+      const hotkey = hotkeyFor(key)
+      if (hotkey !== null && !(key.target instanceof this.win.HTMLElement && key.target.closest('input,textarea,select,[contenteditable="true"]') !== null)) {
+        key.preventDefault(); key.stopPropagation()
+        if ('tool' in hotkey.action) { const tool = hotkey.action.tool; this.run(() => { this.chart.setDrawingTool(tool); this.setToolValue(tool) }) }
+        else if (hotkey.action.action === 'resetView') this.run(() => { this.chart.view.resetViewport() })
+        else void this.download()
         return
       }
       if (key.ctrlKey || key.metaKey || key.altKey || !/^[a-z0-9]$/i.test(key.key) || !(key.target instanceof this.win.HTMLElement) || !this.chartHost.contains(key.target) || key.target.closest('input,textarea,select,[contenteditable="true"]') !== null) return
@@ -2114,12 +2123,12 @@ export class ChartWorkspace {
     if (typeof this.datafeed.getMarks === 'function') add('chart.marks', t('palette.marks'), 'palette.group.chart', () => { this.setMarksVisible(!this.marks.visible) }, { keywords: ['events', 'earnings', 'dividend', 'split', 'news'] })
     for (const range of WORKSPACE_RANGES) add(`view.range.${range}`, t('range.named', { name: t(`range.${range}`) }), 'palette.group.view', () => { this.showRange(range) }, { keywords: ['range', 'zoom', 'period', 'ytd'] })
     add('view.fit', t('context.fit'), 'palette.group.view', () => { this.fitPriceScale() })
-    add('view.reset', t('context.reset'), 'palette.group.view', () => { this.chart.view.resetViewport() })
+    add('view.reset', t('context.reset'), 'palette.group.view', () => { this.chart.view.resetViewport() }, { shortcut: 'Alt+R' })
     add('view.latest', t('nav.latest.title'), 'palette.group.view', () => { this.chart.view.followLatest() })
     add('view.timezone', t(this.zoneId === 'UTC' ? 'scale.local.title' : 'scale.utc.title'), 'palette.group.view', () => { this.toggleTimeZone() })
     for (const id of new Set([localTimeZone(), ...COMMON_TIME_ZONES])) add(`view.timezone.${id}`, t('palette.timezone', { name: id }), 'palette.group.view', () => { this.setTimeZone(id) }, { keywords: ['time', 'zone', 'timezone', 'utc'], when: () => this.zoneId !== id })
     add('draw.pan', t('palette.tool', { name: t('draw.none') }), 'palette.group.draw', () => { this.chart.setDrawingTool(null); this.setToolValue(null) })
-    for (const type of DRAWING_TYPES) add(`draw.${type}`, t('palette.tool', { name: this.toolLabel(type) }), 'palette.group.draw', () => { this.chart.setDrawingTool(type); this.setToolValue(type) }, { keywords: ['draw', type] })
+    for (const type of DRAWING_TYPES) add(`draw.${type}`, t('palette.tool', { name: this.toolLabel(type) }), 'palette.group.draw', () => { this.chart.setDrawingTool(type); this.setToolValue(type) }, { keywords: ['draw', type], ...(toolHotkey(type) === undefined ? {} : { shortcut: toolHotkey(type) }) })
     add('draw.undo', t('draw.undo'), 'palette.group.draw', () => { this.chart.drawings.undo() }, { shortcut: 'Ctrl+Z', when: () => this.chart.drawings.getSnapshot().canUndo })
     add('draw.redo', t('draw.redo'), 'palette.group.draw', () => { this.chart.drawings.redo() }, { shortcut: 'Ctrl+Shift+Z', when: () => this.chart.drawings.getSnapshot().canRedo })
     add('draw.clear', t('palette.clearDrawings'), 'palette.group.draw', () => { this.chart.drawings.clear() }, { when: () => this.chart.drawings.getSnapshot().drawings.length > 0 })
@@ -2129,7 +2138,7 @@ export class ChartWorkspace {
     add('replay.start', t('replay.start'), 'palette.group.replay', () => { if (!this.startReplay()) throw new Error(t('replay.needBars')) }, { when: () => !replaying && this.getStatus().state === 'ready' })
     add('replay.play', t(this.getReplayState().playing ? 'replay.pause' : 'replay.play'), 'palette.group.replay', () => { if (this.getReplayState().playing) this.pauseReplay(); else this.playReplay() }, { when: () => replaying })
     add('replay.exit', t('replay.exit'), 'palette.group.replay', () => { this.exitReplay() }, { when: () => replaying })
-    add('workspace.png', t('png.title'), 'palette.group.general', () => { void this.download() })
+    add('workspace.png', t('png.title'), 'palette.group.general', () => { void this.download() }, { shortcut: 'Alt+S' })
     return [...commands, ...this.commandRegistry.list()]
   }
 

@@ -112,6 +112,20 @@ anchor of them needs a price.
 Scalar `params` are accepted on `trend`, `ray`, `fibonacci` and `plan` only. A mark the engine refuses is reported
 under `rejected` with its code; the others still apply.
 
+## Getting marks right
+
+Models draw wrong marks for three reasons: wrong units, prices that were never on this chart, and marks that land where no one
+can see them. The tools say so instead of hiding it.
+
+- `chart_state` returns `data`: the first and last bar time, the price range of the 500 most recent bars and the last close.
+  The tool descriptions tell the agent to read it before marking.
+- Times are milliseconds. A mark whose anchor times are all plausible Unix *seconds* (between 1e8 and 1e11) is corrected by
+  ×1000 and the result carries `warnings` with code `time_in_seconds`.
+- `chart_annotate` returns `notShown`: for each applied mark that is not on screen, its `status` and a `why` (before the first
+  loaded bar, after the last bar, above or below the recent price range, outside the current view). The agent should fix
+  those, not tell the reader they are drawn.
+- Labels that would overlap move sideways so each stays level with its own price; the axis price tags stack with connectors.
+
 ## Words that point at the chart
 
 A message can point at a mark, and the reader sees it light up. The agent writes a Markdown link whose address is a

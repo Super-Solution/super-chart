@@ -85,15 +85,32 @@ export function legendRows (frame: EngineRenderFrame, index: number, options: En
   return rows
 }
 
+/** The row an indicator pane carries: its title and the value of each of its lines for one bar, each in the colour of its line. */
+export function indicatorLegendRows (frame: EngineRenderFrame, index: number, p: LegendPalette): Span[][] {
+  const model = frame.model, colors = seriesColors.get(model), spans: Span[] = []
+  if (frame.title !== undefined && frame.title !== '') spans.push({ text: frame.title, color: p.ink, font: `600 11px ${FONT_SANS}` })
+  for (const series of model.plottedSeries) {
+    const value = valueAt(series.points, index)
+    const bar = series.source.type === 'bar'
+    spans.push({
+      text: value === null ? '—' : bar ? compactNumber(value) : String(Number(value.toPrecision(5))),
+      color: bar ? p.ink : colors?.get(series.source.id) ?? p.ink,
+      font: p.font,
+      gapBefore: spans.length === 0 ? 0 : 8
+    })
+  }
+  return spans.length === 0 ? [] : [spans]
+}
+
 /** The legend: translucent plates behind the text so candles never make it unreadable. */
 export function paintLegend (ctx: CanvasRenderingContext2D, frame: EngineRenderFrame, x: number | null, options: EngineRenderOptions, p: LegendPalette, digits: number): void {
   const m = frame.model, g = m.geometry, bars = frame.snapshot.bars
-  if (frame.indicatorPane === true || bars.length === 0 || options.legend === false) return
+  if (bars.length === 0 || options.legend === false) return
   let index = bars.length - 1
   if (x !== null && x >= g.left && x <= g.right && frame.inspectBar?.(x) != null) index = nearestChartIndex(m, x) ?? index
   const available = Math.max(0, g.plotWidth - PAD_X * 2)
   const measure = (font: string, text: string): number => { ctx.font = font; return ctx.measureText(text).width }
-  const rows = legendRows(frame, index, options, p, digits, available, measure)
+  const rows = frame.indicatorPane === true ? indicatorLegendRows(frame, index, p) : legendRows(frame, index, options, p, digits, available, measure)
   ctx.save()
   try {
     ctx.textBaseline = 'middle'; ctx.textAlign = 'left'
