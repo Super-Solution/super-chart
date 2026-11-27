@@ -74,6 +74,9 @@ describe('swingsOf', () => {
     expect(lastLeg?.from).toEqual(swings[2])
     expect(lastLeg?.direction).toBe(swings[3].price >= swings[2].price ? 'up' : 'down')
   })
+  it('has no swings and no leg for a chart with no bars', () => {
+    expect(swingsOf([], 5)).toEqual({ swings: [], lastLeg: null })
+  })
   it('has no leg when there are too few bars', () => {
     expect(swingsOf(bars.slice(0, 4), 3)).toEqual({ swings: [], lastLeg: null })
   })

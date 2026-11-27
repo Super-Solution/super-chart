@@ -5,6 +5,10 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- Chat plugin: new `draft` tool `chart_compare` (`add`, `remove`, `list`) overlays another market on a chart that has a feed.
+
+- **Copy chart image** (right-click menu and palette): the same picture as the camera button, put on the clipboard as a PNG. A browser without image clipboard access says so.
+
 - **Compare with another symbol**: `workspace.addCompare(symbol)`, `removeCompare(id)`, `listCompares()` and a palette command lay another market over the chart, rebased to start at the chart's price (relative performance on one scale). It is a line indicator, so it can be hidden or removed like one. Fetched from the datafeed for the loaded range; refreshed on market change, on older bars and every 30 seconds (not streamed). Core: `rebaseCompare`.
 
 - Chat plugin: new read tool `chart_swings` returns the latest swing highs and lows (time and price of real bars, alternating) and the last leg, so trend lines, fibonacci retracements and plans are anchored on real turning points. Core: `swingPivots(bars, { strength, lookback })`, exported next to `supportResistance`.

@@ -444,6 +444,29 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
       }
     },
     {
+      name: 'chart_compare',
+      authority: 'draft',
+      description: 'Overlay another market on a chart that has a datafeed, so relative performance reads at a glance: the other market is rebased to start at this chart\'s price and drawn as a line (up to 6). action "add" takes a symbol ({ ticker, exchange? }); "remove" takes the same symbol; "list" returns what is overlaid. Fetched for the loaded range and refreshed about every 30 seconds, not streamed. Charts that show an inline snapshot of bars cannot compare.',
+      inputSchema: { type: 'object', properties: { chartId, action: { type: 'string', enum: ['add', 'remove', 'list'] }, symbol: { type: 'object', required: ['ticker'] } }, required: ['action'] },
+      run: async (input) => {
+        const { chartId: id, action, symbol } = (input ?? {}) as { chartId?: unknown, action?: unknown, symbol?: unknown }
+        if (action !== 'add' && action !== 'remove' && action !== 'list') throw new TypeError('action must be add, remove or list')
+        const chart = find(id)
+        if (action === 'list') return { chartId: chart.id, compares: chart.workspace.listCompares().map(item => item.symbol) }
+        if (chart.spec.bars !== undefined) throw new Error('This chart shows an inline snapshot of bars and cannot compare. Show a chart card with a feed instead.')
+        const problem = validateSymbol(symbol)
+        if (problem !== null) throw new TypeError(problem)
+        const target = symbol as SymbolInfo
+        if (action === 'add') await chart.workspace.addCompare(target)
+        else {
+          const key = symbolKey(target), found = chart.workspace.listCompares().find(item => symbolKey(item.symbol) === key)
+          if (found === undefined) throw new Error(`${target.ticker} is not overlaid on this chart`)
+          chart.workspace.removeCompare(found.id)
+        }
+        return { chartId: chart.id, compares: chart.workspace.listCompares().map(item => item.symbol) }
+      }
+    },
+    {
       name: 'chart_annotate',
       authority: 'draft',
       description: 'Mark a chart: level (horizontal price line, one anchor with a price), zone (price band over a time range, two anchors with prices), marker (labelled point, one anchor), trend (line through two priced anchors), ray (a trend line extended to the right), fibonacci (retracement levels between two priced anchors; params.levels is a comma list such as "0,0.5,1") or plan (entry, target and stop: three priced anchors in that order, with the risk-reward ratio). Keys are stable: sending a key again replaces that mark. Before drawing, read chart_state: its `data` gives the first and last bar time, the recent price range and the last close, so every price and time you send falls where the bars are. Times are milliseconds since the epoch (not seconds); prices are in the quote units of the symbol; keep text under 24 characters and send a few well-chosen marks, not a dense set. Returns which keys were applied and which the engine rejected, with a code; `notShown` lists applied marks that are not on screen with the reason (fix those rather than telling the reader they are drawn); and for each applied key a `ref:` link: put it in your message as [words](ref:...) and the reader can hover or focus the words to see that mark light up, or click to jump to it.',

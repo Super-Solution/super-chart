@@ -1767,6 +1767,21 @@ export class ChartWorkspace {
     }
   }
 
+  /** Put the chart as a PNG on the clipboard (the same picture as the camera button saves). A browser without image clipboard access says so. */
+  private async copyImage (): Promise<void> {
+    if (this.disposed) return
+    try {
+      if (this.getStatus().state !== 'ready') throw new Error(this.t('png.needData'))
+      const Item = (this.win as unknown as { ClipboardItem?: new (items: Record<string, Blob>) => unknown }).ClipboardItem
+      const clipboard = this.win.navigator.clipboard as (Clipboard & { write?: (items: unknown[]) => Promise<void> }) | undefined
+      if (Item === undefined || clipboard?.write === undefined) throw new Error(this.t('png.copy.unsupported'))
+      const blob = await this.chart.snapshot()
+      if (this.disposed) return
+      await clipboard.write([new Item({ 'image/png': blob })])
+      this.notice.textContent = ''
+    } catch (error) { this.showNotice(error) }
+  }
+
   /** Locale actually in use, a lowercase tag of a registered catalogue (`en` when the requested one has none). */
   getLocale (): string { this.assertLive(); return this.locale }
 
@@ -2197,7 +2212,8 @@ export class ChartWorkspace {
     items.push(
       { id: 'view.fit', label: this.t('context.fit'), separator: items.length > 0, run: () => { this.fitPriceScale() } },
       { id: 'view.reset', label: this.t('context.reset'), run: () => { this.chart.view.resetViewport() } },
-      { id: 'view.latest', label: this.t('context.latest'), run: () => { this.chart.view.followLatest() } }
+      { id: 'view.latest', label: this.t('context.latest'), run: () => { this.chart.view.followLatest() } },
+      { id: 'image.copy', label: this.t('png.copy'), separator: true, run: () => { void this.copyImage() } }
     )
     if (this.chart.drawings.getSnapshot().drawings.length > 0) items.push({ id: 'drawings.toggle', label: this.t(this.chart.drawings.getSnapshot().viewHidden ? 'draw.showAll' : 'draw.hideAll'), run: () => { this.chart.drawings.setViewHidden(!this.chart.drawings.getSnapshot().viewHidden) } })
     if (this.chart.drawings.getSnapshot().drawings.length > 0) items.push({ id: 'drawings.clear', label: this.t('context.removeAll'), danger: true, separator: true, run: () => { this.chart.drawings.clear() } })
@@ -2215,6 +2231,7 @@ export class ChartWorkspace {
     add('workspace.search', t('palette.search'), 'palette.group.general', () => { this.openSearch('', 'command') }, { keywords: ['symbol', 'ticker'] })
     add('workspace.compare', t('palette.compare'), 'palette.group.chart', () => { this.openSearch('', 'command', 'compare') }, { keywords: ['compare', 'overlay', 'symbol', 'versus', 'vs'] })
     for (const item of this.compares.list()) add(`compare.remove.${item.id}`, t('palette.compare.remove', { name: item.symbol.ticker }), 'palette.group.chart', () => { this.compares.remove(item.id) })
+    add('workspace.copyImage', t('png.copy'), 'palette.group.general', () => { void this.copyImage() }, { keywords: ['image', 'png', 'screenshot', 'clipboard', 'snapshot'] })
     add('workspace.reload', t('palette.reload'), 'palette.group.general', () => { void this.reload() })
     for (const name of [AUTO_THEME, ...listWorkspaceThemes()]) add(`theme.${name}`, t('palette.theme', { name: t(`theme.${name}`) }), 'palette.group.general', () => { this.setTheme(name) }, { keywords: ['theme', 'dark', 'light'], when: () => this.themeName !== name })
     for (const period of this.periods) add(`interval.${periodKey(period)}`, t('palette.interval', { name: period.text }), 'palette.group.interval', () => { void this.setPeriod(period) }, { keywords: ['interval', 'timeframe', 'period'], when: () => periodKey(period) !== periodKey(this.period) })

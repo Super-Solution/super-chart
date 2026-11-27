@@ -17,7 +17,7 @@ const plugin = createChartChatPlugin({
 installChatPlugin(cardRegistry, plugin, { tools: toolRegistry })
 ```
 
-`installChatPlugin` refuses an invalid plugin or a card-kind collision. Pass `tools` to offer the agent the nine
+`installChatPlugin` refuses an invalid plugin or a card-kind collision. Pass `tools` to offer the agent the ten
 tools below; without it only the card is installed.
 
 ## The card
@@ -66,6 +66,7 @@ Moving a card between places rebuilds the chart; indicators and marks come back 
 | `chart_levels` | `read` | up to five support and five resistance prices from the recent bars, nearest the last close first, with touch counts; draw lines at these, not at guesses |
 | `chart_swings` | `read` | the latest swing highs and lows (time and price of real bars, alternating) and the last leg; anchor trend lines, fibonacci and plans on these |
 | `chart_set_market` | `draft` | change symbol/period (needs a feed; inline-bar cards refuse) |
+| `chart_compare` | `draft` | overlay another market (rebased to this chart's price) with `add`, `remove` or `list`; needs a feed |
 | `chart_annotate` | `draft` | merge or replace the agent's marks by key; returns `applied` / `rejected` with codes, and a `ref:` link per mark |
 | `chart_indicators` | `draft` | add/remove indicators; returns what is shown and what is available |
 | `chart_replay` | `draft` | start, step, or read bar replay |

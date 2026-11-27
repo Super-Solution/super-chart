@@ -85,6 +85,7 @@ export interface Swing { readonly kind: 'high' | 'low', readonly time: number, r
  * them lands on a real bar.
  */
 export function swingsOf (bars: readonly (BarLike & { readonly timestamp: number })[], strength = 5, count = 8): { swings: Swing[], lastLeg: { from: Swing, to: Swing, direction: 'up' | 'down' } | null } {
+  if (bars.length === 0) return { swings: [], lastLeg: null }
   const pivots = swingPivots(bars, { strength, lookback: bars.length })
   const swings = pivots.slice(-count).map(pivot => ({ kind: pivot.kind, time: bars[pivot.index].timestamp, price: Number(pivot.price.toPrecision(8)) }))
   const to = swings[swings.length - 1], from = swings[swings.length - 2]
