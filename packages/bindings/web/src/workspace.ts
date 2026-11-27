@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/promise-function-async -- Load methods validate synchronously and return the shared queue promise without an async wrapper. */
 import { EngineChart, type EngineChartOptions, type EngineConfiguration } from './chart'
-import { ENGINE_CHART_TYPES, DRAWING_TYPES, DERIVED_STYLES, createDerivedSeriesPort, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, compileSymbolSession, sessionBarClose, sessionKindAt, parseWorkspaceDocument, checkTimeZone, formatUtcOffset, timeZoneChoices, localTimeZone, COMMON_TIME_ZONES, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type DerivedSeriesPort, type DerivedStyle, type DerivedStyleOptions, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1, type SessionIssue, type TradingSession } from '@supersolutions/super-chart-core'
+import { ENGINE_CHART_TYPES, DRAWING_TYPES, DERIVED_STYLES, createDerivedSeriesPort, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, compileSymbolSession, sessionBarClose, sessionKindAt, parseWorkspaceDocument, checkTimeZone, formatUtcOffset, timeZoneChoices, localTimeZone, COMMON_TIME_ZONES, INDICATOR_GROUPS, indicatorInfo, indicatorLabel, searchIndicators, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type DerivedSeriesPort, type DerivedStyle, type DerivedStyleOptions, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1, type SessionIssue, type TradingSession } from '@supersolutions/super-chart-core'
 import { DatafeedMarks, MARKS_LAYER, type WorkspaceMarksState } from './datafeedMarks'
 import { EngineAnnotations, attachAnnotationIntents, type AnnotationIntentEvent, type EngineAnnotationTheme } from './annotations'
 import { themeName } from './tokens'
@@ -16,6 +16,7 @@ import { DrawingToolbar } from './drawingToolbar'
 import { DrawingDocuments, type WorkspaceDrawingCacheOptions } from './drawingDocuments'
 import { WORKSPACE_STYLE } from './workspaceStyle'
 import { CHART_TYPE_GROUPS } from './chartTypes'
+import { TECHNICAL_INDICATOR_DEFINITIONS, CLASSIC_INDICATOR_DEFINITIONS } from '@supersolutions/super-chart-core/indicators'
 import { WORKSPACE_RANGES, rangeStart, firstBarFrom, type WorkspaceRange } from './ranges'
 import { moveActiveIndex, decideEnter, createRecentsStore, visibleRecents, type RecentsStore } from './symbolSearchNav'
 
@@ -128,6 +129,11 @@ export interface ChartWorkspaceOptions {
   drawingCache?: WorkspaceDrawingCacheOptions
   /** Bar-close countdown: the period estimate, or the real close when the symbol has a `session`. Disable it, or supply the exchange's own close, which wins. */
   countdown?: { enabled?: boolean, closeTimestamp?: (market: WorkspaceMarket, lastBar: MarketBar) => number | null }
+  /**
+   * `catalog` (default true) registers the technical and classic indicator packs, about 50 more indicators next to the seven
+   * built-ins, so the Indicators menu, the palette and documents can name them. `false` keeps only the built-ins.
+   */
+  indicators?: { catalog?: boolean }
 }
 
 /** What the price-mode control offers: the real bars, Heikin Ashi, and the price-driven styles. */
@@ -535,17 +541,26 @@ export class ChartWorkspace {
     this.bind(() => { this.indicatorResults.setAttribute('aria-label', this.t('indicators.add')) })
     const addIndicator = (name: string): void => { this.run(() => { this.chart.addIndicator({ name }); }) }
     const fillResults = (): void => {
-      const query = this.indicatorSearch.value.trim().toLowerCase()
-      const names = this.chart.getRegisteredIndicatorNames().filter(name => query === '' || name.toLowerCase().includes(query))
-      names.sort((a, b) => Number(b.toLowerCase().startsWith(query)) - Number(a.toLowerCase().startsWith(query)))
-      this.indicatorResults.replaceChildren(...names.map(name => {
+      const query = this.indicatorSearch.value.trim()
+      const names = searchIndicators(this.chart.getRegisteredIndicatorNames(), query)
+      const nodes: HTMLElement[] = []
+      let group = ''
+      for (const name of names) {
+        const info = indicatorInfo(name)
+        // With no query the list is the catalogue by family; with one it is a ranked list.
+        if (query === '' && info.group !== group) {
+          group = info.group
+          const heading = this.node('div'); heading.className = 'sc-indicator-family'; heading.setAttribute('role', 'presentation'); heading.textContent = this.t(`indicators.family.${info.group}`)
+          nodes.push(heading)
+        }
         const item = this.node('button'); item.type = 'button'; item.className = 'sc-button sc-indicator-result'; item.setAttribute('role', 'option'); item.dataset.name = name
-        const label = this.node('span'); label.className = 'sc-label'; label.textContent = name
-        const plus = createIcon(this.doc, 'plus')
-        item.append(label, plus); item.setAttribute('aria-label', this.t('indicators.add.named', { name }))
+        const label = this.node('span'); label.className = 'sc-label'; label.textContent = info.label
+        const id = this.node('span'); id.className = 'sc-indicator-id'; id.textContent = name.replace(/^SC_/, '')
+        item.append(label, id, createIcon(this.doc, 'plus')); item.setAttribute('aria-label', this.t('indicators.add.named', { name: info.label }))
         this.actions.set(item, () => { addIndicator(name) })
-        return item
-      }))
+        nodes.push(item)
+      }
+      this.indicatorResults.replaceChildren(...nodes)
       if (names.length === 0) { const none = this.node('p'); none.className = 'sc-hint'; none.textContent = this.t('indicators.noMatch'); this.indicatorResults.append(none) }
     }
     this.listen(this.indicatorSearch, 'input', fillResults)
@@ -578,7 +593,7 @@ export class ChartWorkspace {
       indicatorList.replaceChildren(...currentIndicators.map(indicator => {
         const settings = this.node('details'), title = this.node('summary')
         settings.className = 'sc-indicator'; settings.dataset.indicator = indicator.id; settings.open = expanded.has(indicator.id)
-        title.textContent = `${indicator.name} ${indicator.params.join(',')}${indicator.visible ? '' : ` ${this.t('indicators.hidden')}`}`
+        title.textContent = `${indicatorLabel(indicator.name)} ${indicator.params.join(',')}${indicator.visible ? '' : ` ${this.t('indicators.hidden')}`}`
         const params = this.node('input'); params.type = 'text'; params.value = indicator.params.join(',')
         params.setAttribute('aria-label', this.t('indicators.params.named', { name: indicator.name })); params.className = 'sc-input'; params.dataset.control = 'params'; params.autocomplete = 'off'; params.spellcheck = false
         const pane = this.select(this.t('indicators.pane.named', { name: indicator.name }), [['price', () => this.t('indicators.pane.price')], ['overlay', () => this.t('indicators.pane.overlay')], ['separate', () => this.t('indicators.pane.separate')]], indicator.pane, true)
@@ -823,6 +838,7 @@ export class ChartWorkspace {
         },
         onHoldDraw: event => { this.showHoldDraw(event); options.chart?.onHoldDraw?.(event) }
       })
+      if (options.indicators?.catalog !== false) for (const definition of [...TECHNICAL_INDICATOR_DEFINITIONS, ...CLASSIC_INDICATOR_DEFINITIONS]) this.chart.registerIndicator(definition)
       this.derived = createDerivedSeriesPort(this.chart.dataPort, () => {
         // New history changes the measured default size: the point and figure boxes follow it.
         const size = this.derived.getStyle()?.size
@@ -2107,8 +2123,8 @@ export class ChartWorkspace {
     add('draw.undo', t('draw.undo'), 'palette.group.draw', () => { this.chart.drawings.undo() }, { shortcut: 'Ctrl+Z', when: () => this.chart.drawings.getSnapshot().canUndo })
     add('draw.redo', t('draw.redo'), 'palette.group.draw', () => { this.chart.drawings.redo() }, { shortcut: 'Ctrl+Shift+Z', when: () => this.chart.drawings.getSnapshot().canRedo })
     add('draw.clear', t('palette.clearDrawings'), 'palette.group.draw', () => { this.chart.drawings.clear() }, { when: () => this.chart.drawings.getSnapshot().drawings.length > 0 })
-    for (const name of this.chart.getRegisteredIndicatorNames()) add(`indicator.add.${name}`, t('palette.indicator.add', { name }), 'palette.group.indicators', () => { this.chart.addIndicator({ name }) }, { keywords: ['indicator', name] })
-    for (const indicator of this.chart.listIndicators()) add(`indicator.remove.${indicator.id}`, t('palette.indicator.remove', { name: `${indicator.name} ${indicator.params.join(',')}` }), 'palette.group.indicators', () => { this.chart.removeIndicator(indicator.id) })
+    for (const name of searchIndicators(this.chart.getRegisteredIndicatorNames(), '')) add(`indicator.add.${name}`, t('palette.indicator.add', { name: indicatorLabel(name) }), 'palette.group.indicators', () => { this.chart.addIndicator({ name }) }, { keywords: ['indicator', name, name.replace(/^SC_/, ''), ...indicatorInfo(name).keywords.split(' ')] })
+    for (const indicator of this.chart.listIndicators()) add(`indicator.remove.${indicator.id}`, t('palette.indicator.remove', { name: `${indicatorLabel(indicator.name)} ${indicator.params.join(',')}` }), 'palette.group.indicators', () => { this.chart.removeIndicator(indicator.id) })
     const replaying = this.loader.replayInfo !== null
     add('replay.start', t('replay.start'), 'palette.group.replay', () => { if (!this.startReplay()) throw new Error(t('replay.needBars')) }, { when: () => !replaying && this.getStatus().state === 'ready' })
     add('replay.play', t(this.getReplayState().playing ? 'replay.pause' : 'replay.play'), 'palette.group.replay', () => { if (this.getReplayState().playing) this.pauseReplay(); else this.playReplay() }, { when: () => replaying })

@@ -27,6 +27,10 @@ Added
   at <price>` in the plot's context menu, a context menu for the price axis (automatic range, scale mode, invert).
 * **Dragging the plot up or down moves the price range** (the range turns manual; the Auto switch or a double click on the
   axis brings it back).
+* **The workspace registers the indicator packs by default** (about 50 indicators; `indicators: { catalog: false }` for the
+  built-ins only), grouped by family and searchable by name, long name, keyword or Chinese name. Core exports
+  `INDICATOR_INFO`, `indicatorInfo`, `indicatorLabel`, `indicatorShortName`, `searchIndicators`. The chat plugin no longer
+  registers the packs itself, and legend rows and pane titles use the short name (`ATR 14`, not `SC_ATR`).
 * `chart.zoneAt(clientX, clientY)` names the part of the chart under a point (`plot`, `price-axis`, `time-axis`).
 
 ## 0.13.1

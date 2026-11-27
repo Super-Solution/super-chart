@@ -681,3 +681,8 @@ A chart with no options looks and behaves like the charting tools people already
   search; over the price axis — automatic range, linear / log / percentage, invert.
 - **Dragging** the plot moves time and, once the drag is clearly vertical, the price range (it turns manual); dragging the
   axis scales it; a double click on the axis returns to automatic.
+- **Indicators**: the workspace registers the technical and classic packs next to the seven built-ins (`indicators: { catalog:
+  false }` keeps only the built-ins), about 50 in all. The menu lists them by family (trend, momentum, volatility, volume,
+  levels) and searches name, long name, keywords and Chinese names (`searchIndicators`, `indicatorInfo` in core); an
+  indicator that only repeats another (`SC_RSI` and `RSI`) is not listed twice. A bare `EngineChart` still registers a pack
+  only when told to.

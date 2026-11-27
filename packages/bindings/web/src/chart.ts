@@ -1,5 +1,5 @@
 import { attachChartSpeech, barReadoutText, chartSummaryText, defaultBar, defaultSummary, priceDigits, type ChartDescriptions } from './a11y'
-import { RealtimeSeries, RealtimeView, derivePrecision, axisStrip, normalizeBars, normalizeBar, ENGINE_CHART_TYPES, buildEngineFrame, validateEngineLayout, validatePriceScale, EngineIndicators, DrawingStore, DRAWING_TYPES, projectDrawing, viewportLimitsForWidth, financialGeometry, type CandleMode, type MarketBar, type ChartDataPort, type EngineRenderOptions, type EngineFrame, type EngineLayout, type EngineInspection, type EngineIndicatorSpec, type IndicatorDefinition, type Drawing, type DrawingType, type DrawingGeometry, type DrawingBounds } from '@supersolutions/super-chart-core'
+import { RealtimeSeries, RealtimeView, derivePrecision, axisStrip, indicatorShortName, normalizeBars, normalizeBar, ENGINE_CHART_TYPES, buildEngineFrame, validateEngineLayout, validatePriceScale, EngineIndicators, DrawingStore, DRAWING_TYPES, projectDrawing, viewportLimitsForWidth, financialGeometry, type CandleMode, type MarketBar, type ChartDataPort, type EngineRenderOptions, type EngineFrame, type EngineLayout, type EngineInspection, type EngineIndicatorSpec, type IndicatorDefinition, type Drawing, type DrawingType, type DrawingGeometry, type DrawingBounds } from '@supersolutions/super-chart-core'
 import { paintEngineFrame, paintEngineCursor, paintEngineLegend, paintEngineLastCaption } from './canvasRenderer'
 import { attachEngineGestures } from './gestures'
 import { attachDrawingInteraction, type ToolEnd } from './drawingInteraction'
@@ -851,7 +851,8 @@ export class EngineChart {
       const instances = new Map(this.indicators.list().map(instance => [instance.id, instance]))
       const indicators = this.indicators.compute(bars).map(result => {
         const instance = instances.get(result.id)
-        const label = result.name === 'VOL' ? 'Volume' : instance === undefined || instance.params.length === 0 ? result.name : `${result.name} ${instance.params.join(' ')}`
+        const short = indicatorShortName(result.name)
+        const label = result.name === 'VOL' ? 'Volume' : instance === undefined || instance.params.length === 0 ? short : `${short} ${instance.params.join(' ')}`
         return result.pane === 'separate'
           ? { ...result, label, pane: `indicator:${result.paneId ?? result.id}` }
           : { ...result, label, pane: 'price', overlay: result.pane === 'overlay' }

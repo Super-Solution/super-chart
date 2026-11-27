@@ -255,4 +255,10 @@ export const WORKSPACE_STYLE = `
 .sc-workspace .sc-footer .sc-button:not([aria-pressed]){border-color:transparent;background:transparent;color:var(--sc-muted,${DARK.muted})}
 .sc-workspace .sc-footer .sc-button:not([aria-pressed]):hover:not(:disabled){background:var(--sc-hover-background,${DARK.hover});color:var(--sc-text,${DARK.text})}
 .sc-workspace:not([data-layout=narrow]) .sc-countdown{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.sc-workspace .sc-indicator-results{display:flex;flex-direction:column;gap:1px;max-height:240px}
+.sc-workspace .sc-indicator-result{width:100%;border-color:transparent!important;background:transparent!important;gap:10px}
+.sc-workspace .sc-indicator-result .sc-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.sc-workspace .sc-indicator-id{flex:none;color:var(--sc-muted,${DARK.muted});font-size:11px;letter-spacing:.02em}
+.sc-workspace .sc-indicator-result:hover:not(:disabled),.sc-workspace .sc-indicator-result:focus-visible{background:var(--sc-hover-background,${DARK.hover})!important}
+.sc-workspace .sc-indicator-family{padding:8px 10px 2px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--sc-muted,${DARK.muted})}
 `

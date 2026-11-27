@@ -307,7 +307,7 @@ export function buildEngineFrame (
         pricePrecision,
         previousClose: primary ? previousClose : undefined,
         indicatorPane: !primary,
-        title: primary ? undefined : indicators.filter(item => item.pane === id).map(item => item.name).join(' · '),
+        title: primary ? undefined : indicators.filter(item => item.pane === id).map(item => item.label ?? item.name).join(' · '),
         inspectBar: x => inspectBar(model, x),
         inspect: x => inspect(model, x)
       },

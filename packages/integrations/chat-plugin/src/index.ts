@@ -2,7 +2,6 @@
 import { ChartWorkspace, SUPER_CHART_COLORS, FONT_SANS } from '@supersolutions/super-chart-web'
 import { EngineAnnotations } from '@supersolutions/super-chart-web/annotations'
 import { symbolKey, type Datafeed as CoreDatafeed, type MarketBar as CoreBar, type Period as CorePeriod, type SymbolInfo as CoreSymbol } from '@supersolutions/super-chart-core'
-import { TECHNICAL_INDICATOR_DEFINITIONS, CLASSIC_INDICATOR_DEFINITIONS } from '@supersolutions/super-chart-core/indicators'
 import { readHostTheme, CHART_CARD_KIND, CHART_LIMITS, chartCardKind, validatePeriod, validateSymbol, formatCardRef, parseChartRef, validateChartAnnotations, validateChartCardSpec as validateChartCard, type CardMount, type CardMountContext, type ChartIndicator, type ChartType, type ChatPlugin, type Datafeed, type MarketBar, type Period, type SymbolInfo, type PluginTool, type PluginToolAuthority, type CardRef, type CardRefEvent, type CardRefResult, type ChartAnnotation, type ChartCardSpec } from '@supersolutions/super-protocol'
 import { chartHostLook } from './host-theme'
 
@@ -227,7 +226,6 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
           ui: { variables: look.variables, ...(placement === 'document' ? { parts: DOCUMENT_PARTS } : {}) },
           chart: { mode: engine.mode, render: { ...look.render, chartType: engine.chartType as never } }
         })
-        for (const definition of [...TECHNICAL_INDICATOR_DEFINITIONS, ...CLASSIC_INDICATOR_DEFINITIONS]) workspace.registerIndicator(definition)
         const annotations = new EngineAnnotations({ symbol: symbolKey(spec.symbol), theme: context.theme, pricePrecision: typeof spec.symbol.pricePrecision === 'number' ? spec.symbol.pricePrecision : undefined, onChange: () => { if (!destroyed) workspace.chart.requestPaint() } })
         const removeLayer = workspace.chart.addLayer(annotations)
         const id = spec.id ?? `chart-${++counter}`
