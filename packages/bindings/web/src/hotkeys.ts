@@ -9,7 +9,7 @@ const hotkey = (code: string, action: HotkeyAction, shift = false): Hotkey => Ob
 
 /** The Alt shortcuts, the same letters other charting tools use for the same drawings. They go by physical key (`code`), so a layout or the Option key on a Mac does not change them. */
 export const HOTKEYS: readonly Hotkey[] = Object.freeze([
-  hotkey('KeyT', { tool: 'trend-line' }),
+  hotkey('KeyT', { tool: 'segment' }),
   hotkey('KeyH', { tool: 'horizontal' }),
   hotkey('KeyJ', { tool: 'horizontal-ray' }),
   hotkey('KeyV', { tool: 'vertical' }),

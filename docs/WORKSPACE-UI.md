@@ -690,3 +690,4 @@ A chart with no options looks and behaves like the charting tools people already
   retracement, I pitchfork, Shift+R rectangle, R reset the view, S save a PNG. `HOTKEYS` lists them; the palette shows each
   one beside its command. They do nothing while an input or select has focus.
 - **Watermark.** The symbol sits large and faint behind the candles with the market name and interval under it. It is a render option (`render.watermark`), so a host can replace the text or turn it off.
+- **Shortcuts.** `Alt+T` arms the trend line, `Alt+H` the horizontal line and so on (listed beside each command in the palette). `?` opens the palette, so the list is one key away. Shortcuts do nothing while a field has focus.

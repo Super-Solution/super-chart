@@ -774,6 +774,11 @@ export class ChartWorkspace {
         if (this.palette.isOpen) this.palette.close(); else this.openCommandPalette()
         return
       }
+      const typing = key.target instanceof this.win.HTMLElement && key.target.closest('input,textarea,select,[contenteditable="true"]') !== null
+      // `?` lists every command with its shortcut, as in other charting tools; the palette is that list.
+      if (key.key === '?' && !typing && !key.ctrlKey && !key.metaKey && !key.altKey && this.paletteEnabled) {
+        key.preventDefault(); key.stopPropagation(); this.openCommandPalette(); return
+      }
       const hotkey = hotkeyFor(key)
       if (hotkey !== null && !(key.target instanceof this.win.HTMLElement && key.target.closest('input,textarea,select,[contenteditable="true"]') !== null)) {
         key.preventDefault(); key.stopPropagation()

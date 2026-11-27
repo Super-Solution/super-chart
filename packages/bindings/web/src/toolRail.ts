@@ -21,7 +21,7 @@ export interface ToolRailHost {
 
 /** Group order in the rail, and the tool each group offers first. Groups that no tool belongs to are left out. */
 const GROUPS: ReadonlyArray<readonly [group: string, first: DrawingType]> = [
-  ['group.lines', 'trend-line'], ['group.channels', 'parallel-channel'], ['group.fibonacci', 'fibonacci'],
+  ['group.lines', 'segment'], ['group.channels', 'parallel-channel'], ['group.fibonacci', 'fibonacci'],
   ['group.patterns', 'xabcd'], ['group.shapes', 'rectangle'], ['group.measurement', 'price-range'],
   ['group.annotations', 'text'], ['group.studies', 'anchored-vwap'], ['group.freehand', 'brush']
 ]

@@ -5,6 +5,9 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- The first tool of the Lines group, and `Alt+T`, now draw a **trend line** (a segment between two points), as in other charting tools. The line that runs on past both points is labelled **Extended line**; both still exist and keep their types (`segment`, `trend-line`).
+- `?` opens the command palette, which lists every command with its shortcut.
+
 - `supportResistance(bars, options)` (core): swing pivots clustered into support and resistance levels, ranked by distance from the last close. Pure, OHLC only. It backs the new `SC_SR` indicator (three lines each side, family "levels") and the chat plugin's `chart_levels` read tool, so an agent draws at prices where price turned.
 - Indicator rows in the workspace read `Moving Average (20)` rather than `Moving Average 20`.
 
