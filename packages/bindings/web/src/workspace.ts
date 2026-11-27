@@ -544,6 +544,7 @@ export class ChartWorkspace {
     }
     presentation.panel.classList.add('sc-settings-grid')
     presentation.panel.append(this.field('chartType', chartType), this.field('priceMode', mode), this.field('priceScale', scale), reverse)
+    presentation.panel.append(this.control('compare.button', () => { this.openSearch('', 'button', 'compare') }, { title: 'palette.compare' }))
     // Only a feed that can supply marks gets the switch; without getMarks there is nothing to show or hide.
     if (typeof options.datafeed.getMarks === 'function') {
       this.marksToggle = this.control('marks.toggle', () => { this.setMarksVisible(!this.marks.visible) }, { title: 'marks.toggle.title' })
