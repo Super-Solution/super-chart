@@ -17,7 +17,7 @@ const plugin = createChartChatPlugin({
 installChatPlugin(cardRegistry, plugin, { tools: toolRegistry })
 ```
 
-`installChatPlugin` refuses an invalid plugin or a card-kind collision. Pass `tools` to offer the agent the seven
+`installChatPlugin` refuses an invalid plugin or a card-kind collision. Pass `tools` to offer the agent the nine
 tools below; without it only the card is installed.
 
 ## The card
@@ -64,6 +64,7 @@ Moving a card between places rebuilds the chart; indicators and marks come back 
 | `chart_state` | `read` | symbol, period, chart type, indicators, annotations, bar count, replay |
 | `chart_bars` | `read` | the last N loaded bars (≤ 500) |
 | `chart_levels` | `read` | up to five support and five resistance prices from the recent bars, nearest the last close first, with touch counts; draw lines at these, not at guesses |
+| `chart_swings` | `read` | the latest swing highs and lows (time and price of real bars, alternating) and the last leg; anchor trend lines, fibonacci and plans on these |
 | `chart_set_market` | `draft` | change symbol/period (needs a feed; inline-bar cards refuse) |
 | `chart_annotate` | `draft` | merge or replace the agent's marks by key; returns `applied` / `rejected` with codes, and a `ref:` link per mark |
 | `chart_indicators` | `draft` | add/remove indicators; returns what is shown and what is available |
@@ -126,7 +127,8 @@ can see them. The tools say so instead of hiding it.
   loaded bar, after the last bar, above or below the recent price range, outside the current view). The agent should fix
   those, not tell the reader they are drawn.
 - `warnings` also carries `invalid_plan` (a `plan` whose stop is on the target's side of the entry, which the chart draws as a
-  note, not a plan) and `flat_range` (a `zone` or `fibonacci` with the same price at both ends).
+  note, not a plan) and `flat_range` (a `zone` or `fibonacci` with the same price at both ends), and `near_duplicate` (a `level` within 0.1% of another in the same call: one line, one label).
+- `chart_swings` gives the swing points and the last leg, so a trend line or retracement starts and ends on real turning bars.
 - `chart_levels` gives the support and resistance prices price has turned at, so lines go where the chart shows a reason.
 - A level whose chip would sit under the legend puts the chip at the right end of its line instead.
 - Labels that would overlap move sideways so each stays level with its own price; the axis price tags stack with connectors.

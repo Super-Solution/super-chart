@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkMarkShapes, correctTimeUnits, levelsOf, summarizeData, whyNotShown } from './agent-feedback'
+import { checkMarkShapes, correctTimeUnits, levelsOf, summarizeData, swingsOf, whyNotShown } from './agent-feedback'
 import type { ChartAnnotation } from '@supersolutions/super-protocol'
 
 const level = (key: string, time: number, price: number): ChartAnnotation => ({ key, kind: 'level', anchors: [{ time, price }] }) as ChartAnnotation
@@ -56,5 +56,25 @@ describe('checkMarkShapes', () => {
   it('flags a zone or retracement with no height', () => {
     expect(checkMarkShapes([mark('z', 'zone', [100, 100]), mark('f', 'fibonacci', [5, 5])]).map(w => w.code)).toEqual(['flat_range', 'flat_range'])
     expect(checkMarkShapes([mark('ok', 'zone', [100, 101])])).toEqual([])
+  })
+  it('flags level lines within 0.1% of each other, once per extra line', () => {
+    const warnings = checkMarkShapes([mark('support', 'level', [100]), mark('key_support', 'level', [100.05]), mark('far', 'level', [101])])
+    expect(warnings.map(w => [w.key, w.code])).toEqual([['key_support', 'near_duplicate']])
+  })
+})
+
+describe('swingsOf', () => {
+  const bars = Array.from({ length: 120 }, (_, i) => { const c = 105 - 5 * Math.cos((i / 30) * Math.PI * 2); return { timestamp: 1_700_000_000_000 + i * 60_000, high: c + 0.5, low: c - 0.5, close: c } })
+  it('returns alternating swings on real bar times and the last leg', () => {
+    const { swings, lastLeg } = swingsOf(bars, 3, 4)
+    expect(swings).toHaveLength(4)
+    const times = new Set(bars.map(bar => bar.timestamp))
+    for (const swing of swings) expect(times.has(swing.time)).toBe(true)
+    expect(lastLeg?.to).toEqual(swings[3])
+    expect(lastLeg?.from).toEqual(swings[2])
+    expect(lastLeg?.direction).toBe(swings[3].price >= swings[2].price ? 'up' : 'down')
+  })
+  it('has no leg when there are too few bars', () => {
+    expect(swingsOf(bars.slice(0, 4), 3)).toEqual({ swings: [], lastLeg: null })
   })
 })

@@ -2127,6 +2127,16 @@ export class ChartWorkspace {
       this.contextMenu.open(items, event.clientX, event.clientY, this.t('context.label'))
       return
     }
+    if (this.chart.zoneAt(event.clientX, event.clientY) === 'time-axis') {
+      // Over the time axis the menu is about time: jump, reset, follow. The price commands do not belong here.
+      items.push(
+        { id: 'view.goto', label: this.t('palette.goto'), run: () => { this.openGoToDate() } },
+        { id: 'view.reset', label: this.t('context.reset'), separator: true, run: () => { this.chart.view.resetViewport() } },
+        { id: 'view.latest', label: this.t('context.latest'), run: () => { this.chart.view.followLatest() } }
+      )
+      this.contextMenu.open(items, event.clientX, event.clientY, this.t('context.label'))
+      return
+    }
     if (hit !== null) {
       this.chart.drawings.select(hit.id)
       const drawing = this.chart.drawings.getSnapshot().drawings.find(item => item.id === hit.id)
@@ -2185,6 +2195,7 @@ export class ChartWorkspace {
     if (typeof this.datafeed.getMarks === 'function') add('chart.marks', t('palette.marks'), 'palette.group.chart', () => { this.setMarksVisible(!this.marks.visible) }, { keywords: ['events', 'earnings', 'dividend', 'split', 'news'] })
     for (const range of WORKSPACE_RANGES) add(`view.range.${range}`, t('range.named', { name: t(`range.${range}`) }), 'palette.group.view', () => { this.showRange(range) }, { keywords: ['range', 'zoom', 'period', 'ytd'] })
     add('view.fit', t('context.fit'), 'palette.group.view', () => { this.fitPriceScale() })
+    add('draw.toggleHidden', t(this.chart.drawings.getSnapshot().viewHidden ? 'draw.showAll' : 'draw.hideAll'), 'palette.group.draw', () => { this.chart.drawings.setViewHidden(!this.chart.drawings.getSnapshot().viewHidden) }, { keywords: ['hide', 'show', 'visible', 'drawings', 'eye'], when: () => this.chart.drawings.getSnapshot().drawings.length > 0 })
     add('view.goto', t('palette.goto'), 'palette.group.view', () => { this.openGoToDate() }, { shortcut: 'Alt+G', keywords: ['date', 'time', 'jump', 'seek'] })
     add('view.reset', t('context.reset'), 'palette.group.view', () => { this.chart.view.resetViewport() }, { shortcut: 'Alt+R' })
     add('view.latest', t('nav.latest.title'), 'palette.group.view', () => { this.chart.view.followLatest() })

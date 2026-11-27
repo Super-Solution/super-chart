@@ -4,7 +4,7 @@ import { EngineAnnotations } from '@supersolutions/super-chart-web/annotations'
 import { symbolKey, type Datafeed as CoreDatafeed, type MarketBar as CoreBar, type Period as CorePeriod, type SymbolInfo as CoreSymbol } from '@supersolutions/super-chart-core'
 import { readHostTheme, CHART_CARD_KIND, CHART_LIMITS, chartCardKind, validatePeriod, validateSymbol, formatCardRef, parseChartRef, validateChartAnnotations, validateChartCardSpec as validateChartCard, type CardMount, type CardMountContext, type ChartIndicator, type ChartType, type ChatPlugin, type Datafeed, type MarketBar, type Period, type SymbolInfo, type PluginTool, type PluginToolAuthority, type CardRef, type CardRefEvent, type CardRefResult, type ChartAnnotation, type ChartCardSpec } from '@supersolutions/super-protocol'
 import { chartHostLook } from './host-theme'
-import { checkMarkShapes, correctTimeUnits, levelsOf, summarizeData, whyNotShown, type DataSummary, type MarkPlacement, type MarkWarning } from './agent-feedback'
+import { checkMarkShapes, correctTimeUnits, levelsOf, summarizeData, swingsOf, whyNotShown, type DataSummary, type MarkPlacement, type MarkWarning } from './agent-feedback'
 
 type AuthorizedPluginTool = PluginTool & { authority: PluginToolAuthority }
 
@@ -405,6 +405,19 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
         if (strength !== undefined && !(Number.isInteger(strength) && (strength as number) >= 1 && (strength as number) <= 50)) throw new RangeError('strength must be an integer from 1 to 50')
         const chart = find(id)
         return { chartId: chart.id, ...levelsOf(chart.workspace.getBars({ limit: 500 }), strength as number | undefined) }
+      }
+    },
+    {
+      name: 'chart_swings',
+      authority: 'read',
+      description: 'Read the latest swing highs and lows of the recent bars (up to 500), oldest first and alternating, each with the time and price of a real bar, plus the last leg (previous swing to latest swing). Anchor trend lines, rays, fibonacci retracements and trade plans on these points instead of on guessed times and prices; check them against chart_state first.',
+      inputSchema: { type: 'object', properties: { chartId, strength: { type: 'integer', minimum: 1, maximum: 50, description: 'Bars on each side a swing must out-reach; larger finds fewer, larger swings. Default 5.' }, count: { type: 'integer', minimum: 2, maximum: 30, description: 'How many of the latest swings to return. Default 8.' } } },
+      run: async (input) => {
+        const { chartId: id, strength, count } = (input ?? {}) as { chartId?: unknown, strength?: unknown, count?: unknown }
+        if (strength !== undefined && !(Number.isInteger(strength) && (strength as number) >= 1 && (strength as number) <= 50)) throw new RangeError('strength must be an integer from 1 to 50')
+        if (count !== undefined && !(Number.isInteger(count) && (count as number) >= 2 && (count as number) <= 30)) throw new RangeError('count must be an integer from 2 to 30')
+        const chart = find(id)
+        return { chartId: chart.id, ...swingsOf(chart.workspace.getBars({ limit: 500 }), strength as number | undefined, count as number | undefined) }
       }
     },
     {

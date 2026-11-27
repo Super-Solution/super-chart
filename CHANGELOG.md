@@ -5,6 +5,12 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- Chat plugin: new read tool `chart_swings` returns the latest swing highs and lows (time and price of real bars, alternating) and the last leg, so trend lines, fibonacci retracements and plans are anchored on real turning points. Core: `swingPivots(bars, { strength, lookback })`, exported next to `supportResistance`.
+
+- Chat plugin: `chart_annotate` warns `near_duplicate` when two `level` marks of one call sit within 0.1% of each other.
+
+- Right-clicking the time axis opens a time menu (go to date, reset, latest) instead of the price commands. The palette lists **Hide drawings**.
+
 - **Go to date** (`Alt+G`, or the palette command): opens the palette on the latest bar's date, selected; type `2026-03-01` or `2026-03-01 14:30` (axis time zone) and Enter to move the view to the nearest loaded bar. A date outside the loaded bars says so. Running any palette command now returns focus to the chart first, so shortcuts keep working afterwards.
 
 - The command palette leads with a **Recent** group (the last five commands run) when the query is empty. The demo workspace takes `?locale=zh-TW`.

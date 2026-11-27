@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { supportResistance } from '@supersolutions/super-chart-core'
+import { supportResistance, swingPivots } from '@supersolutions/super-chart-core'
 import type { ChartAnnotation } from '@supersolutions/super-protocol'
 
 /** What an agent needs to check its own marks against: how far the loaded data reaches in time and price. */
@@ -12,7 +12,7 @@ export interface DataSummary {
   readonly lastClose: number | null
 }
 
-export interface MarkWarning { readonly key: string, readonly code: 'time_in_seconds' | 'invalid_plan' | 'flat_range', readonly message: string }
+export interface MarkWarning { readonly key: string, readonly code: 'time_in_seconds' | 'invalid_plan' | 'flat_range' | 'near_duplicate', readonly message: string }
 export interface MarkPlacement { readonly key: string, readonly status: 'offscreen' | 'unprojectable' | 'no-data', readonly why: string }
 
 interface BarLike { readonly timestamp: number, readonly high: number, readonly low: number, readonly close: number }
@@ -77,6 +77,20 @@ export function levelsOf (bars: readonly (BarLike & { readonly timestamp: number
   return { support: found.support.slice(0, 5).map(shape), resistance: found.resistance.slice(0, 5).map(shape), lastClose: bars[bars.length - 1].close }
 }
 
+export interface Swing { readonly kind: 'high' | 'low', readonly time: number, readonly price: number }
+
+/**
+ * The latest swing highs and lows, oldest first, alternating, with the last leg (the move from the previous swing to the
+ * latest one) called out: the anchors a trend line or a retracement needs. Times are the bars' own, so a mark placed on
+ * them lands on a real bar.
+ */
+export function swingsOf (bars: readonly (BarLike & { readonly timestamp: number })[], strength = 5, count = 8): { swings: Swing[], lastLeg: { from: Swing, to: Swing, direction: 'up' | 'down' } | null } {
+  const pivots = swingPivots(bars, { strength, lookback: bars.length })
+  const swings = pivots.slice(-count).map(pivot => ({ kind: pivot.kind, time: bars[pivot.index].timestamp, price: Number(pivot.price.toPrecision(8)) }))
+  const to = swings[swings.length - 1], from = swings[swings.length - 2]
+  return { swings, lastLeg: to !== undefined && from !== undefined ? { from, to, direction: to.price >= from.price ? 'up' : 'down' } : null }
+}
+
 /**
  * Shapes the engine accepts but draws as a note or as nothing: a trade plan whose stop is on the wrong side, a zone or a
  * retracement whose two prices are the same. The agent is told in words, so it corrects the mark instead of reporting it drawn.
@@ -92,6 +106,12 @@ export function checkMarkShapes (annotations: readonly ChartAnnotation[]): MarkW
     } else if ((mark.kind === 'zone' || mark.kind === 'fibonacci') && prices.length >= 2 && typeof prices[0] === 'number' && prices[0] === prices[1]) {
       warnings.push({ key: mark.key, code: 'flat_range', message: `"${mark.key}" has the same price at both anchors (${prices[0]}), so it has no height. Give the two ends different prices.` })
     }
+  }
+  // Two level lines within 0.1% of each other draw on top of one another and their labels collide.
+  const levels = annotations.flatMap(mark => mark.kind === 'level' && typeof mark.anchors[0]?.price === 'number' ? [{ key: mark.key, price: mark.anchors[0].price }] : []).sort((a, b) => a.price - b.price)
+  for (let i = 1; i < levels.length; i++) {
+    const a = levels[i - 1], b = levels[i]
+    if (Math.abs(b.price - a.price) <= Math.max(Math.abs(a.price), Math.abs(b.price)) * 0.001) warnings.push({ key: b.key, code: 'near_duplicate', message: `"${b.key}" (${b.price}) is on top of "${a.key}" (${a.price}): one line, one label. Drop one or merge their labels.` })
   }
   return warnings
 }

@@ -46,6 +46,49 @@ function averageTrueRange (bars: readonly LevelBar[], from: number): number {
   return n === 0 ? 0 : sum / n
 }
 
+export interface SwingPivot {
+  /** Index of the bar in the array given. */
+  readonly index: number
+  readonly kind: 'high' | 'low'
+  readonly price: number
+}
+
+function findPivots (bars: readonly LevelBar[], start: number, strength: number): SwingPivot[] {
+  const pivots: SwingPivot[] = []
+  for (let i = start + strength; i < bars.length - strength; i++) {
+    let high = true, low = true
+    for (let k = 1; k <= strength && (high || low); k++) {
+      if (bars[i - k].high >= bars[i].high || bars[i + k].high > bars[i].high) high = false
+      if (bars[i - k].low <= bars[i].low || bars[i + k].low < bars[i].low) low = false
+    }
+    if (high && Number.isFinite(bars[i].high)) pivots.push({ index: i, kind: 'high', price: bars[i].high })
+    if (low && Number.isFinite(bars[i].low)) pivots.push({ index: i, kind: 'low', price: bars[i].low })
+  }
+  return pivots
+}
+
+/**
+ * The swing highs and lows of the latest `lookback` bars in time order, alternating high and low (of two highs in a row
+ * only the higher stays, of two lows the lower), so each neighbour pair is one leg of the price path: what a trend line
+ * or a retracement is anchored on. `strength` is the bars on each side a pivot must out-reach.
+ */
+export function swingPivots (bars: readonly LevelBar[], options: { readonly strength?: number, readonly lookback?: number } = {}): readonly SwingPivot[] {
+  const strength = options.strength ?? 5, lookback = options.lookback ?? 500
+  if (!Number.isSafeInteger(strength) || strength < 1) throw new RangeError('strength must be a positive integer')
+  if (!Number.isSafeInteger(lookback) || lookback < 1) throw new RangeError('lookback must be a positive integer')
+  const start = Math.max(0, bars.length - lookback)
+  if (bars.length - start < 2 * strength + 1) return Object.freeze([])
+  const raw = findPivots(bars, start, strength).sort((a, b) => a.index - b.index || (a.kind === 'high' ? -1 : 1))
+  const out: SwingPivot[] = []
+  for (const pivot of raw) {
+    const previous = out[out.length - 1]
+    if (previous !== undefined && previous.kind === pivot.kind) {
+      if (pivot.kind === 'high' ? pivot.price > previous.price : pivot.price < previous.price) out[out.length - 1] = pivot
+    } else out.push(pivot)
+  }
+  return Object.freeze(out)
+}
+
 export function supportResistance (bars: readonly LevelBar[], options: SupportResistanceOptions = {}): SupportResistance {
   const strength = options.strength ?? 5, lookback = options.lookback ?? 500, minTouches = options.minTouches ?? 2
   if (!Number.isSafeInteger(strength) || strength < 1) throw new RangeError('strength must be a positive integer')
@@ -57,16 +100,7 @@ export function supportResistance (bars: readonly LevelBar[], options: SupportRe
   if (!Number.isFinite(last)) return EMPTY
   const tolerance = options.tolerance ?? averageTrueRange(bars, start) / 2
   if (!Number.isFinite(tolerance) || tolerance < 0) throw new RangeError('tolerance must be a finite, non-negative price distance')
-  const pivots: Array<{ price: number, index: number }> = []
-  for (let i = start + strength; i < bars.length - strength; i++) {
-    let high = true, low = true
-    for (let k = 1; k <= strength && (high || low); k++) {
-      if (bars[i - k].high >= bars[i].high || bars[i + k].high > bars[i].high) high = false
-      if (bars[i - k].low <= bars[i].low || bars[i + k].low < bars[i].low) low = false
-    }
-    if (high && Number.isFinite(bars[i].high)) pivots.push({ price: bars[i].high, index: i })
-    if (low && Number.isFinite(bars[i].low)) pivots.push({ price: bars[i].low, index: i })
-  }
+  const pivots = findPivots(bars, start, strength).map(p => ({ price: p.price, index: p.index }))
   pivots.sort((a, b) => a.price - b.price)
   const span = Math.max(1, bars.length - start)
   const levels: SupportResistanceLevel[] = []
