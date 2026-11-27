@@ -2,7 +2,7 @@
 import { EngineChart, type EngineChartOptions, type EngineConfiguration } from './chart'
 import { formatDateQuery, parseDateQuery } from './goToDate'
 import { CompareOverlays, type CompareInfo } from './compareOverlay'
-import { ENGINE_CHART_TYPES, DRAWING_TYPES, DERIVED_STYLES, createDerivedSeriesPort, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, compileSymbolSession, sessionBarClose, sessionKindAt, parseWorkspaceDocument, checkTimeZone, formatUtcOffset, timeZoneChoices, localTimeZone, COMMON_TIME_ZONES, INDICATOR_GROUPS, indicatorInfo, indicatorLabel, searchIndicators, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type DerivedSeriesPort, type DerivedStyle, type DerivedStyleOptions, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1, type SessionIssue, type TradingSession } from '@supersolutions/super-chart-core'
+import { ENGINE_CHART_TYPES, DRAWING_TYPES, drawingAnchorCount, drawingUsesText, DERIVED_STYLES, createDerivedSeriesPort, DataLoader, resolvePricePrecision, symbolKey, periodKey, parsePeriod, WorkspaceEventBus, WorkspaceLoadQueue, createTimedReplay, createBarCountdown, compileSymbolSession, sessionBarClose, sessionKindAt, parseWorkspaceDocument, checkTimeZone, formatUtcOffset, timeZoneChoices, localTimeZone, COMMON_TIME_ZONES, INDICATOR_GROUPS, indicatorInfo, indicatorLabel, searchIndicators, type IndicatorDefinition, type EngineChartType, type DrawingType, type PriceScaleOptions, type DataStatus, type LoaderOptions, type ChartDataPort, type DerivedSeriesPort, type DerivedStyle, type DerivedStyleOptions, type Datafeed, type Period, type SymbolInfo, type MarketBar, type WorkspaceEvents, type WorkspaceLoadResult, type WorkspaceLoadState, type WorkspaceMarket, type WorkspaceReplayState, type WorkspaceState, type TimedReplay, type BarCountdown, type WorkspaceDocumentV1, type SessionIssue, type TradingSession } from '@supersolutions/super-chart-core'
 import { DatafeedMarks, MARKS_LAYER, type WorkspaceMarksState } from './datafeedMarks'
 import { EngineAnnotations, attachAnnotationIntents, type AnnotationIntentEvent, type EngineAnnotationTheme } from './annotations'
 import { themeName } from './tokens'
@@ -321,6 +321,8 @@ export class ChartWorkspace {
   /** Fold or unfold the indicator rows of the legend; its icon and words follow the state. */
   private readonly legendFoldButton: HTMLButtonElement
   private legendCollapsed = false
+  /** Where the mouse last was over the chart (client pixels), for the hotkeys that draw where it points. */
+  private lastPointer: { x: number, y: number } | null = null
   private legendHideTimer = 0
   private readonly olderButton: HTMLButtonElement
   private readonly replayInfo: HTMLSpanElement
@@ -799,7 +801,7 @@ export class ChartWorkspace {
       const hotkey = hotkeyFor(key)
       if (hotkey !== null && !(key.target instanceof this.win.HTMLElement && key.target.closest('input,textarea,select,[contenteditable="true"]') !== null)) {
         key.preventDefault(); key.stopPropagation()
-        if ('tool' in hotkey.action) { const tool = hotkey.action.tool; this.run(() => { this.chart.setDrawingTool(tool); this.setToolValue(tool) }) }
+        if ('tool' in hotkey.action) { const tool = hotkey.action.tool; this.run(() => { if (!this.placeAtPointer(tool)) { this.chart.setDrawingTool(tool); this.setToolValue(tool) } }) }
         else if (hotkey.action.action === 'resetView') this.run(() => { this.chart.view.resetViewport() })
         else if (hotkey.action.action === 'goToDate') this.openGoToDate()
         else void this.download()
@@ -929,7 +931,8 @@ export class ChartWorkspace {
         this.legendActions.style.top = `${Math.round(row.top - stageBox.top - 3)}px`
         this.legendActions.hidden = false
       })
-      this.listen(this.chartHost, 'pointerleave', () => { this.scheduleLegendHide() })
+      this.listen(this.chartHost, 'pointermove', event => { const e = event as PointerEvent; if (e.pointerType === 'mouse') this.lastPointer = { x: e.clientX, y: e.clientY } })
+      this.listen(this.chartHost, 'pointerleave', () => { this.lastPointer = null; this.scheduleLegendHide() })
       this.unsubscribe.push(attachAnnotationIntents(this.chartHost, this.annotations, event => { for (const listener of [...this.intentListeners]) listener(event) }))
       this.marks = new DatafeedMarks({
         feed: this.datafeed,
@@ -1890,6 +1893,24 @@ export class ChartWorkspace {
   private scheduleLegendHide (): void {
     this.win.clearTimeout(this.legendHideTimer)
     this.legendHideTimer = this.win.setTimeout(() => { this.hideLegendActions() }, 220)
+  }
+
+  /**
+   * A one-point drawing (horizontal line, horizontal ray, vertical line) from its hotkey is put where the mouse points, as other
+   * charting tools do, instead of waiting for a click. False when the mouse is not on the plot or the tool needs more.
+   */
+  private placeAtPointer (tool: DrawingType): boolean {
+    const at = this.lastPointer
+    if (at === null || drawingAnchorCount(tool) !== 1 || drawingUsesText(tool) || tool === 'image') return false
+    const point = this.chart.pointAt(at.x, at.y)
+    if (point === null) return false
+    const store = this.chart.drawings
+    let id: string, n = 0
+    do { id = `drawing-${Date.now().toString(36)}-k${(++n).toString(36)}` } while (store.getSnapshot().drawings.some(item => item.id === id))
+    store.setViewHidden(false)
+    store.add({ id, type: tool, anchors: [{ timestamp: point.timestamp, price: point.price }] }); store.select(id)
+    this.chart.setDrawingTool(null); this.setToolValue(null)
+    return true
   }
 
   private hideLegendActions (): void { this.legendActions.hidden = true; this.legendTarget = null }
