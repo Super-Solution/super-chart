@@ -62,3 +62,26 @@ test('an unknown chart type is refused at runtime (JSON callers bypass the types
   expect(state.rejected).toBe(true)
   expect(state.after).toBe(state.before)
 })
+
+test('a workspace with its legend title, watermark and fold can save itself and restore with all three intact', async ({ page }) => {
+  await openHarness(page)
+  await page.evaluate(async () => {
+    const { H } = window as any
+    const { pro } = H.mount({ id: 'doc' })
+    ;(window as any).pro = pro
+    await H.ready(pro)
+  })
+  const result = await page.evaluate(async () => {
+    const pro = (window as any).pro
+    pro.setLegendCollapsed(true)
+    const before = pro.chart.getRenderOptions()
+    const saved = pro.exportDocument()
+    const outcome = await pro.restoreDocument(saved)
+    const after = pro.chart.getRenderOptions()
+    return { outcome: outcome.status, title: [before.legendTitle, after.legendTitle], watermark: [before.watermark?.title, after.watermark?.title], fold: [before.legendCollapsed, after.legendCollapsed] }
+  })
+  expect(['loaded', 'unchanged']).toContain(result.outcome)
+  expect(result.title[1]).toBe(result.title[0])
+  expect(result.watermark[1]).toBe(result.watermark[0])
+  expect(result.fold).toEqual([true, true])
+})

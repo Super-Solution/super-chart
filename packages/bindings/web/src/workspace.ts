@@ -270,7 +270,8 @@ export class ChartWorkspace {
   private marksToggle: HTMLButtonElement | null = null
   private watermarkToggle: HTMLButtonElement | null = null
   private legendToggle: HTMLButtonElement | null = null
-  private watermarkOn = true
+  /** The watermark the host passed in `chart.render`, if any; the viewer can hide it and bring it back. */
+  private readonly hostWatermark: { readonly title: string, readonly subtitle?: string } | undefined
   private syncAppearance: () => void = () => {}
   private zoneId: string
   private readonly intervalBar: HTMLDivElement
@@ -388,6 +389,7 @@ export class ChartWorkspace {
     this.datafeed = options.datafeed
     this.ownLegendTitle = options.chart?.render?.legendTitle === undefined
     this.ownWatermark = options.chart?.render?.watermark === undefined
+    this.hostWatermark = options.chart?.render?.watermark ?? undefined
     this.symbol = validSymbol(options.symbol); this.period = validPeriod(options.period)
     this.recentLimit = options.search?.recentLimit ?? 8
     if (!Number.isSafeInteger(this.recentLimit) || this.recentLimit < 0 || this.recentLimit > 50) throw new RangeError('Recent-symbol limit must be from 0 to 50')
@@ -561,13 +563,13 @@ export class ChartWorkspace {
     // Appearance, as in TradingView's chart settings: which grid lines, whether the symbol watermark and the legend show.
     const grid = this.select('gridLines', GRID_MODES.map(name => [name, () => this.t(`gridLines.${name}`)] as const), options.chart?.render?.gridLines ?? 'horizontal')
     this.listen(grid, 'change', () => { this.run(() => { this.chart.setRenderOptions({ gridLines: grid.value as GridMode }) }) })
-    this.watermarkToggle = this.control('watermark.toggle', () => { this.setWatermarkVisible(!this.watermarkOn) }, { title: 'watermark.toggle.title' })
+    this.watermarkToggle = this.control('watermark.toggle', () => { this.setWatermarkVisible(this.chart.getRenderOptions().watermark === null) }, { title: 'watermark.toggle.title' })
     this.legendToggle = this.control('legend.toggle', () => { this.setLegendVisible(this.chart.getRenderOptions().legend === false) }, { title: 'legend.toggle.title' })
     presentation.panel.append(this.field('gridLines', grid), this.watermarkToggle, this.legendToggle)
     this.syncAppearance = () => {
       const render = this.chart.getRenderOptions()
       grid.value = render.gridLines ?? 'horizontal'
-      this.watermarkToggle?.setAttribute('aria-pressed', String(this.watermarkOn))
+      this.watermarkToggle?.setAttribute('aria-pressed', String(render.watermark !== null))
       this.legendToggle?.setAttribute('aria-pressed', String(render.legend !== false))
     }
     // The chart does not exist yet while the toolbar is built; syncPresentation runs this once it does.
@@ -1081,7 +1083,7 @@ export class ChartWorkspace {
     if (!this.periods.some(item => periodKey(item) === periodKey(nextPeriod))) this.periods.push(nextPeriod)
     this.symbol = nextSymbol; this.period = nextPeriod
     if (this.ownLegendTitle) this.chart.setRenderOptions({ legendTitle: legendTitleOf(nextSymbol, nextPeriod) })
-    if (this.ownWatermark && this.watermarkOn) this.chart.setRenderOptions({ watermark: watermarkOf(nextSymbol, nextPeriod) })
+    if (this.ownWatermark && this.chart.getRenderOptions().watermark !== null) this.chart.setRenderOptions({ watermark: watermarkOf(nextSymbol, nextPeriod) })
     this.symbolButton.textContent = nextSymbol.ticker; this.syncPeriodControls()
     const result = changed ? this.request(true) : this.loads.current(this.market()) ?? Promise.resolve(this.currentResult())
     if (changed) this.events.emit('marketChange', { previous, requested: this.market() })
@@ -1201,14 +1203,16 @@ export class ChartWorkspace {
     this.assertLive()
     const state = this.getLoadState()
     if (state.loaded === null || !['ready', 'empty'].includes(state.status)) throw new Error('Load a market before saving its workspace')
-    const { formatPrice, showTimeAxis, timespan, symbolTimezone, session, pointFigureBox, locale, ...render } = this.chart.getRenderOptions()
+    // The legend title, the fold state and the watermark text are rebuilt from the market and the viewer's choices when a document is restored.
+    const { formatPrice, showTimeAxis, timespan, symbolTimezone, session, pointFigureBox, locale, legendTitle, legendCollapsed, legendCollapsedLabel, watermark, ...render } = this.chart.getRenderOptions()
     // A price-driven style is not saved, so neither is the chart type it borrowed (step line for Kagi, X/O for point and figure).
     if (this.typeBeforeStyle !== null && (render.chartType === 'step-line' || render.chartType === 'point-figure')) render.chartType = this.typeBeforeStyle
+    const saved: WorkspaceDocumentV1['render'] = watermark === null ? { ...render, watermark: null } : render
     const document: WorkspaceDocumentV1 = {
       version: 1,
       ...this.market(),
       mode: this.chart.view.getSnapshot().mode,
-      render,
+      render: saved,
       layout: this.chart.getLayoutOptions(),
       indicators: this.chart.listIndicators(),
       drawings: JSON.parse(this.chart.drawings.exportJson())
@@ -1240,7 +1244,19 @@ export class ChartWorkspace {
       if (this.disposed) return { status: 'disposed' }
       if (generation !== this.restoreGeneration) return { status: 'superseded', by: this.market() }
       const configuration: EngineConfiguration = {
-        render: { ...document.render, formatPrice: this.chart.getRenderOptions().formatPrice, timespan: period.timespan, symbolTimezone: document.symbol.timezone, session: this.compileSession(document.symbol), locale: this.locale },
+        render: {
+          ...document.render,
+          formatPrice: this.chart.getRenderOptions().formatPrice,
+          timespan: period.timespan,
+          symbolTimezone: document.symbol.timezone,
+          session: this.compileSession(document.symbol),
+          locale: this.locale,
+          // What the workspace itself keeps on the canvas, for the market being restored; a restore replaces the render options whole.
+          legendCollapsedLabel: this.t('legend.folded'),
+          legendCollapsed: this.legendCollapsed,
+          ...(this.ownLegendTitle ? { legendTitle: legendTitleOf(document.symbol, period) } : this.chart.getRenderOptions().legendTitle === undefined ? {} : { legendTitle: this.chart.getRenderOptions().legendTitle }),
+          ...(document.render.watermark === null ? { watermark: null } : { watermark: this.hostWatermark ?? watermarkOf(document.symbol, period) })
+        },
         layout: document.layout,
         mode: document.mode ?? 'raw',
         indicators: document.indicators,
@@ -1354,8 +1370,7 @@ export class ChartWorkspace {
   setWatermarkVisible (visible: boolean): void {
     this.assertLive()
     if (typeof visible !== 'boolean') throw new TypeError('setWatermarkVisible needs true or false')
-    this.watermarkOn = visible
-    if (this.ownWatermark) this.chart.setRenderOptions({ watermark: visible ? watermarkOf(this.symbol, this.period) : null })
+    this.chart.setRenderOptions({ watermark: visible ? this.hostWatermark ?? watermarkOf(this.symbol, this.period) : null })
     this.syncAppearance()
   }
 
@@ -2350,7 +2365,7 @@ export class ChartWorkspace {
     add('view.goto', t('palette.goto'), 'palette.group.view', () => { this.openGoToDate() }, { shortcut: 'Alt+G', keywords: ['date', 'time', 'jump', 'seek'] })
     add('view.reset', t('context.reset'), 'palette.group.view', () => { this.chart.view.resetViewport() }, { shortcut: 'Alt+R' })
     add('view.gridLines', t('palette.gridLines'), 'palette.group.view', () => { this.run(() => { const next = GRID_MODES[(GRID_MODES.indexOf(this.chart.getRenderOptions().gridLines ?? 'horizontal') + 1) % GRID_MODES.length]; this.chart.setRenderOptions({ gridLines: next }); this.syncAppearance() }) }, { keywords: ['grid', 'lines', 'vertical', 'horizontal'] })
-    add('view.watermark', t('palette.watermark'), 'palette.group.view', () => { this.setWatermarkVisible(!this.watermarkOn) }, { keywords: ['watermark', 'symbol', 'background'] })
+    add('view.watermark', t('palette.watermark'), 'palette.group.view', () => { this.setWatermarkVisible(this.chart.getRenderOptions().watermark === null) }, { keywords: ['watermark', 'symbol', 'background'] })
     add('view.legendVisible', t('palette.legendVisible'), 'palette.group.view', () => { this.setLegendVisible(this.chart.getRenderOptions().legend === false) }, { keywords: ['legend', 'ohlc', 'title', 'hide', 'show'] })
     add('view.legend', t(this.legendCollapsed ? 'legend.unfold' : 'legend.fold'), 'palette.group.view', () => { this.setLegendCollapsed(!this.legendCollapsed) }, { keywords: ['legend', 'indicators', 'fold', 'collapse', 'hide'] })
     add('view.latest', t('nav.latest.title'), 'palette.group.view', () => { this.chart.view.followLatest() })

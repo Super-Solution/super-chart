@@ -5,6 +5,8 @@ history (`git log --oneline`, one commit per release). Nothing here is published
 
 ## Unreleased
 
+- **Fixed: a workspace could not save itself**: `exportDocument()` threw "Unknown or missing render options property" because the legend title, legend fold label and watermark the workspace itself puts on the canvas were treated as unknown saved options, and a restore dropped them. They are now rebuilt for the restored market (and the fold is kept); a saved document carries only the viewer's choices: `gridLines`, `legend` and a hidden watermark (`watermark: null`). A restored document with no `watermark` key shows the watermark.
+
 - **Replay from this bar**: right-clicking the plot offers "Replay from this bar", which starts replay at the bar under the pointer (the way TradingView's bar picker does) instead of only a count from the end. It is left out while replaying, before data is ready and in a price-driven style.
 
 - **Appearance settings in the Chart menu**: a Grid lines choice (horizontal, vertical, both, none) and Watermark and Legend switches, as in TradingView's chart settings, with matching palette commands and `setWatermarkVisible()` / `setLegendVisible()` on the workspace. New core render option `gridLines` (default `'horizontal'`, the previous look); vertical lines sit at the time-axis ticks and are left off indicator panes. A hidden watermark stays hidden across symbol and interval changes; a watermark the host supplied is not touched.

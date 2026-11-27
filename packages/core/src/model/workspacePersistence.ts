@@ -32,7 +32,7 @@ export const WORKSPACE_DOCUMENT_LIMITS = Object.freeze({
 
 const BUILTINS = new Set(['MA', 'EMA', 'BOLL', 'VOL', 'MACD', 'RSI', 'KDJ'])
 const SYMBOL_KEYS = ['ticker', 'name', 'shortName', 'exchange', 'market', 'pricePrecision', 'volumePrecision', 'priceCurrency', 'type', 'logo', 'timezone']
-const RENDER_KEYS = ['chartType', 'candleDensity', 'baseline', 'background', 'grid', 'text', 'up', 'down', 'line', 'font', 'pricePrecision', 'timeZone', 'theme']
+const RENDER_KEYS = ['chartType', 'candleDensity', 'baseline', 'background', 'grid', 'text', 'up', 'down', 'line', 'font', 'pricePrecision', 'timeZone', 'theme', 'gridLines', 'legend', 'watermark']
 const DANGEROUS_KEYS = new Set(['__proto__', 'prototype', 'constructor'])
 
 function object (value: unknown, allowed: readonly string[], required: readonly string[], label: string): Record<string, unknown> {
@@ -143,6 +143,10 @@ function renderOf (value: unknown): WorkspaceSavedRender {
   for (const key of ['background', 'grid', 'text', 'up', 'down', 'line', 'font']) {
     if (input[key] !== undefined) text(input[key], `render ${key}`, 256)
   }
+  if (input.gridLines !== undefined && !['horizontal', 'vertical', 'both', 'none'].includes(input.gridLines as string)) throw new RangeError('Unknown grid lines mode')
+  if (input.legend !== undefined) flag(input.legend, 'render legend')
+  // A saved watermark can only say "hidden": the text follows the symbol and interval, so it is rebuilt, never stored.
+  if (input.watermark !== undefined && input.watermark !== null) throw new TypeError('A saved watermark can only be null')
   return { ...input } as WorkspaceSavedRender
 }
 function layoutOf (value: unknown): EngineLayout {
