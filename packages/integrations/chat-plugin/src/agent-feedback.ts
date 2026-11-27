@@ -45,7 +45,7 @@ export function correctTimeUnits (annotations: readonly ChartAnnotation[]): { an
 
 /** The validator's complaint with a hint added when the likely cause is a date string or seconds where milliseconds belong. */
 export function explainProblem (problem: string, annotations: unknown): string {
-  if (!/finite time/.test(problem) || !Array.isArray(annotations)) return problem
+  if (!problem.includes('finite time') || !Array.isArray(annotations)) return problem
   const strings = annotations.some(item => Array.isArray((item as { anchors?: unknown })?.anchors) && ((item as { anchors: Array<{ time?: unknown }> }).anchors).some(anchor => typeof anchor?.time === 'string'))
   return strings ? `${problem} Send time as a number, milliseconds since the epoch (for example 1795800000000), not a date string; chart_state gives the first and last bar time to copy.` : problem
 }
