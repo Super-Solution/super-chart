@@ -114,9 +114,9 @@ function rescale (model: FinancialChartModel, values: readonly number[], options
 function alignedModel (
   snapshot: RealtimeViewSnapshot, series: FinancialSeries[], indexByTime: ReadonlyMap<number, number>,
   width: number, height: number, gutter: number | undefined, scaleOptions: PriceScaleOptions,
-  values: readonly number[], base: number, primary: boolean, axisSide: 'left' | 'right', overlays: ReadonlyMap<string, OverlayMap>
+  values: readonly number[], base: number, primary: boolean, axisSide: 'left' | 'right', overlays: ReadonlyMap<string, OverlayMap>, bottomInset: number
 ): { model: FinancialChartModel, scale: PriceScale } {
-  const geometry = financialGeometry(width, height, gutter, 12, axisSide), count = snapshot.bars.length
+  const geometry = financialGeometry(width, height, gutter, 12, axisSide, bottomInset), count = snapshot.bars.length
   const scale = createPriceScale(values, geometry.top, geometry.bottom, scaleOptions, base)
   const span = snapshot.viewport.i1 - snapshot.viewport.i0
   const fractional = snapshot.dataStart !== undefined && span > 0 && count > 0
@@ -200,7 +200,17 @@ export function buildEngineFrame (
   const paneIds = [...new Set(indicators.filter(item => item.pane !== 'price').map(item => item.pane))]
   const ratio = Math.max(0.3, Math.min(0.85, layout.priceRatio ?? 0.62))
   const ids = ['price', ...paneIds]
-  const weights = ids.map(id => layout.paneWeights?.[id] ?? (id === 'price' ? ratio : (1 - ratio) / paneIds.length))
+  // One separate pane gets the share the ratio leaves it. Each further pane adds 30% of that share again (up to 60% of
+  // the height in all), so three panes under a ratio of 0.8 are not three strips of a fifth between them, too small to
+  // read a scale from.
+  const paneShare = paneIds.length <= 1 ? 1 - ratio : Math.min(0.6, (1 - ratio) * (1 + 0.3 * (paneIds.length - 1)))
+  // The shares are of the plots, not of whole panes: each pane also carries its top gap and the room under it (the time
+  // axis, under the lowest pane only), which would otherwise leave the lowest pane, with the most under it, the smallest plot.
+  const chrome = ids.map((_, index) => 12 + (index === ids.length - 1 ? 34 : 6))
+  const plotTotal = Math.max(ids.length, height - chrome.reduce((sum, value) => sum + value, 0))
+  // With one pane under the price pane the ratio is of the whole height, as it always was.
+  const weights = ids.map((id, index) => layout.paneWeights?.[id] ?? (paneIds.length <= 1 ? (id === 'price' ? ratio : 1 - ratio)
+    : plotTotal * (id === 'price' ? 1 - paneShare : paneShare / paneIds.length) + chrome[index]))
   // Normalize before summing so even very large finite input weights cannot overflow.
   const largestWeight = Math.max(...weights), normalized = weights.map(value => value / largestWeight)
   let totalWeight = normalized.reduce((sum, value) => sum + value, 0), available = height
@@ -252,6 +262,8 @@ export function buildEngineFrame (
   for (const [position, id] of ids.entries()) {
     const primary = position === 0
     const paneHeight = heights[position], top = paneTop
+    // Only the lowest pane has the time axis under it; the others keep a small gap, not 34px of empty pane each.
+    const bottomInset = position === ids.length - 1 ? 34 : 6
     paneTop += paneHeight
     const series: FinancialSeries[] = []
     const figureStyles = new Map<string, IndicatorFigure>()
@@ -278,7 +290,7 @@ export function buildEngineFrame (
     const overlayRatio = layout.overlayRatio ?? 0.2
     for (const item of series) {
       if (item.overlay === true) {
-        const g = financialGeometry(width, paneHeight, layout.axisGutter, 12, axisSide)
+        const g = financialGeometry(width, paneHeight, layout.axisGutter, 12, axisSide, bottomInset)
         overlays.set(item.id, overlayMap(item, figureStyles.get(item.id)?.base ?? 0, g.bottom, g.plotHeight, overlayRatio))
         continue
       }
@@ -287,10 +299,10 @@ export function buildEngineFrame (
     const scaleOptions = primary ? layout.priceScale ?? {} : {}, base = rawBars[0]?.close ?? 1
     let model: FinancialChartModel, scale: PriceScale
     if (aligned) {
-      ({ model, scale } = alignedModel(snapshot, series, indexByTime, width, paneHeight, layout.axisGutter, scaleOptions, values, base, primary, axisSide, overlays))
+      ({ model, scale } = alignedModel(snapshot, series, indexByTime, width, paneHeight, layout.axisGutter, scaleOptions, values, base, primary, axisSide, overlays, bottomInset))
     } else {
       // Preserve generic handling of malformed/duplicate external categories.
-      model = buildFinancialChartModel({ xType: 'category', series, candles }, width, paneHeight, layout.axisGutter, undefined, 52, axisSide)
+      model = buildFinancialChartModel({ xType: 'category', series, candles }, width, paneHeight, layout.axisGutter, undefined, 52, axisSide, bottomInset)
       applyRealtimeViewport(model, snapshot, 'category')
       if (!primary) model.plottedCandles = []
       scale = rescale(model, values, scaleOptions, base, overlays)

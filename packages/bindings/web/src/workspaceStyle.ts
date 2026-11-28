@@ -255,9 +255,14 @@ export const WORKSPACE_STYLE = `
 .sc-workspace .sc-footer .sc-button:not([aria-pressed]){border-color:transparent;background:transparent;color:var(--sc-muted,${DARK.muted})}
 .sc-workspace .sc-footer .sc-button:not([aria-pressed]):hover:not(:disabled){background:var(--sc-hover-background,${DARK.hover});color:var(--sc-text,${DARK.text})}
 .sc-workspace:not([data-layout=narrow]) .sc-countdown{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-.sc-workspace .sc-indicator-results{display:flex;flex-direction:column;gap:1px;max-height:240px}
+.sc-workspace .sc-indicator-results{display:flex;flex-direction:column;gap:1px;max-height:224px}
 .sc-workspace .sc-indicator-result{width:100%;border-color:transparent!important;background:transparent!important;gap:10px}
 .sc-workspace .sc-indicator-result .sc-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.sc-workspace .sc-indicator-count{flex:none;min-width:18px;padding:0 5px;border-radius:9px;text-align:center;font-size:11px;line-height:18px;color:var(--sc-accent,${DARK.accent});background:var(--sc-active-background,${DARK.active})}
+.sc-workspace .sc-indicator-onchart{padding:12px 2px 0}
+.sc-workspace .sc-indicator-onchart:not([hidden])+.sc-indicator-list{padding-top:4px}
+.sc-workspace .sc-indicator-onchart[hidden]{display:none}
+.sc-workspace .sc-indicator-entry[data-flash=true]{border-color:var(--sc-accent,${DARK.accent});box-shadow:0 0 0 1px var(--sc-accent,${DARK.accent})}
 .sc-workspace .sc-indicator-id{flex:none;color:var(--sc-muted,${DARK.muted});font-size:11px;letter-spacing:.02em}
 .sc-workspace .sc-indicator-result:hover:not(:disabled),.sc-workspace .sc-indicator-result:focus-visible{background:var(--sc-hover-background,${DARK.hover})!important}
 .sc-workspace .sc-indicator-family{padding:8px 10px 2px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--sc-muted,${DARK.muted})}

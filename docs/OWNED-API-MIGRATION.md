@@ -257,4 +257,6 @@ These change what a workspace looks like with no options. Each has an option tha
 | First Lines tool and `Alt+T` | `trend-line` (ran on past both points) | `segment`, labelled Trend line; `trend-line` is labelled Extended line | `chart.setDrawingTool('trend-line')` |
 | Background watermark | none | symbol and "name, interval", very faint | `render: { watermark: null }` |
 | `compact` size class | below 780px | below 1040px (the market bar is one row at every width) | `ui: { layout: 'regular' }` |
+| Indicator panes (two or more under the price pane) | each pane's share was `(1 - priceRatio) / n`, with 34px of empty plot under every pane | the shares are of the plots; the room for the time axis is under the lowest pane only, and each extra pane adds 30% to the panes' total share (the candles keep at least 40%) | `layout.paneWeights` (pane heights) |
+| Price-axis ticks | four, however tall the pane | about one per 70px, from 3 to 8, on a 1-2-2.5-5-10 ladder | none; `render.formatPrice` formats them |
 | Chat plugin fibonacci mark | level 0 at the first anchor | level 0 at the second anchor, like the drawing tool (a retracement reads from where the move ended) | swap the two anchors |

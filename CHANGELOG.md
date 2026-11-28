@@ -3,6 +3,14 @@
 Releases of the five `@supersolutions/super-chart-*` packages, which share one version. Older releases are in the git
 history (`git log --oneline`, one commit per release). Nothing here is published by this repository's commits.
 
+## 0.14.1 (not yet published)
+
+Found on a live chart with ten indicators: the Indicators menu gave no sign that a click had worked, so one indicator was added again and again.
+
+- **The Indicators menu:** an indicator with the same name, settings and pane as one already on the chart is not added a second time (it would draw exactly over the first); the existing row opens and is marked instead. The chart API (`addIndicator`) still adds as many as it is told to. Each catalogue row shows how many of that indicator are on the chart, the added indicators sit under an "On the chart (n)" heading, the list keeps its scroll position and the focused row when it changes, and its first view ends on a whole row. The command palette adds the same way.
+- **Several indicator panes** are no longer squeezed to strips with no scale: the shares are of the plots (the time-axis room is under the lowest pane only, not 34px in each), each further pane adds 30% to the panes' total share, and a one-pane layout is unchanged. Pane drag and `layout.paneWeights` are unchanged.
+- **Price-axis ticks** follow the pane's height (about one per 70px, 3 to 8, with a 2.5 step) instead of four however tall. A tall price pane has more labels than before. Both layout changes are listed in `docs/OWNED-API-MIGRATION.md`, "Defaults that changed after 0.13".
+
 ## 0.14.0
 
 **Defaults that change for existing hosts** (details in `docs/OWNED-API-MIGRATION.md`, "Defaults that changed after 0.13"):
