@@ -32,7 +32,7 @@ export const WORKSPACE_DOCUMENT_LIMITS = Object.freeze({
 
 const BUILTINS = new Set(['MA', 'EMA', 'BOLL', 'VOL', 'MACD', 'RSI', 'KDJ'])
 const SYMBOL_KEYS = ['ticker', 'name', 'shortName', 'exchange', 'market', 'pricePrecision', 'volumePrecision', 'priceCurrency', 'type', 'logo', 'timezone']
-const RENDER_KEYS = ['chartType', 'candleDensity', 'baseline', 'background', 'grid', 'text', 'up', 'down', 'line', 'font', 'pricePrecision', 'timeZone', 'theme']
+const RENDER_KEYS = ['chartType', 'candleDensity', 'baseline', 'background', 'grid', 'text', 'up', 'down', 'line', 'font', 'pricePrecision', 'timeZone', 'theme', 'gridLines', 'legend', 'watermark']
 const DANGEROUS_KEYS = new Set(['__proto__', 'prototype', 'constructor'])
 
 function object (value: unknown, allowed: readonly string[], required: readonly string[], label: string): Record<string, unknown> {
@@ -143,13 +143,19 @@ function renderOf (value: unknown): WorkspaceSavedRender {
   for (const key of ['background', 'grid', 'text', 'up', 'down', 'line', 'font']) {
     if (input[key] !== undefined) text(input[key], `render ${key}`, 256)
   }
+  if (input.gridLines !== undefined && !['horizontal', 'vertical', 'both', 'none'].includes(input.gridLines as string)) throw new RangeError('Unknown grid lines mode')
+  if (input.legend !== undefined) flag(input.legend, 'render legend')
+  // A saved watermark can only say "hidden": the text follows the symbol and interval, so it is rebuilt, never stored.
+  if (input.watermark !== undefined && input.watermark !== null) throw new TypeError('A saved watermark can only be null')
   return { ...input } as WorkspaceSavedRender
 }
 function layoutOf (value: unknown): EngineLayout {
-  const input = object(value, ['axisGutter', 'priceScale', 'priceRatio', 'paneWeights'], [], 'layout')
+  const input = object(value, ['axisSide', 'axisGutter', 'priceScale', 'priceRatio', 'paneWeights', 'overlayRatio'], [], 'layout')
   const result: EngineLayout = {}
+  if (input.axisSide !== undefined) { if (input.axisSide !== 'left' && input.axisSide !== 'right') throw new RangeError('Axis side must be left or right'); result.axisSide = input.axisSide }
   if (input.axisGutter !== undefined) result.axisGutter = finite(input.axisGutter, 'axis gutter')
   if (input.priceRatio !== undefined) result.priceRatio = finite(input.priceRatio, 'price ratio')
+  if (input.overlayRatio !== undefined) result.overlayRatio = finite(input.overlayRatio, 'overlay ratio')
   if (input.priceScale !== undefined) {
     const scale = object(input.priceScale, ['mode', 'reversed', 'range'], [], 'price scale')
     if (scale.reversed !== undefined) flag(scale.reversed, 'reversed scale')
@@ -173,7 +179,8 @@ function layoutOf (value: unknown): EngineLayout {
   return result
 }
 function indicatorsOf (value: unknown, options: WorkspaceDocumentOptions): readonly EngineIndicatorInstance[] {
-  if (!Array.isArray(value) || value.length > WORKSPACE_DOCUMENT_LIMITS.indicators) throw new TypeError('Invalid workspace indicators')
+  if (!Array.isArray(value)) throw new TypeError('Invalid workspace indicators')
+  if (value.length > WORKSPACE_DOCUMENT_LIMITS.indicators) throw new RangeError(`A saved workspace holds at most ${WORKSPACE_DOCUMENT_LIMITS.indicators} indicators; this one has ${value.length}. Remove some before saving.`)
   const custom = new Set(options.registeredIndicatorNames ?? [])
   for (const name of custom) text(name, 'registered indicator name')
   const ids = new Set<string>(), builtins = new EngineIndicators()
@@ -186,7 +193,7 @@ function indicatorsOf (value: unknown, options: WorkspaceDocumentOptions): reado
       if (!BUILTINS.has(name) && !custom.has(name)) throw new TypeError(`Indicator is not registered: ${name}`)
       if (!Array.isArray(input.params) || input.params.length > WORKSPACE_DOCUMENT_LIMITS.params) throw new TypeError('Invalid indicator parameters')
       const params = input.params.map(param => finite(param, 'indicator parameter'))
-      if (input.pane !== 'price' && input.pane !== 'separate') throw new TypeError('Invalid indicator pane')
+      if (input.pane !== 'price' && input.pane !== 'separate' && input.pane !== 'overlay') throw new TypeError('Invalid indicator pane')
       const instance: EngineIndicatorInstance = {
         id,
         name,

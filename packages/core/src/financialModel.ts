@@ -2,15 +2,23 @@
 /** Pure measured-dp chart geometry, scaling and hit testing. Hosts own feeds. */
 export type ChartX = string | number;
 export type ChartAxis = 'left' | 'right';
-export interface FinancialSeries { id: string; name: string; type: 'line' | 'area' | 'bar' | 'scatter'; points: ReadonlyArray<readonly [ChartX, number]>; color?: string; axis?: ChartAxis }
+export interface FinancialSeries { id: string; name: string; type: 'line' | 'area' | 'bar' | 'scatter'; points: ReadonlyArray<readonly [ChartX, number]>; color?: string; axis?: ChartAxis;
+  /** Drawn in a band along the bottom of the pane on a scale of its own (see `plottedSeries[].zeroY`). */ overlay?: boolean }
 export interface FinancialCandle { t: ChartX; o: number; h: number; l: number; c: number; v?: number }
 export interface FinancialAnnotation { id: string; type: 'hline' | 'vline' | 'band' | 'marker'; value: ChartX; to?: ChartX; label?: string; color?: string; axis?: ChartAxis }
 export interface FinancialChartData { xType: 'category' | 'number' | 'time'; series?: readonly FinancialSeries[]; candles?: readonly FinancialCandle[]; annotations?: readonly FinancialAnnotation[]; scale?: 'auto' | 'zero' | 'tight'; stacked?: boolean }
 export interface FinancialViewport { start: number; end: number }
-export interface FinancialGeometry { width: number; height: number; left: number; right: number; top: number; bottom: number; plotWidth: number; plotHeight: number }
+/** `axisSide` is the edge the price labels sit on; geometry made before it existed reads as `left`. */
+export interface FinancialGeometry { width: number; height: number; left: number; right: number; top: number; bottom: number; plotWidth: number; plotHeight: number; axisSide?: ChartAxis }
+/** The strip beside the plot that holds price labels and tags: from `from`, `width` wide, text anchored `anchor` px from its inner edge. */
+export function axisStrip(g: FinancialGeometry): { from: number; width: number; side: ChartAxis; /** x the label text is anchored to */ textX: number; align: 'left' | 'right'; /** x of the edge facing the plot */ inner: number } {
+  return g.axisSide === 'right'
+    ? { from: g.right, width: g.width - g.right, side: 'right', textX: g.right + 6, align: 'left', inner: g.right }
+    : { from: 0, width: g.left, side: 'left', textX: g.left - 6, align: 'right', inner: g.left };
+}
 export interface ChartPoint { x: number; y: number; value: number; key: ChartX; index: number }
 export type ChartCandlePoint = FinancialCandle & { x: number; bodyTop: number; bodyBottom: number; wickTop: number; wickBottom: number; index: number };
-export interface FinancialChartModel { geometry: FinancialGeometry; min: number; max: number; yTicks: number[]; rightMin: number; rightMax: number; rightTicks: number[]; hasRightAxis: boolean; xKeys: ChartX[]; allKeys: ChartX[]; start: number; end: number; xPositions: number[]; xTickIndices: number[]; plottedSeries: Array<{ source: FinancialSeries; points: ChartPoint[] }>; plottedCandles: ChartCandlePoint[]; x: (key: ChartX, index: number) => number; y: (value: number, axis?: ChartAxis) => number }
+export interface FinancialChartModel { geometry: FinancialGeometry; min: number; max: number; yTicks: number[]; rightMin: number; rightMax: number; rightTicks: number[]; hasRightAxis: boolean; xKeys: ChartX[]; allKeys: ChartX[]; start: number; end: number; xPositions: number[]; xTickIndices: number[]; plottedSeries: Array<{ source: FinancialSeries; points: ChartPoint[]; /** Overlay series only: the y of the value zero, where bars start. */ zeroY?: number }>; plottedCandles: ChartCandlePoint[]; x: (key: ChartX, index: number) => number; y: (value: number, axis?: ChartAxis) => number }
 
 /**
  * What the x axis IS, when the caller did not say.
@@ -47,11 +55,16 @@ export function resolveXType(
   return 'number';
 }
 
-export function financialGeometry(width: number, height: number, axisGutter = 52, rightGutter = 12): FinancialGeometry {
+export function financialGeometry(width: number, height: number, axisGutter = 52, rightGutter = 12, axisSide: ChartAxis = 'left'): FinancialGeometry {
   const w = Math.max(1, width), h = Math.max(1, height);
+  const top = 12, bottom = Math.max(top + 1, h - 34);
+  if (axisSide === 'right') {
+    const strip = Math.max(52, Math.min(axisGutter, w * 0.34)), margin = Math.min(8, w * 0.1);
+    const edge = Math.max(margin + 1, w - strip);
+    return { width: w, height: h, left: margin, right: edge, top, bottom, plotWidth: edge - margin, plotHeight: bottom - top, axisSide: 'right' };
+  }
   const left = Math.max(52, Math.min(axisGutter, w * 0.34));
   const right = Math.max(left + 1, w - Math.max(12, Math.min(rightGutter, w * 0.34)));
-  const top = 12, bottom = Math.max(top + 1, h - 34);
   return { width: w, height: h, left, right, top, bottom, plotWidth: right - left, plotHeight: bottom - top };
 }
 function numericX(key: ChartX): number { if (typeof key === 'number') return key; const parsed = Number(key); return Number.isFinite(parsed) ? parsed : Date.parse(key); }
@@ -99,7 +112,7 @@ function domain(values: number[], zero: boolean): [number, number] {
   const padding = rawMax > rawMin ? (rawMax - rawMin) * 0.12 : Math.max(Math.abs(rawMax) * 0.05, 0.01);
   return [zero ? Math.min(0, rawMin) : rawMin - padding, zero ? Math.max(0.01, rawMax + padding) : rawMax + padding];
 }
-export function buildFinancialChartModel(data: FinancialChartData, width: number, height: number, axisGutter = 52, viewport?: FinancialViewport, rightGutter = 52): FinancialChartModel {
+export function buildFinancialChartModel(data: FinancialChartData, width: number, height: number, axisGutter = 52, viewport?: FinancialViewport, rightGutter = 52, axisSide: ChartAxis = 'left'): FinancialChartModel {
   // Build-local identities: shared ISO keys recur across series and stacking.
   // Numeric/category keys already have cheap conversions; do not cache them.
   const identities = new Map<string, string>();
@@ -115,7 +128,7 @@ export function buildFinancialChartModel(data: FinancialChartData, width: number
   const xKeys = allKeys.slice(start, end), visibleIds = new Set(xKeys.map(key => identify(key)));
   const sources = data.series ?? [], candles = (data.candles ?? []).filter(c => validCandle(c) && visibleIds.has(identify(c.t)));
   const hasRightAxis = sources.some(s => s.axis === 'right');
-  const geometry = financialGeometry(width, height, axisGutter, hasRightAxis ? rightGutter : 12);
+  const geometry = financialGeometry(width, height, axisGutter, hasRightAxis ? rightGutter : 12, axisSide);
   const indexByKey = new Map(xKeys.map((key, i) => [identify(key), i]));
   const visibleSeries = sources.map(source => ({ source, points: source.points.filter(p => visibleIds.has(identify(p[0])) && Number.isFinite(p[1])) }));
   const leftValues = candles.flatMap(c => [c.h, c.l]).filter(Number.isFinite), rightValues: number[] = [];

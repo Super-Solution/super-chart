@@ -141,14 +141,15 @@ const fibonacci: AnnotationTemplate = {
   anchors: 2,
   create: input => {
     const [a, b] = input.anchors
-    // The first anchor is level 0 and the second level 1, so a retracement drawn low-to-high reads 0 at the low.
+    // Like the Fibonacci drawing tool: level 0 sits at the second anchor (where the move ended) and level 1 at the first (where it began),
+    // so a retracement of a leg anchored start-then-end reads 0.382 as a 38.2% pullback from the end.
     const left = Math.min(a.x, b.x), right = Math.max(a.x, b.x)
     const extendRight = paramFlag(input.params, 'extend', false)
     const edge = extendRight ? input.bounds.right : right
     const figures: AnnotationFigure[] = [{ type: 'line', from: a, to: b, dash: [2, 3], width: 1 }]
     const showPrice = paramFlag(input.params, 'prices', true)
     for (const level of fibonacciLevels(input.params)) {
-      const price = a.price + (b.price - a.price) * level
+      const price = b.price + (a.price - b.price) * level
       const projected = input.project(a.time, price)
       if (projected === null) continue
       figures.push({ type: 'line', from: { x: left, y: projected.y }, to: { x: edge, y: projected.y }, width: level === 0 || level === 1 ? 1.5 : 1 })
@@ -173,7 +174,8 @@ const plan: AnnotationTemplate = {
     const left = Math.min(entry.x, target.x), right = Math.max(entry.x, target.x), width = right - left
     const long = target.price > entry.price
     const valid = target.price !== entry.price && (long ? stop.price < entry.price : stop.price > entry.price)
-    if (!valid || width < 1) return [{ type: 'text', x: entry.x + 6, y: entry.y - 10, text: 'Invalid plan: the stop must sit opposite the target' }]
+    if (!valid) return [{ type: 'text', x: entry.x + 6, y: entry.y - 10, text: 'Invalid plan: the stop must sit opposite the target' }]
+    if (width < 1) return [{ type: 'text', x: entry.x + 6, y: entry.y - 10, text: 'Invalid plan: entry and target need different times' }]
     const win = Math.abs(target.price - entry.price), risk = Math.abs(entry.price - stop.price)
     const percent = (price: number): string => `${price >= entry.price ? '+' : '-'}${(Math.abs(price - entry.price) / Math.abs(entry.price) * 100).toFixed(2)}%`
     const ratio = risk > 0 ? win / risk : Infinity

@@ -9,7 +9,7 @@ upstream renderer, overlay registry, figure type or runtime import is required.
 | --- | --- | ---: | --- |
 | segment | segment | 2 | Bounded trend segment |
 | rayLine | ray | 2 | Ray from A through B |
-| straightLine | trend-line | 2 | Line extended in both directions |
+| straightLine | trend-line | 2 | Line extended in both directions (labelled "Extended line"; the "Trend line" tool is `segment`) |
 | horizontalStraightLine | horizontal | 1 | Horizontal price level |
 | horizontalRayLine | horizontal-ray | 1 | Price level extending right |
 | horizontalSegment | horizontal-segment | 2 | Bounded level; equal retained prices |

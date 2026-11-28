@@ -100,6 +100,8 @@ export interface DrawingSnapshot {
   readonly selectedId: string | null
   readonly canUndo: boolean
   readonly canRedo: boolean
+  /** The view hides every drawing (a display switch, not part of the document, history or export). */
+  readonly viewHidden: boolean
 }
 
 const LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] as const
@@ -562,11 +564,12 @@ export function mergeDrawingDocuments (local: string, remote: string): string | 
 export class DrawingStore {
   private drawings: readonly Drawing[] = Object.freeze([])
   private selectedId: string | null = null
+  private viewHidden = false
   private past: Array<readonly Drawing[]> = []
   private future: Array<readonly Drawing[]> = []
   private readonly listeners = new Set<() => void>()
   private readonly historyLimit: number
-  private snapshot: DrawingSnapshot = Object.freeze({ drawings: this.drawings, selectedId: null, canUndo: false, canRedo: false })
+  private snapshot: DrawingSnapshot = Object.freeze({ drawings: this.drawings, selectedId: null, canUndo: false, canRedo: false, viewHidden: false })
 
   constructor (options: { historyLimit?: number } = {}) {
     const limit = options.historyLimit ?? 50
@@ -616,7 +619,15 @@ export class DrawingStore {
     return true
   }
 
+  /** Hide or show every drawing without touching the document: nothing is drawn, hit or selected while hidden; undo history and export are unchanged. */
+  setViewHidden (hidden: boolean): boolean {
+    if (hidden === this.viewHidden) return false
+    this.viewHidden = hidden; this.publish()
+    return true
+  }
+
   select (id: string | null): boolean {
+    if (this.viewHidden && id !== null) return false
     if (id !== null && !this.drawings.some(item => item.id === id && !item.hidden)) return false
     if (id === this.selectedId) return false
     this.selectedId = id; this.publish()
@@ -657,6 +668,7 @@ export class DrawingStore {
   geometry (project: DrawingProjector, bounds: DrawingBounds, context?: DrawingContext): DrawingGeometry[] {
     validBounds(bounds)
     const result: DrawingGeometry[] = []
+    if (this.viewHidden) return result
     for (const value of this.drawings) {
       const geometry = projectDrawing(value, project, bounds, context)
       if (geometry !== null) result.push(geometry)
@@ -678,8 +690,8 @@ export class DrawingStore {
   }
 
   private publish (): void {
-    if (!this.drawings.some(item => item.id === this.selectedId && !item.hidden)) this.selectedId = null
-    this.snapshot = Object.freeze({ drawings: this.drawings, selectedId: this.selectedId, canUndo: this.past.length > 0, canRedo: this.future.length > 0 })
+    if (this.viewHidden || !this.drawings.some(item => item.id === this.selectedId && !item.hidden)) this.selectedId = null
+    this.snapshot = Object.freeze({ drawings: this.drawings, selectedId: this.selectedId, canUndo: this.past.length > 0, canRedo: this.future.length > 0, viewHidden: this.viewHidden })
     for (const listener of [...this.listeners]) {
       try { listener() } catch (error) { console.warn('[super-chart] Drawing observer failed', error) }
     }

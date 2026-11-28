@@ -3,6 +3,117 @@
 Releases of the five `@supersolutions/super-chart-*` packages, which share one version. Older releases are in the git
 history (`git log --oneline`, one commit per release). Nothing here is published by this repository's commits.
 
+## Unreleased
+
+- Saving a workspace with more than 64 indicators said only "Invalid workspace indicators"; it now says the limit and how many there are.
+
+- **No more two-row market bar**: between about 780 and 1150px wide the regular layout wrapped its last buttons (the command palette button, then Replay and Objects) onto a second row. The `compact` breakpoint moves from 780 to 1040px, and in the regular layout an `auto` interval bar that would wrap now gives way to the dropdown, so the market bar is one row at every width. Hosts that set `ui.layout` explicitly are unaffected.
+
+- **Fixed: a workspace could not save itself**: `exportDocument()` threw "Unknown or missing render options property" because the legend title, legend fold label and watermark the workspace itself puts on the canvas were treated as unknown saved options, and a restore dropped them. They are now rebuilt for the restored market (and the fold is kept); a saved document carries only the viewer's choices: `gridLines`, `legend` and a hidden watermark (`watermark: null`). A restored document with no `watermark` key shows the watermark.
+
+- **Replay from this bar**: right-clicking the plot offers "Replay from this bar", which starts replay at the bar under the pointer (the way TradingView's bar picker does) instead of only a count from the end. It is left out while replaying, before data is ready and in a price-driven style.
+
+- **Appearance settings in the Chart menu**: a Grid lines choice (horizontal, vertical, both, none) and Watermark and Legend switches, as in TradingView's chart settings, with matching palette commands and `setWatermarkVisible()` / `setLegendVisible()` on the workspace. New core render option `gridLines` (default `'horizontal'`, the previous look); vertical lines sit at the time-axis ticks and are left off indicator panes. A hidden watermark stays hidden across symbol and interval changes; a watermark the host supplied is not touched.
+
+- **Shift keeps a line straight**: holding Shift while placing or dragging the end of a segment, ray, trend line or arrow snaps it to horizontal, vertical or 45 degrees from its other end.
+
+- `Alt+H`, `Alt+J` and `Alt+V` draw the horizontal line, horizontal ray and vertical line at the mouse position at once (selected), as other charting tools do, instead of arming the tool and waiting for a click. Off the plot they arm the tool as before.
+
+- **Type an interval on the chart**: with the chart focused, a digit now opens the command palette with an interval command (`15`, `240`, `4h`, `1D`, `1W`; a bare number is minutes and 60 or more that divide evenly become hours) and Enter switches to it when the feed supports it. A letter still opens the symbol search. Before, a digit started a symbol search too.
+
+- Chat plugin: `chart_annotate` told an agent that sent a date string as an anchor time only "anchors need a finite time"; it now adds that time is milliseconds since the epoch, as a number.
+
+- **Copy and paste a drawing**: `Ctrl/Cmd+C` with a drawing selected, `Ctrl/Cmd+V` puts a copy 14 px further each time, selected (one undo step per paste). Nothing happens without a selected drawing, so the browser's own copy still works elsewhere.
+
+- The pointer cursor says what is under it: a crosshair while a drawing tool is armed or a shape is being placed, a hand over a drawing, a grab over one of its points (and while one is dragged). The axes keep their resize cursors.
+
+- **Fold the legend**: with many indicators the legend can fold its indicator rows into one line ("6 indicators"): a third button beside an indicator's row, a palette command, `workspace.setLegendCollapsed(collapsed)` / `isLegendCollapsed()`, or `render.legendCollapsed` (core; `legendCollapsedLabel` sets the words, `{count}` for the number).
+
+- Compare lines use colours that read on the light theme too (the yellow and light green were under 2:1 on white; all six are now at least 3:1 on both surfaces), and a new line takes the first colour not already in use after one was removed.
+
+- **Changed:** an agent `fibonacci` mark now measures from the second anchor (level 0) back to the first (level 1), the way the Fibonacci tool and other charting tools do. It used to put 0 at the first anchor, so an agent that anchored on a leg's start and end got every pullback level mirrored (0.382 read as 61.8%). Anchor the first point on where the move began and the second where it ended; the tool description says so.
+
+- Compare: a feed that serves fewer bars per request than the chart shows is asked further back until the shown range is covered (the line used to stop short), and starting replay no longer refetches the other market (its line disappeared while replaying). The chart's own times still cut the line at the replayed bar, so nothing from the future shows.
+
+- Drawings: **Clone** and **Hide** are in the drawing's right-click menu, and a clone is now placed 14 px to the side (it used to land exactly on the original, so cloning looked like nothing happened). Web: `chart.offsetAnchors(anchors, dx?, dy?)`.
+
+- Chat plugin: `chart_state` lists `notShown` marks (outside the view, with the reason) too, not only `chart_annotate`.
+
+- A `plan` whose entry and target share one time now says so ("entry and target need different times") instead of blaming the stop; the chat plugin warns `plan_no_width` and the tool description says the plan spans from the entry time to the target time.
+
+- Agent marks read cleaner: the labels of fibonacci levels and other template marks stay clear of the legend and of each other (moved sideways, level with their price), and two marks at one price share one axis tag instead of a stack of identical ones.
+
+- Chat plugin: new `draft` tool `chart_compare` (`add`, `remove`, `list`) overlays another market on a chart that has a feed.
+
+- **Copy chart image** (right-click menu and palette): the same picture as the camera button, put on the clipboard as a PNG. A browser without image clipboard access says so.
+
+- **Compare with another symbol**: `workspace.addCompare(symbol)`, `removeCompare(id)`, `listCompares()` and a palette command lay another market over the chart, rebased to start at the chart's price (relative performance on one scale). It is a line indicator, so it can be hidden or removed like one. Fetched from the datafeed for the loaded range; refreshed on market change, on older bars and every 30 seconds (not streamed). Core: `rebaseCompare`.
+
+- Chat plugin: new read tool `chart_swings` returns the latest swing highs and lows (time and price of real bars, alternating) and the last leg, so trend lines, fibonacci retracements and plans are anchored on real turning points. Core: `swingPivots(bars, { strength, lookback })`, exported next to `supportResistance`.
+
+- Chat plugin: `chart_annotate` warns `near_duplicate` when two `level` marks of one call sit within 0.1% of each other.
+
+- Right-clicking the time axis opens a time menu (go to date, reset, latest) instead of the price commands. The palette lists **Hide drawings**.
+
+- **Go to date** (`Alt+G`, or the palette command): opens the palette on the latest bar's date, selected; type `2026-03-01` or `2026-03-01 14:30` (axis time zone) and Enter to move the view to the nearest loaded bar. A date outside the loaded bars says so. Running any palette command now returns focus to the chart first, so shortcuts keep working afterwards.
+
+- The command palette leads with a **Recent** group (the last five commands run) when the query is empty. The demo workspace takes `?locale=zh-TW`.
+
+- **Hide drawings** (eye button in the rail, and a palette command): hides every drawing at once without changing the document, undo history or export. Arming a drawing tool shows them again. Core: `DrawingStore.setViewHidden()` and `viewHidden` on the snapshot. On windows shorter than 860 px the rail's buttons shrink (34 px, then 30 px) so every tool stays in reach.
+
+- Six more indicators in the technical pack: `SC_PPO`, `SC_CHAIKIN_OSC`, `SC_DPO`, `SC_LINREG` (regression channel), `SC_FISHER`, `SC_STDEV`; kernels in `taExtra.ts`, built on `ta.ts`. The catalogue is now 66 names. They exist in the TypeScript engine only (the Go and Python servers keep their 33 kernels).
+
+- Hovering an indicator's row in the legend shows **settings** (opens the Indicators menu) and **remove** beside it. Core: price-pane legend entries now carry the indicator `id`. The replay bar uses icon buttons (previous, next, play or pause) and a clearer Exit.
+
+- Quick measure: hold **Shift** and drag on the plot to measure between two bars: price change, percentage, bars and time, in a tinted box with a label. It stays (glued to its bars when the view moves) until the next ordinary press or Escape. Nothing is drawn into the document.
+
+- Chat plugin: `chart_annotate` warns (`invalid_plan`, `flat_range`) about marks that draw as a note or with no height. A level chip that would sit under the legend moves to the right end of its line.
+
+- New colour token `drawing` (TradingView-style blue, `#2962ff` on light and `#4d86ff` on dark; the colour-blind themes keep ink, since blue is their up colour). A drawing with no colour of its own takes it, replacing the ink colour used before. A drawing's own style, the chart's `color` option and a registered theme's token still win. Held at 3:1 on the surface by a test.
+
+- The first tool of the Lines group, and `Alt+T`, now draw a **trend line** (a segment between two points), as in other charting tools. The line that runs on past both points is labelled **Extended line**; both still exist and keep their types (`segment`, `trend-line`).
+- `?` opens the command palette, which lists every command with its shortcut.
+
+- `supportResistance(bars, options)` (core): swing pivots clustered into support and resistance levels, ranked by distance from the last close. Pure, OHLC only. It backs the new `SC_SR` indicator (three lines each side, family "levels") and the chat plugin's `chart_levels` read tool, so an agent draws at prices where price turned.
+- Indicator rows in the workspace read `Moving Average (20)` rather than `Moving Average 20`.
+
+- `render.watermark` (`{ title, subtitle? }` or `null`): a faint background ticker like TradingView's. The workspace sets it to the symbol and "name, interval" by default; pass `render: { watermark: null }` to switch it off. Indicator panes do not paint it.
+
+Changed (default behaviour; every item has a setting to get the old look back)
+
+* **The price axis is on the right** (`layout.axisSide`, `'left'` restores it) and the time axis keeps its row.
+* **Volume is a bottom band of the price pane** (indicator pane `'overlay'`, `layout.overlayRatio` 0.05–0.5, default
+  0.2) with its own scale, not a separate pane. `{ pane: 'separate' }` on the VOL indicator restores the pane.
+* **A legend sits over the plot at all times**: symbol and interval, open, high, low, close and the change for the latest
+  bar (or the bar under the pointer), then one row per price-pane indicator in the colour of its line. It reads real
+  prices in log and percentage scales. `render.legend: false` removes it; `render.legendTitle` names the chart.
+* **Candles are solid** (hollow styles stay available as chart types).
+* **Replay moved to the market bar**; the footer holds the quick ranges, a live clock, the time-zone menu and the
+  `%` / `log` / `auto` scale switches.
+* The bar-close countdown is a second tag under the last-price tag (`chart.setLastPriceCaption(text)`).
+
+Added
+
+* **Quick ranges** (1D, 5D, 1M, 3M, 6M, YTD, 1Y, 5Y, All): `workspace.showRange(range)`, `WORKSPACE_RANGES`,
+  `isWorkspaceRange`, palette commands `view.range.*`. Month and year ranges are calendar ranges; older pages are
+  requested until the range is covered.
+* **Chart-type menu** with a picture of each type, **searchable indicator list**, `Copy price` and `Draw a horizontal line
+  at <price>` in the plot's context menu, a context menu for the price axis (automatic range, scale mode, invert).
+* **Dragging the plot up or down moves the price range** (the range turns manual; the Auto switch or a double click on the
+  axis brings it back).
+* **The workspace registers the indicator packs by default** (about 50 indicators; `indicators: { catalog: false }` for the
+  built-ins only), grouped by family and searchable by name, long name, keyword or Chinese name. Core exports
+  `INDICATOR_INFO`, `indicatorInfo`, `indicatorLabel`, `indicatorShortName`, `searchIndicators`. The chat plugin no longer
+  registers the packs itself, and legend rows and pane titles use the short name (`ATR 14`, not `SC_ATR`).
+* **Alt hotkeys** like other charting tools: Alt+T trend line, Alt+H horizontal line, Alt+J horizontal ray, Alt+V vertical
+  line, Alt+F Fibonacci, Alt+I pitchfork, Alt+Shift+R rectangle, Alt+R reset the view, Alt+S save a PNG (by physical key, shown
+  in the palette).
+* **Each indicator pane has a legend** with its short title and the value of every line at the latest bar or under the pointer.
+* **Agent marks**: times written as Unix seconds are corrected to milliseconds (and the agent is told), `chart_annotate`
+  returns `notShown` with a reason for any mark outside the view, `chart_state` returns the reach of the data (`data`: first and
+  last bar, recent price range, last close), and labels that would overlap move sideways so each stays level with its price.
+* `chart.zoneAt(clientX, clientY)` names the part of the chart under a point (`plot`, `price-axis`, `time-axis`).
+
 ## 0.13.1
 
 Changed

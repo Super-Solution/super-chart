@@ -7,6 +7,8 @@ export interface PaletteHost {
   readonly root: HTMLElement
   readonly t: () => Translator
   readonly commands: () => WorkspaceCommand[]
+  /** Commands made from what was typed (a date to go to); listed before the matches, never when the query is empty. */
+  readonly suggest?: (query: string) => WorkspaceCommand[]
   readonly listen: (target: EventTarget, type: string, listener: EventListener) => void
   /** Run a command and surface its error; the palette closes first. */
   readonly run: (command: WorkspaceCommand) => void
@@ -23,6 +25,8 @@ export class CommandPalette {
   private shown: WorkspaceCommand[] = []
   private active = 0
   private returnFocus: HTMLElement | null = null
+  /** Ids of the commands last run, newest first: the empty palette leads with them. */
+  private recent: string[] = []
 
   constructor (private readonly host: PaletteHost) {
     const { doc } = host
@@ -62,11 +66,12 @@ export class CommandPalette {
     if (this.isOpen) this.render()
   }
 
-  open (query = ''): void {
+  open (query = '', selectAll = false): void {
     this.host.closeOthers()
     const active = this.host.doc.activeElement
     this.returnFocus = active instanceof this.host.doc.defaultView!.HTMLElement ? active : null
     this.input.value = query; this.active = 0; this.panel.hidden = false; this.render(); this.input.focus()
+    if (selectAll) this.input.select()
   }
 
   close (restoreFocus = true): void {
@@ -78,7 +83,14 @@ export class CommandPalette {
 
   private render (): void {
     const t = this.host.t()
-    this.shown = filterCommands(this.host.commands(), this.input.value)
+    const commands = this.host.commands(), all = filterCommands(commands, this.input.value)
+    if (this.input.value.trim() === '' && this.recent.length > 0) {
+      // The empty list is cut to its first commands, so look the recent ones up in the whole list.
+      const byId = new Map(commands.map(command => [command.id, command] as const))
+      const head = this.recent.flatMap(id => { const command = byId.get(id); return command === undefined ? [] : [{ ...command, group: t('palette.group.recent') }] })
+      const ids = new Set(head.map(command => command.id))
+      this.shown = [...head, ...all.filter(command => !ids.has(command.id))]
+    } else this.shown = this.input.value.trim() === '' || this.host.suggest === undefined ? all : [...this.host.suggest(this.input.value), ...all]
     this.active = Math.min(this.active, Math.max(0, this.shown.length - 1))
     this.status.textContent = this.shown.length === 0 ? t('palette.empty') : ''
     const items: HTMLLIElement[] = []
@@ -109,7 +121,9 @@ export class CommandPalette {
   private choose (index: number): void {
     const command = this.shown[index]
     if (command === undefined) return
-    this.close(false)
+    // Focus goes back first, so shortcuts keep working afterwards; a command that opens something takes focus itself.
+    this.close()
+    this.recent = [command.id, ...this.recent.filter(id => id !== command.id)].slice(0, 5)
     this.host.run(command)
   }
 

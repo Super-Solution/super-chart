@@ -16,7 +16,16 @@ const high = bars.map(b => b.high), low = bars.map(b => b.low), close = bars.map
 describe('the 0.13 indicator definitions', () => {
   it('every registered name has exactly one definition, and the new ten are present', () => {
     expect(TECHNICAL_INDICATOR_DEFINITIONS.map(d => d.name).sort()).toEqual([...TECHNICAL_INDICATOR_NAMES].sort())
-    for (const name of ['SC_AROON', 'SC_CMF', 'SC_ADL', 'SC_FORCE', 'SC_VORTEX', 'SC_TSI', 'SC_ULTIMATE', 'SC_ZIGZAG', 'SC_PIVOTS', 'SC_CHANDELIER']) expect(definition(name), name).toBeDefined()
+    for (const name of ['SC_AROON', 'SC_CMF', 'SC_ADL', 'SC_FORCE', 'SC_VORTEX', 'SC_TSI', 'SC_ULTIMATE', 'SC_ZIGZAG', 'SC_PIVOTS', 'SC_CHANDELIER', 'SC_SR', 'SC_PPO', 'SC_CHAIKIN_OSC', 'SC_DPO', 'SC_LINREG', 'SC_FISHER', 'SC_STDEV']) expect(definition(name), name).toBeDefined()
+  })
+  it('SC_SR draws flat levels on the right side of the last close and rejects a bad strength', () => {
+    const last = bars[bars.length - 1].close
+    const above = column('SC_SR', 'r1'), below = column('SC_SR', 's1')
+    expect(new Set(above).size).toBe(1)
+    expect(new Set(below).size).toBe(1)
+    if (above[0] !== null) expect(above[0]).toBeGreaterThan(last)
+    if (below[0] !== null) expect(below[0]).toBeLessThanOrEqual(last)
+    expect(() => column('SC_SR', 'r1', [0])).toThrow(RangeError)
   })
   it('their rows are the kernels, row key by row key, with the documented defaults', () => {
     expect(column('SC_AROON', 'up')).toEqual(ta.aroon(high, low, 14).up)
@@ -48,7 +57,7 @@ describe('the 0.13 indicator definitions', () => {
     expect(() => column('SC_VWAP', 'vwap', [9])).toThrow(/SC_VWAP anchor must be/)
   })
   it('puts price-scale indicators on the price pane and oscillators in their own', () => {
-    for (const name of ['SC_ZIGZAG', 'SC_PIVOTS', 'SC_CHANDELIER']) expect(definition(name).pane, name).toBe('price')
-    for (const name of ['SC_AROON', 'SC_CMF', 'SC_ADL', 'SC_FORCE', 'SC_VORTEX', 'SC_TSI', 'SC_ULTIMATE']) expect(definition(name).pane, name).toBe('separate')
+    for (const name of ['SC_ZIGZAG', 'SC_PIVOTS', 'SC_CHANDELIER', 'SC_SR', 'SC_LINREG']) expect(definition(name).pane, name).toBe('price')
+    for (const name of ['SC_AROON', 'SC_CMF', 'SC_ADL', 'SC_FORCE', 'SC_VORTEX', 'SC_TSI', 'SC_ULTIMATE', 'SC_PPO', 'SC_CHAIKIN_OSC', 'SC_DPO', 'SC_FISHER', 'SC_STDEV']) expect(definition(name).pane, name).toBe('separate')
   })
 })

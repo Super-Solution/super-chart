@@ -30,8 +30,11 @@ Below the groups are two modes and the actions on the selection:
 | Control | Does |
 | --- | --- |
 | Magnet | While on, a point you place or drag snaps to the open, high, low or close of a bar within 24 px (`chart.setDrawingMagnet(true)`; off by default). Whole-drawing moves never snap. Holding **Ctrl** (Command on a Mac) flips it while held: snap with the magnet off, place freely with it on. |
+| Shift | While drawing or dragging the end of a straight line (segment, ray, trend line, arrow), the end snaps to horizontal, vertical or 45 degrees from the other end, measured in pixels. Other shapes ignore it. |
+| Hide drawings | The eye button hides every drawing without changing the document: nothing is drawn, hit or selected, and undo history and export stay as they are (`chart.drawings.setViewHidden(true)`; `viewHidden` on the snapshot). Arming a tool shows them again. |
 | Keep drawing | Re-arms the tool after each completed drawing; Escape ends it. Built on `chart.onToolComplete(reason)`, where `reason` is `'completed'` or `'cancelled'`. |
 | Lock / Delete | Act on the selected drawing. |
+| `Ctrl/Cmd+C`, `Ctrl/Cmd+V` | Copy the selected drawing and paste it; each paste lands 14 px further, selected. |
 | Remove all | Removes every unlocked drawing in one undoable step. |
 
 The rail shows at `regular` and `compact` widths; `narrow` keeps the Tools
@@ -365,14 +368,15 @@ new ChartWorkspace(host, {
   shows icons and moves secondary actions into a More menu, `narrow` also folds
   the drawing tools behind a Tools button, shows the intervals as one dropdown
   and keeps the market bar to one row (see below). `auto` follows the workspace's own width (`LAYOUT_BREAKPOINTS`:
-  narrow below 560px, compact below 780px), not the window's. `getLayout()`
+  narrow below 560px, compact below 1040px, where the labelled bar no longer fits on one row), not the window's. `getLayout()`
   returns the class in effect. With the rail, `compact` also moves undo/redo into
   More; `narrow` has no rail.
 - `intervals: 'select'` renders the period list as a dropdown at any width;
   `'bar'` keeps buttons; `'auto'` picks the bar unless the layout is `narrow` or the
-  bar does not fit: in `compact` the market bar never wraps, so `auto` looks at the
+  bar does not fit: in `compact` the market bar never wraps and in `regular` a bar that wrapped onto a
+  second row would look broken, so `auto` looks at the
   bar after the other parts are placed and uses the dropdown when the buttons would be
-  clipped or scrolled out of sight (`resolveIntervalControl(control, layout, fits)`).
+  clipped, scrolled out of sight or wrapped (`resolveIntervalControl(control, layout, fits)`).
   Only `'bar'` set by the host can still overflow.
 
 **Phone widths (`narrow`).** The market bar is one row: Tools, the symbol (shortened
@@ -422,7 +426,8 @@ own picker.
   remover; registering the same `id` replaces. A command's `when()` can hide it,
   `run` may be async. `listCommands()` returns what is currently available.
   `commands: { enabled: false }` removes the palette and its shortcut;
-  `shortcut: false` keeps the palette but drops Ctrl/Cmd+K.
+  `shortcut: false` keeps the palette but drops Ctrl/Cmd+K. With an empty query the palette leads
+  with a **Recent** group: the last five commands run in this workspace (not stored across loads). **Go to date** (`Alt+G`) opens it on the latest bar's date; a typed date such as `2026-03-01 14:30` (axis time zone) becomes a `Go to …` command that moves the view to the nearest loaded bar and says when the date is outside the loaded range. **Typing on the chart** starts a search, as on other charts: a letter opens the symbol search, a digit opens this palette with an interval command (`15` is 15 minutes, `240` is 4 hours, `4h`, `1D`, `1W`), and Enter switches to it when the feed supports that interval.
 - Right-click on the chart opens a menu. Over a drawing it offers lock/unlock and
   delete (a locked drawing cannot be deleted); everywhere it offers fit the price
   scale, reset the view, jump to the latest bar, remove all drawings (when there
@@ -433,6 +438,25 @@ own picker.
 - The object tree (Objects) lists indicators, drawings and host annotations with
   show/hide, lock and remove. Host annotations are listed read-only: the host owns
   them.
+
+## Compare with another symbol
+
+`addCompare(symbol)` lays another market over the chart (palette: **Compare with another symbol…**, which opens the
+built-in symbol list even when the host handles symbol search itself). The other market's closes are rebased to start at
+the chart's own price at the first bar both have, so the two lines show relative performance on one scale (in percentage
+mode both read as a change from that bar). It is a line indicator named `Compare TICKER · EXCHANGE`: the Indicators list,
+legend and Objects tree hide or remove it, and `removeCompare(id)` / `listCompares()` do the same from code. Up to 6.
+
+- The bars come from the host's datafeed (`getHistoryKLineData`) for the range loaded. They are fetched again when the
+  market changes (a comparison that becomes the chart's own market is dropped), when older bars load, and every 30 seconds
+  for the latest bars. The feed's single live subscription belongs to the chart's own market, so a compare line is
+  refreshed, not streamed.
+- A gap or a slower period carries the last close forward; before the other market's first bar the line is not drawn.
+- The legend shows the rebased value, not the other market's own price. A feed that serves fewer bars per request than
+  the chart shows is asked further back (up to 12 requests) until the shown range is covered; where the feed has no
+  history the line is not drawn. While replay runs the other market is not fetched again, and the chart's own times cut
+  its line at the replayed bar.
+- Core: `rebaseCompare(main, other)` is the pure alignment and rebasing.
 
 ## Scale bar
 
@@ -662,3 +686,39 @@ Limits, deliberately:
 - The point and figure render type (`chartType: 'point-figure'`) needs `pointFigureBox`, the price height of a box, and is
   refused without it; the price mode sets both. It is left out of the chart-type select and is not saved in workspace
   documents, which also keep the chart type that Kagi borrowed (step line) out of the file.
+
+## The default layout
+
+A chart with no options looks and behaves like the charting tools people already know, and every part can be changed.
+
+- **Price axis on the right** (`layout.axisSide: 'left' | 'right'`, default `'right'`). The strip is as wide as the widest
+  label needs, at least 52px. `axisStrip(geometry)` in core says where it is; the labels, the last-price tag, the cursor
+  tag, annotation tags and the axis hit area all read it, so a host layer that paints beside the axis should too.
+- **Volume as a band** at the foot of the price pane (`pane: 'overlay'`, `layout.overlayRatio`), on its own scale and
+  never part of the price range, drawn behind the candles. Any indicator that returns bars can use `'overlay'`.
+- **Legend** over the plot (`render.legend`, `render.legendTitle`): title, O H L C and the change for the latest bar or
+  the bar under the pointer, then one row per price-pane indicator. Below 400px of plot width it keeps the close only.
+  It is drawn on the cursor layer, so a pointer move repaints only it. Real prices, whatever the axis mode. Many
+  indicators make it tall: the third button beside an indicator's row (or the palette command **Fold the indicator
+  list**, or `workspace.setLegendCollapsed(true)` / `render.legendCollapsed`) folds the rows into one line ("6 indicators")
+  and the same button on that line unfolds them. The quote row always stays.
+- **Market bar**: symbol, intervals, chart-type menu (with a picture per type), Chart settings, Indicators (search, then
+  add), Replay, Objects. **Footer**: quick ranges, a live clock, time zone, `%`, `log`, Auto, and Load older.
+- **Context menus**: over the plot — copy the price, draw a horizontal line there, fit, reset, latest, palette,
+  search, start Replay from the bar under the pointer, copy the chart as an image (over a drawing, also lock, clone, hide and delete it); over the price axis — automatic range, linear / log / percentage, invert; over the time axis — go to date,
+  reset, latest.
+- **Dragging** the plot moves time and, once the drag is clearly vertical, the price range (it turns manual); dragging the
+  axis scales it; a double click on the axis returns to automatic.
+- **Indicators**: the workspace registers the technical and classic packs next to the seven built-ins (`indicators: { catalog:
+  false }` keeps only the built-ins), about 50 in all. The menu lists them by family (trend, momentum, volatility, volume,
+  levels) and searches name, long name, keywords and Chinese names (`searchIndicators`, `indicatorInfo` in core); an
+  indicator that only repeats another (`SC_RSI` and `RSI`) is not listed twice. A bare `EngineChart` still registers a pack
+  only when told to.
+- **Hotkeys** (hold Alt; by physical key): T trend line, H horizontal line, J horizontal ray, V vertical line, F Fibonacci
+  retracement, I pitchfork, Shift+R rectangle, R reset the view, S save a PNG. `HOTKEYS` lists them; the palette shows each
+  one beside its command. They do nothing while an input or select has focus.
+- **Watermark.** The symbol sits large and faint behind the candles with the market name and interval under it. It is a render option (`render.watermark`), so a host can replace the text or turn it off; the viewer can hide it from the Chart menu (Watermark) without touching the host's option, and the Chart menu also holds Grid lines (`render.gridLines`: horizontal, vertical, both or none) and Legend (`render.legend`).
+- **Shortcuts.** `Alt+T` arms the trend line and so on (listed beside each command in the palette). The one-point drawings, `Alt+H` (horizontal line), `Alt+J` (horizontal ray) and `Alt+V` (vertical line), are put where the mouse points at once, as in other charting tools; with the mouse off the plot they arm the tool instead. `?` opens the palette, so the list is one key away. Shortcuts do nothing while a field has focus.
+- **Drawing colour.** New drawings are blue (the `drawing` token), not white, so they stand apart from price and from text. Change it for one drawing with the style bar, for all of them with the `color` render option, or per theme through a registered colour set. Violet stays the assistant's colour.
+- **Quick measure.** Shift and drag on the plot (cursor tool, mouse) shows the price change, its percentage, the bars spanned and the elapsed time between the two bars, in a box tinted by direction. It is not a drawing: it is not saved or undone, stays put when you pan or zoom, and goes on the next plain press or Escape. For a measure that is kept, use the Price range tool.
+- **Legend actions.** Point at an indicator's row in the legend and two buttons appear beside it: settings (opens the Indicators menu, where the parameters are edited) and remove. They show for a mouse only; on touch use the Indicators menu.

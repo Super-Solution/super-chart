@@ -18,6 +18,8 @@ interface Drag {
 }
 
 let nextId = 0
+/** The drawings that are one straight line between two points, which Shift keeps horizontal, vertical or diagonal. */
+const STRAIGHT_LINES: ReadonlySet<DrawingType> = new Set<DrawingType>(['segment', 'ray', 'trend-line', 'arrow'])
 
 /** Drawing edits are user transactions: previews never enter retained state or undo history. */
 export function attachDrawingInteraction (
@@ -40,6 +42,7 @@ export function attachDrawingInteraction (
   let editor: { input: HTMLTextAreaElement, original: Drawing | null, close: () => void } | null = null
   let media: { abort: AbortController, input: HTMLInputElement } | null = null
   let disposed = false
+  let copied: Drawing | null = null, pastes = 0
 
   const editable = (target: EventTarget | null): boolean => target instanceof win.Element &&
     target.closest('input,textarea,select,button,a,[contenteditable]:not([contenteditable="false"])') !== null
@@ -67,6 +70,20 @@ export function attachDrawingInteraction (
   const finishTool = (reason: ToolEnd = 'cancelled'): void => {
     if (tool === null) return
     tool = null; onToolComplete?.(reason)
+  }
+  /**
+   * With Shift held, the end of a straight line snaps to the nearest of horizontal, vertical or 45 degrees from its other end
+   * (in pixels, so it looks right whatever the scales are), as other charting tools do. Other shapes are left alone.
+   */
+  const constrain = (current: EngineFrame, p: DrawingPoint, shift: boolean, type: DrawingType, from: DrawingAnchor | undefined): DrawingPoint => {
+    if (!shift || from === undefined || !STRAIGHT_LINES.has(type)) return p
+    const origin = current.project(from.timestamp, from.price)
+    if (origin === null || !Number.isFinite(origin.x) || !Number.isFinite(origin.y)) return p
+    const dx = p.x - origin.x, dy = p.y - origin.y, ax = Math.abs(dx), ay = Math.abs(dy), edge = Math.tan(Math.PI / 8)
+    if (ay <= ax * edge) return { x: p.x, y: origin.y }
+    if (ax <= ay * edge) return { x: origin.x, y: p.y }
+    const size = (ax + ay) / 2
+    return { x: origin.x + Math.sign(dx) * size, y: origin.y + Math.sign(dy) * size }
   }
   /** The anchor under the pointer; with the magnet on, the open, high, low or close of a bar within reach of it. */
   const anchorAt = (current: EngineFrame, p: DrawingPoint): DrawingAnchor | null => {
@@ -185,14 +202,14 @@ export function attachDrawingInteraction (
     if (value.original !== null && !value.moved) return true
     let anchors: readonly DrawingAnchor[]
     if (value.original === null) {
-      const next = anchorAt(currentFrame, p)
+      const next = anchorAt(currentFrame, constrain(currentFrame, p, event.shiftKey, value.preview.type, value.preview.anchors[0]))
       if (!anchor(next)) return false
       const placed = oneClick(value.preview.type) && drawingAnchorCount(value.preview.type) > 1 ? positionAnchors(currentFrame, value.preview.type, p) : null
       if (oneClick(value.preview.type) && drawingAnchorCount(value.preview.type) > 1 && placed === null) return false
       anchors = placed ?? (drawingAnchorCount(value.preview.type) === 1
         ? [next] : setPlacementAnchor(value.preview, value.anchorIndex ?? 1, next).anchors)
     } else if (value.anchorIndex !== null) {
-      const next = anchorAt(currentFrame, p)
+      const next = anchorAt(currentFrame, constrain(currentFrame, p, event.shiftKey, value.original.type, value.original.anchors[value.anchorIndex === 0 ? 1 : 0]))
       if (!anchor(next)) return false
       anchors = moveDrawingHandle(value.original, value.anchorIndex, next)
     } else {
@@ -230,7 +247,7 @@ export function attachDrawingInteraction (
     const inside = p.x >= g.left && p.x <= g.right && p.y >= g.top && p.y <= g.bottom
     if (tool !== null) {
       if (!inside) return
-      const first = anchorAt(currentFrame, p)
+      const first = anchorAt(currentFrame, placement === null ? p : constrain(currentFrame, p, e.shiftKey, placement.preview.type, placement.preview.anchors[0]))
       if (!anchor(first)) return
       let preview: Drawing, nextAnchor: number | null = null
       if (placement !== null) {
@@ -264,11 +281,26 @@ export function attachDrawingInteraction (
     try { element.setPointerCapture(e.pointerId) } catch { cancel(); return }
     element.focus({ preventScroll: true })
   })
+  // The pointer says what is under it: a crosshair while a tool is armed or a shape is being placed, a hand over a drawing, a grab
+  // over one of its points. The pane's own handler has just put the axis cursors (or none) back, so only the plot is touched here.
+  const hoverCursor = (e: PointerEvent): void => {
+    if (e.pointerType === 'touch') return
+    const currentFrame = frame()
+    if (currentFrame === null) return
+    const p = point(e), g = currentFrame.model.geometry
+    if (p.x < g.left || p.x > g.right || p.y < g.top || p.y > g.bottom) return
+    if (drag !== null) { element.style.cursor = drag.original === null ? 'crosshair' : drag.moved ? 'grabbing' : 'grab'; return }
+    if (tool !== null || placement !== null) { element.style.cursor = 'crosshair'; return }
+    const hit = store.hitTest(p, currentFrame.project, g, 6, currentFrame.drawingContext)
+    if (hit !== null) element.style.cursor = hit.anchorIndex === null ? 'pointer' : 'grab'
+  }
+  // Not through `on` (capture): the pane's handler is a bubble listener added first, and it puts the cursor back; this one runs after it.
+  element.addEventListener('pointermove', event => { hoverCursor(event) }, { passive: true, signal: abort.signal })
   on('pointermove', event => {
     const e = event as PointerEvent
     if (drag === null) {
       if (placement === null || editable(e.target)) return
-      const p = point(e), currentFrame = frame(), next = currentFrame === null ? null : anchorAt(currentFrame, p)
+      const p = point(e), currentFrame = frame(), next = currentFrame === null ? null : anchorAt(currentFrame, constrain(currentFrame, p, e.shiftKey, placement.preview.type, placement.preview.anchors[0]))
       if (e.pointerType !== 'touch') behavior?.pointer?.(p.x, p.y)
       if (next !== null && anchor(next)) { placement.preview = setPlacementAnchor(placement.preview, placement.nextAnchor, next); onPreview(placement.preview) }
       consume(e); return
@@ -342,6 +374,24 @@ export function attachDrawingInteraction (
     if (e.key === 'Enter' && placement?.preview.type === 'any-waves') { consume(e); completeWave(); return }
     if (e.key === 'Escape' && (drag !== null || placement !== null || tool !== null)) { consume(e); cancel(); finishTool(); return }
     const snapshot = store.getSnapshot(), modified = e.ctrlKey || e.metaKey
+    if (modified && !e.altKey && !e.shiftKey && (e.key.toLowerCase() === 'c' || e.key.toLowerCase() === 'v')) {
+      // Copy and paste a drawing, as in other charting tools: the copy lands a few pixels further each time, selected.
+      const selected = snapshot.drawings.find(item => item.id === snapshot.selectedId), copying = e.key.toLowerCase() === 'c'
+      if (copying && selected !== undefined) { consume(e); copied = selected; pastes = 0 }
+      else if (!copying && copied !== null) {
+        const current = frame()
+        if (current === null) return
+        consume(e); pastes++
+        const anchors = copied.anchors.map(item => {
+          const at = current.project(item.timestamp, item.price), moved = at !== null && Number.isFinite(at.x) && Number.isFinite(at.y) ? current.unproject(at.x + 14 * pastes, at.y + 14 * pastes) : null
+          return moved !== null && anchor(moved) ? { timestamp: moved.timestamp, price: moved.price } : { timestamp: item.timestamp, price: item.price }
+        })
+        let id = `${copied.id}-copy`
+        for (let n = 2; store.getSnapshot().drawings.some(item => item.id === id); n++) id = `${copied.id}-copy-${n}`
+        try { store.add({ ...copied, id, locked: false, hidden: false, anchors }); store.select(id) } catch { /* the drawing limit was reached */ }
+      }
+      return
+    }
     if (modified && !e.altKey) {
       const key = e.key.toLowerCase(), redo = (key === 'z' && e.shiftKey) || (key === 'y' && !e.shiftKey)
       const undo = key === 'z' && !e.shiftKey

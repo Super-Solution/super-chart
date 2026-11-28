@@ -1,8 +1,9 @@
-import { nearestChartIndex, derivePrecision, formatBarDate, timeAxisTicks, sessionLayout, type FinancialChartModel, type ChartCandlePoint, type EngineRenderFrame, type EngineRenderOptions, type BarDateRequestType } from '@supersolutions/super-chart-core'
+import { nearestChartIndex, axisStrip, derivePrecision, formatBarDate, timeAxisTicks, sessionLayout, type FinancialChartModel, type ChartCandlePoint, type EngineRenderFrame, type EngineRenderOptions, type BarDateRequestType } from '@supersolutions/super-chart-core'
 import { paintPriceSeries } from './seriesRenderer'
 import { typicalPrice, halfBarWidth } from './geometry'
 import { timeLabelCentre } from './badge'
-import { colors, withAlpha, CANVAS_FONT, CANVAS_LABEL_FONT } from './tokens'
+import { paintLegend, legendRowBoxes, seriesColors, type LegendPalette, type LegendRowBox } from './legend'
+import { colors, withAlpha, CANVAS_FONT, CANVAS_LABEL_FONT, FONT_SANS } from './tokens'
 
 export type { EngineRenderOptions } from '@supersolutions/super-chart-core'
 
@@ -146,27 +147,19 @@ function direction (open: number, close: number): number {
 }
 
 /**
- * Hollow when the close is above the open, solid when below, one line when flat,
- * so up and down read by shape before colour. Bodies under 3px are filled, or
- * a hollow body would vanish. A path per group, not a stroke per bar.
+ * Solid bodies, up and down, one line when flat; the hollow looks are chart types of their own
+ * (`hollow-candles`, `hollow-down-candles`, `outline-candles`). A path per group, not a stroke per bar.
  */
 function paintCandles (ctx: CanvasRenderingContext2D, m: FinancialChartModel, candles: readonly ChartCandlePoint[], half: number, type: 'candles' | 'ohlc', p: Palette): void {
-  const bodies = type === 'candles', hollowUp = bodies && half >= 1.5
+  const bodies = type === 'candles'
   ctx.lineWidth = 1
   for (const group of [1, -1, 0]) {
     const color = group > 0 ? p.up : group < 0 ? p.down : p.flat
     ctx.fillStyle = ctx.strokeStyle = color
-    const hollow = (candle: ChartCandlePoint): boolean => hollowUp && group > 0 && candle.bodyBottom - candle.bodyTop >= 2
     ctx.beginPath()
     for (const candle of candles) {
       if (direction(candle.o, candle.c) !== group) continue
-      if (hollow(candle)) {
-        ctx.moveTo(candle.x, candle.wickTop); ctx.lineTo(candle.x, candle.bodyTop)
-        ctx.moveTo(candle.x, candle.bodyBottom); ctx.lineTo(candle.x, candle.wickBottom)
-        ctx.rect(candle.x - half + 0.5, candle.bodyTop + 0.5, Math.max(1, 2 * half - 1), candle.bodyBottom - candle.bodyTop - 1)
-      } else {
-        ctx.moveTo(candle.x, candle.wickTop); ctx.lineTo(candle.x, candle.wickBottom)
-      }
+      ctx.moveTo(candle.x, candle.wickTop); ctx.lineTo(candle.x, candle.wickBottom)
       if (type === 'ohlc') {
         const openY = m.y(candle.o), closeY = m.y(candle.c)
         ctx.moveTo(candle.x - half, openY); ctx.lineTo(candle.x, openY)
@@ -179,11 +172,20 @@ function paintCandles (ctx: CanvasRenderingContext2D, m: FinancialChartModel, ca
     if (!bodies || group === 0) continue
     ctx.beginPath()
     for (const candle of candles) {
-      if (direction(candle.o, candle.c) !== group || hollow(candle)) continue
+      if (direction(candle.o, candle.c) !== group) continue
       ctx.rect(candle.x - half, candle.bodyTop, 2 * half, Math.max(1, candle.bodyBottom - candle.bodyTop))
     }
     ctx.fill()
   }
+}
+
+/** Where the time axis puts its ticks (x in pane pixels), the same choice `paintTimeAxis` makes, for a vertical grid to sit on them. */
+function timeTickXs (ctx: CanvasRenderingContext2D, m: FinancialChartModel, options: EngineRenderOptions): number[] {
+  const g = m.geometry, timestamps = m.xKeys as number[]
+  if (!(timestamps.length > 0 && timestamps.every(key => typeof key === 'number'))) return m.xTickIndices.map(index => m.xPositions[index]).filter(Number.isFinite)
+  const sample = ctx.measureText(options.timespan === 'second' ? '00:00:00' : '00:00').width
+  return timeAxisTicks(timestamps, m.xPositions, { timeZone: options.timeZone, symbolTimezone: options.symbolTimezone, timespan: options.timespan, locale: options.locale, minSpacing: sample + 40, left: g.left, right: g.right })
+    .map(tick => m.xPositions[tick.index]).filter(Number.isFinite)
 }
 
 const BOLD_FONT = /^(\d+)\s/
@@ -297,18 +299,94 @@ export function paintEngineFrame (
     try {
       clipPlot(ctx, m)
       paintSession(ctx, m, p, options)
-      // Horizontal grid only: price levels matter, time is read from the axis.
+      // Price levels by default (time is read from the axis); `gridLines` adds the time ticks or removes either.
+      const grid = options.gridLines ?? 'horizontal'
       ctx.strokeStyle = p.grid
       ctx.beginPath()
-      for (const tick of m.yTicks) {
-        const y = Math.round(m.y(tick)) + 0.5
-        ctx.moveTo(g.left, y); ctx.lineTo(g.right, y)
+      if (grid === 'horizontal' || grid === 'both') {
+        for (const tick of m.yTicks) {
+          const y = Math.round(m.y(tick)) + 0.5
+          ctx.moveTo(g.left, y); ctx.lineTo(g.right, y)
+        }
+      }
+      if ((grid === 'vertical' || grid === 'both') && frame.indicatorPane !== true) {
+        for (const tickX of timeTickXs(ctx, m, options)) { const x = Math.round(tickX) + 0.5; ctx.moveTo(x, g.top); ctx.lineTo(x, g.bottom) }
       }
       ctx.stroke()
+
+      if (frame.indicatorPane !== true && options.watermark !== undefined && options.watermark !== null && options.watermark.title !== '') {
+        // Behind everything: the symbol and what it is, faint enough that no candle or line loses to it.
+        const mark = options.watermark, size = Math.max(14, Math.min(g.plotHeight * 0.22, g.plotWidth * 0.1, 96))
+        ctx.save()
+        try {
+          ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = p.ink; ctx.globalAlpha = 0.04
+          const cx = (g.left + g.right) / 2, cy = (g.top + g.bottom) / 2 + (mark.subtitle === undefined ? size * 0.35 : -size * 0.05)
+          ctx.font = `700 ${size}px ${FONT_SANS}`; ctx.fillText(mark.title, cx, cy, g.plotWidth - 24)
+          if (mark.subtitle !== undefined && mark.subtitle !== '') { ctx.font = `500 ${Math.max(11, size * 0.3)}px ${FONT_SANS}`; ctx.fillText(mark.subtitle, cx, cy + size * 0.5, g.plotWidth - 24) }
+        } finally { ctx.restore() }
+      }
 
       const type = options.chartType ?? 'candles'
       const span = frame.snapshot.viewport.i1 - frame.snapshot.viewport.i0
       const half = (type !== 'line' && type !== 'area') || m.plottedSeries.some(series => series.source.type === 'bar') ? halfBarWidth(m, frame.snapshot.dataStart !== undefined && span > 0 ? g.plotWidth / span : undefined) : 0
+      const colorMemo = new Map<string, string>()
+      seriesColors.set(m, colorMemo)
+      const paintSeries = (list: readonly FinancialChartModel['plottedSeries'][number][]): void => {
+        // Lines without their own colour take the pane's slots in order; a fourth
+        // and later line is ink-muted and dashed. Bars follow the candle (volume)
+        // or their sign around the base (histograms).
+        let slot = 0
+        let directions: Map<unknown, number> | null = null
+        for (const series of list) {
+          const style = frame.figureStyles?.get(series.source.id)
+          const own = series.source.color
+          if (series.source.type === 'bar') {
+            const base = Math.max(m.min, Math.min(m.max, style?.base ?? 0))
+            const zero = series.zeroY !== undefined ? series.zeroY : Math.max(g.top, Math.min(g.bottom, m.y(base)))
+            const signed = series.points.some(point => point.value < base)
+            if (own === undefined && !signed && directions === null) directions = new Map(bars.map(bar => [bar.timestamp, direction(bar.open, bar.close)]))
+            for (const rising of [true, false]) {
+              ctx.fillStyle = own ?? (rising ? p.upBar : p.downBar)
+              ctx.beginPath()
+              for (const point of series.points) {
+                const up = own !== undefined || (signed ? point.value >= base : directions?.get(point.key) !== -1)
+                if (up !== rising) continue
+                ctx.rect(point.x - half, Math.min(zero, point.y), half * 2, Math.max(1, Math.abs(point.y - zero)))
+              }
+              ctx.fill()
+              if (own !== undefined) break
+            }
+            continue
+          }
+          let color = own, dash = style?.dash
+          if (color === undefined) {
+            color = slot < p.indicator.length ? p.indicator[slot] : p.inkMuted
+            if (slot >= p.indicator.length && dash === undefined) dash = [4, 3]
+            slot++
+          }
+          colorMemo.set(series.source.id, color)
+          ctx.lineWidth = style?.lineWidth ?? 1.5
+          ctx.setLineDash(dash === undefined ? [] : [...dash])
+          ctx.strokeStyle = ctx.fillStyle = color
+          if (series.source.type === 'scatter') {
+            ctx.beginPath()
+            for (const point of series.points) { ctx.moveTo(point.x + ctx.lineWidth, point.y); ctx.arc(point.x, point.y, ctx.lineWidth, 0, 2 * Math.PI) }
+            ctx.fill(); continue
+          }
+          ctx.lineJoin = 'round'
+          ctx.beginPath()
+          let previous = -2
+          for (const point of series.points) {
+            // The model filters null/non-finite values. Index discontinuities still identify those gaps.
+            if (point.index !== previous + 1) ctx.moveTo(point.x, point.y)
+            else ctx.lineTo(point.x, point.y)
+            previous = point.index
+          }
+          ctx.stroke()
+        }
+      }
+      // Overlay bands (volume) sit behind the price series, on a scale of their own.
+      paintSeries(m.plottedSeries.filter(series => series.zeroY !== undefined))
       if (paintPriceSeries(ctx, frame, { ...options, up: p.up, down: p.down, line: p.line, text: p.text, background: p.background }, half)) {
         // Extended series share this clip and the exact same price transform.
       } else if (type === 'line' || type === 'area') {
@@ -325,57 +403,7 @@ export function paintEngineFrame (
         paintCandles(ctx, m, candles, half, type === 'ohlc' ? 'ohlc' : 'candles', p)
       }
 
-      // Lines without their own colour take the pane's slots in order; a fourth
-      // and later line is ink-muted and dashed. Bars follow the candle (volume)
-      // or their sign around the base (histograms).
-      let slot = 0
-      let directions: Map<unknown, number> | null = null
-      for (const series of m.plottedSeries) {
-        const style = frame.figureStyles?.get(series.source.id)
-        const own = series.source.color
-        if (series.source.type === 'bar') {
-          const base = Math.max(m.min, Math.min(m.max, style?.base ?? 0))
-          const zero = Math.max(g.top, Math.min(g.bottom, m.y(base)))
-          const signed = series.points.some(point => point.value < base)
-          if (own === undefined && !signed && directions === null) directions = new Map(bars.map(bar => [bar.timestamp, direction(bar.open, bar.close)]))
-          for (const rising of [true, false]) {
-            ctx.fillStyle = own ?? (rising ? p.upBar : p.downBar)
-            ctx.beginPath()
-            for (const point of series.points) {
-              const up = own !== undefined || (signed ? point.value >= base : directions?.get(point.key) !== -1)
-              if (up !== rising) continue
-              ctx.rect(point.x - half, Math.min(zero, point.y), half * 2, Math.max(1, Math.abs(point.y - zero)))
-            }
-            ctx.fill()
-            if (own !== undefined) break
-          }
-          continue
-        }
-        let color = own, dash = style?.dash
-        if (color === undefined) {
-          color = slot < p.indicator.length ? p.indicator[slot] : p.inkMuted
-          if (slot >= p.indicator.length && dash === undefined) dash = [4, 3]
-          slot++
-        }
-        ctx.lineWidth = style?.lineWidth ?? 1.5
-        ctx.setLineDash(dash === undefined ? [] : [...dash])
-        ctx.strokeStyle = ctx.fillStyle = color
-        if (series.source.type === 'scatter') {
-          ctx.beginPath()
-          for (const point of series.points) { ctx.moveTo(point.x + ctx.lineWidth, point.y); ctx.arc(point.x, point.y, ctx.lineWidth, 0, 2 * Math.PI) }
-          ctx.fill(); continue
-        }
-        ctx.lineJoin = 'round'
-        ctx.beginPath()
-        let previous = -2
-        for (const point of series.points) {
-          // The model filters null/non-finite values. Index discontinuities still identify those gaps.
-          if (point.index !== previous + 1) ctx.moveTo(point.x, point.y)
-          else ctx.lineTo(point.x, point.y)
-          previous = point.index
-        }
-        ctx.stroke()
-      }
+      paintSeries(m.plottedSeries.filter(series => series.zeroY === undefined))
       ctx.setLineDash([])
 
       if (showLast) {
@@ -385,18 +413,19 @@ export function paintEngineFrame (
       }
     } finally { ctx.restore() }
 
-    if (frame.indicatorPane === true && frame.title !== undefined) {
+    if (frame.indicatorPane === true && frame.title !== undefined && options.legend === false) {
       ctx.font = CANVAS_LABEL_FONT; ctx.fillStyle = p.text; ctx.textAlign = 'left'
       ctx.fillText(frame.title, g.left + 4, Math.max(8, g.top - 7), Math.max(1, g.plotWidth - 8))
       ctx.font = p.font
     }
     // Price labels never collide with each other or with the last-price tag.
-    ctx.fillStyle = p.text; ctx.textAlign = 'right'
+    const strip = axisStrip(g)
+    ctx.fillStyle = p.text; ctx.textAlign = strip.align
     let previousY = -Infinity
     for (const tick of [...m.yTicks].sort((a, b) => m.y(a) - m.y(b))) {
       const y = m.y(tick)
       if (y - previousY < 12 || (showLast && Math.abs(y - lastY) < 14)) continue
-      ctx.fillText(options.formatPrice?.(tick, digits) ?? tick.toFixed(digits), g.left - 6, y, Math.max(1, g.left - 10))
+      ctx.fillText(options.formatPrice?.(tick, digits) ?? tick.toFixed(digits), strip.textX, y, Math.max(1, strip.width - 10))
       previousY = y
     }
     if (m.hasRightAxis) {
@@ -405,11 +434,46 @@ export function paintEngineFrame (
     }
     if (showLast && last !== undefined) {
       ctx.fillStyle = lastColor
-      ctx.fillRect(2, Math.round(lastY) - 9, Math.max(1, g.left - 4), 18)
-      ctx.fillStyle = p.onMarket; ctx.textAlign = 'right'
-      ctx.fillText(options.formatPrice?.(last.close, digits) ?? last.close.toFixed(digits), g.left - 6, Math.round(lastY), Math.max(1, g.left - 10))
+      ctx.fillRect(strip.from + 2, Math.round(lastY) - 9, Math.max(1, strip.width - 4), 18)
+      ctx.fillStyle = p.onMarket; ctx.textAlign = strip.align
+      ctx.fillText(options.formatPrice?.(last.close, digits) ?? last.close.toFixed(digits), strip.textX, Math.round(lastY), Math.max(1, strip.width - 10))
     }
     if (options.showTimeAxis !== false) paintTimeAxis(ctx, m, p, options)
+  } finally { ctx.restore() }
+}
+
+/** The always-on legend, drawn on the cursor layer so a pointer move repaints only it. `x` is the pointer's, or null for the latest bar. */
+export function paintEngineLegend (ctx: CanvasRenderingContext2D, frame: EngineRenderFrame, x: number | null, options: EngineRenderOptions = {}): void {
+  if (!ready(frame.model)) return
+  const p = palette(options)
+  const legend: LegendPalette = { background: p.background, ink: p.ink, muted: p.inkMuted, up: p.up, down: p.down, flat: p.flat, font: p.font }
+  paintLegend(ctx, frame, x, options, legend, precision(options.pricePrecision ?? frame.pricePrecision ?? derivePrecision(frame.snapshot.bars)))
+}
+
+/** The boxes of the legend's indicator rows at rest, in pane pixels, so the workspace can put actions beside them. */
+export function engineLegendRowBoxes (ctx: CanvasRenderingContext2D, frame: EngineRenderFrame, options: EngineRenderOptions = {}): LegendRowBox[] {
+  if (!ready(frame.model)) return []
+  const p = palette(options)
+  const legend: LegendPalette = { background: p.background, ink: p.ink, muted: p.inkMuted, up: p.up, down: p.down, flat: p.flat, font: p.font }
+  return legendRowBoxes(ctx, frame, options, legend, precision(options.pricePrecision ?? frame.pricePrecision ?? derivePrecision(frame.snapshot.bars)))
+}
+
+/** A small second tag under the last-price tag (the bar-close countdown), on the cursor layer so it can change every second at no cost to the plot. */
+export function paintEngineLastCaption (ctx: CanvasRenderingContext2D, frame: EngineRenderFrame, text: string, options: EngineRenderOptions = {}): void {
+  const m = frame.model, g = m.geometry
+  if (!ready(m) || frame.indicatorPane === true || text === '') return
+  const last = frame.snapshot.bars[frame.snapshot.bars.length - 1]
+  if (last === undefined) return
+  const y = m.y(last.close)
+  if (!Number.isFinite(y) || y < g.top || y > g.bottom) return
+  const p = palette(options), strip = axisStrip(g)
+  const color = [p.down, p.flat, p.up][direction(last.open, last.close) + 1]
+  const top = Math.min(g.bottom - 16, Math.round(y) + 10)
+  ctx.save()
+  try {
+    ctx.font = CANVAS_LABEL_FONT; ctx.textBaseline = 'middle'; ctx.textAlign = strip.align
+    ctx.fillStyle = color; ctx.fillRect(strip.from + 2, top, Math.max(1, strip.width - 4), 16)
+    ctx.fillStyle = p.onMarket; ctx.fillText(text, strip.textX, top + 8.5, Math.max(1, strip.width - 10))
   } finally { ctx.restore() }
 }
 
@@ -465,7 +529,7 @@ export function paintEngineCursor (
     ctx.textAlign = 'left'; ctx.textBaseline = 'top'
 
     // Readout: names muted, values in ink, on the canvas colour.
-    if (hit !== null && bar !== undefined) {
+    if (hit !== null && bar !== undefined && options.legend === false) {
       const parts: Array<[string, string]> = indicator
         ? m.plottedSeries.map(series => {
           // Visible points stay ordered even when warmup/null gaps were filtered.
@@ -492,9 +556,10 @@ export function paintEngineCursor (
     if (Number.isFinite(py) && (free || !indicator)) {
       const y = Math.round(py)
       const text = indicator ? String(Number(displayed.toPrecision(6))) : options.formatPrice?.(displayed, digits) ?? displayed.toFixed(digits)
-      ctx.fillStyle = p.tagFill; ctx.fillRect(2, y - 9, Math.max(1, g.left - 4), 18)
-      ctx.fillStyle = p.tagText; ctx.textAlign = 'right'
-      ctx.fillText(text, g.left - 6, y, Math.max(1, g.left - 10))
+      const strip = axisStrip(g)
+      ctx.fillStyle = p.tagFill; ctx.fillRect(strip.from + 2, y - 9, Math.max(1, strip.width - 4), 18)
+      ctx.fillStyle = p.tagText; ctx.textAlign = strip.align
+      ctx.fillText(text, strip.textX, y, Math.max(1, strip.width - 10))
     }
     if (options.showTimeAxis !== false && hit !== null) {
       const time = timeLabel(timeFormat(options.timeZone ?? 'UTC'), hit.timestamp, options, 'crosshair')

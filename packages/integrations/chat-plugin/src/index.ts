@@ -2,9 +2,9 @@
 import { ChartWorkspace, SUPER_CHART_COLORS, FONT_SANS } from '@supersolutions/super-chart-web'
 import { EngineAnnotations } from '@supersolutions/super-chart-web/annotations'
 import { symbolKey, type Datafeed as CoreDatafeed, type MarketBar as CoreBar, type Period as CorePeriod, type SymbolInfo as CoreSymbol } from '@supersolutions/super-chart-core'
-import { TECHNICAL_INDICATOR_DEFINITIONS, CLASSIC_INDICATOR_DEFINITIONS } from '@supersolutions/super-chart-core/indicators'
 import { readHostTheme, CHART_CARD_KIND, CHART_LIMITS, chartCardKind, validatePeriod, validateSymbol, formatCardRef, parseChartRef, validateChartAnnotations, validateChartCardSpec as validateChartCard, type CardMount, type CardMountContext, type ChartIndicator, type ChartType, type ChatPlugin, type Datafeed, type MarketBar, type Period, type SymbolInfo, type PluginTool, type PluginToolAuthority, type CardRef, type CardRefEvent, type CardRefResult, type ChartAnnotation, type ChartCardSpec } from '@supersolutions/super-protocol'
 import { chartHostLook } from './host-theme'
+import { checkMarkShapes, correctTimeUnits, explainProblem, levelsOf, summarizeData, swingsOf, whyNotShown, type DataSummary, type MarkPlacement, type MarkWarning } from './agent-feedback'
 
 type AuthorizedPluginTool = PluginTool & { authority: PluginToolAuthority }
 
@@ -32,6 +32,10 @@ export interface ChartSnapshot {
   /** For each mark, the `ref:` link that makes words in a message point at it. Absent when the chart's id cannot be a ref target. */
   refs: Record<string, string>
   bars: { count: number, first: number | null, last: number | null }
+  /** The loaded data's reach, to check a mark against: first and last time, the price range of the 500 most recent bars and the last close. */
+  data: DataSummary
+  /** Marks that are not on screen, each with the reason (present only when there are any). */
+  notShown?: MarkPlacement[]
   replay: { active: boolean }
 }
 
@@ -124,8 +128,20 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     if (kept.size > MAX_KEPT_CHARTS) kept.delete(kept.keys().next().value as string)
   }
 
+  /** Which of these marks are not on screen, and why, so the agent fixes them instead of telling the reader they are drawn. */
+  const notShownOf = (chart: Mounted, keys: Iterable<string>): MarkPlacement[] => {
+    const data = dataOf(chart), placement: MarkPlacement[] = []
+    for (const key of keys) {
+      const span = chart.annotations.getAnnotationSpan(key, 'agent'), mark = chart.annotationsByKey.get(key)
+      if (span === null || mark === undefined || span.status === 'visible') continue
+      const why = whyNotShown(mark, span.status, data)
+      if (why !== null) placement.push({ key, status: span.status, why })
+    }
+    return placement
+  }
   const snapshot = (chart: Mounted): ChartSnapshot => {
     const state = chart.workspace.getState()
+    const notShown = notShownOf(chart, chart.annotationsByKey.keys())
     return {
       chartId: chart.id,
       symbol: chart.workspace.getSymbol(),
@@ -135,8 +151,14 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
       annotations: [...chart.annotationsByKey.values()],
       refs: refsOf(chart),
       bars: { count: state.data.count, first: state.data.firstTimestamp, last: state.data.lastTimestamp },
+      data: dataOf(chart),
+      ...(notShown.length > 0 ? { notShown } : {}),
       replay: { active: state.replay.active }
     }
+  }
+  const dataOf = (chart: Mounted): DataSummary => {
+    const state = chart.workspace.getState()
+    return summarizeData(state.data.count, state.data.firstTimestamp, state.data.lastTimestamp, chart.workspace.getBars({ limit: 500 }))
   }
   const refsOf = (chart: Mounted): Record<string, string> => {
     const refs: Record<string, string> = {}
@@ -227,7 +249,6 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
           ui: { variables: look.variables, ...(placement === 'document' ? { parts: DOCUMENT_PARTS } : {}) },
           chart: { mode: engine.mode, render: { ...look.render, chartType: engine.chartType as never } }
         })
-        for (const definition of [...TECHNICAL_INDICATOR_DEFINITIONS, ...CLASSIC_INDICATOR_DEFINITIONS]) workspace.registerIndicator(definition)
         const annotations = new EngineAnnotations({ symbol: symbolKey(spec.symbol), theme: context.theme, pricePrecision: typeof spec.symbol.pricePrecision === 'number' ? spec.symbol.pricePrecision : undefined, onChange: () => { if (!destroyed) workspace.chart.requestPaint() } })
         const removeLayer = workspace.chart.addLayer(annotations)
         const id = spec.id ?? `chart-${++counter}`
@@ -372,7 +393,7 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
     {
       name: 'chart_state',
       authority: 'read',
-      description: 'Read a chart on screen: symbol, period, chart type, indicators, annotations, how many bars are loaded and whether replay is active.',
+      description: 'Read a chart on screen: symbol, period, chart type, indicators, annotations (and `notShown`: any mark that is not on screen, with the reason), how many bars are loaded, the reach of the data (first and last bar time, recent price range, last close) and whether replay is active. Read it before marking a chart.',
       inputSchema: { type: 'object', properties: { chartId } },
       run: async (input) => snapshot(find((input as { chartId?: unknown } | undefined)?.chartId))
     },
@@ -387,6 +408,31 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
         const chart = find(id)
         const bars = chart.workspace.getBars({ limit: (limit as number | undefined) ?? 100 })
         return { chartId: chart.id, count: bars.length, bars }
+      }
+    },
+    {
+      name: 'chart_levels',
+      authority: 'read',
+      description: 'Read the support and resistance levels price has turned at, from the most recent bars (up to 500): up to five of each, nearest the last close first, with how many times price turned there and when last. Draw lines and zones at these prices instead of guessing; check them against chart_state first.',
+      inputSchema: { type: 'object', properties: { chartId, strength: { type: 'integer', minimum: 1, maximum: 50, description: 'Bars on each side a turning point must out-reach; larger finds fewer, more important levels. Default 5.' } } },
+      run: async (input) => {
+        const { chartId: id, strength } = (input ?? {}) as { chartId?: unknown, strength?: unknown }
+        if (strength !== undefined && !(Number.isInteger(strength) && (strength as number) >= 1 && (strength as number) <= 50)) throw new RangeError('strength must be an integer from 1 to 50')
+        const chart = find(id)
+        return { chartId: chart.id, ...levelsOf(chart.workspace.getBars({ limit: 500 }), strength as number | undefined) }
+      }
+    },
+    {
+      name: 'chart_swings',
+      authority: 'read',
+      description: 'Read the latest swing highs and lows of the recent bars (up to 500), oldest first and alternating, each with the time and price of a real bar, plus the last leg (previous swing to latest swing). Anchor trend lines, rays, fibonacci retracements and trade plans on these points instead of on guessed times and prices; check them against chart_state first.',
+      inputSchema: { type: 'object', properties: { chartId, strength: { type: 'integer', minimum: 1, maximum: 50, description: 'Bars on each side a swing must out-reach; larger finds fewer, larger swings. Default 5.' }, count: { type: 'integer', minimum: 2, maximum: 30, description: 'How many of the latest swings to return. Default 8.' } } },
+      run: async (input) => {
+        const { chartId: id, strength, count } = (input ?? {}) as { chartId?: unknown, strength?: unknown, count?: unknown }
+        if (strength !== undefined && !(Number.isInteger(strength) && (strength as number) >= 1 && (strength as number) <= 50)) throw new RangeError('strength must be an integer from 1 to 50')
+        if (count !== undefined && !(Number.isInteger(count) && (count as number) >= 2 && (count as number) <= 30)) throw new RangeError('count must be an integer from 2 to 30')
+        const chart = find(id)
+        return { chartId: chart.id, ...swingsOf(chart.workspace.getBars({ limit: 500 }), strength as number | undefined, count as number | undefined) }
       }
     },
     {
@@ -413,9 +459,32 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
       }
     },
     {
+      name: 'chart_compare',
+      authority: 'draft',
+      description: 'Overlay another market on a chart that has a datafeed, so relative performance reads at a glance: the other market is rebased to start at this chart\'s price and drawn as a line (up to 6). action "add" takes a symbol ({ ticker, exchange? }); "remove" takes the same symbol; "list" returns what is overlaid. Fetched for the loaded range and refreshed about every 30 seconds, not streamed. Charts that show an inline snapshot of bars cannot compare.',
+      inputSchema: { type: 'object', properties: { chartId, action: { type: 'string', enum: ['add', 'remove', 'list'] }, symbol: { type: 'object', required: ['ticker'] } }, required: ['action'] },
+      run: async (input) => {
+        const { chartId: id, action, symbol } = (input ?? {}) as { chartId?: unknown, action?: unknown, symbol?: unknown }
+        if (action !== 'add' && action !== 'remove' && action !== 'list') throw new TypeError('action must be add, remove or list')
+        const chart = find(id)
+        if (action === 'list') return { chartId: chart.id, compares: chart.workspace.listCompares().map(item => item.symbol) }
+        if (chart.spec.bars !== undefined) throw new Error('This chart shows an inline snapshot of bars and cannot compare. Show a chart card with a feed instead.')
+        const problem = validateSymbol(symbol)
+        if (problem !== null) throw new TypeError(problem)
+        const target = symbol as SymbolInfo
+        if (action === 'add') await chart.workspace.addCompare(target)
+        else {
+          const key = symbolKey(target), found = chart.workspace.listCompares().find(item => symbolKey(item.symbol) === key)
+          if (found === undefined) throw new Error(`${target.ticker} is not overlaid on this chart`)
+          chart.workspace.removeCompare(found.id)
+        }
+        return { chartId: chart.id, compares: chart.workspace.listCompares().map(item => item.symbol) }
+      }
+    },
+    {
       name: 'chart_annotate',
       authority: 'draft',
-      description: 'Mark a chart: level (horizontal price line, one anchor with a price), zone (price band over a time range, two anchors with prices), marker (labelled point, one anchor), trend (line through two priced anchors), ray (a trend line extended to the right), fibonacci (retracement levels between two priced anchors; params.levels is a comma list such as "0,0.5,1") or plan (entry, target and stop: three priced anchors in that order, with the risk-reward ratio). Keys are stable: sending a key again replaces that mark. Returns which keys were applied and which the engine rejected, with a code, and for each applied key a `ref:` link: put it in your message as [words](ref:...) and the reader can hover or focus the words to see that mark light up, or click to jump to it.',
+      description: 'Mark a chart: level (horizontal price line, one anchor with a price), zone (price band over a time range, two anchors with prices), marker (labelled point, one anchor), trend (line through two priced anchors), ray (a trend line extended to the right), fibonacci (retracement levels between two priced anchors, as the Fibonacci tool draws them: anchor the first where the move began and the second where it ended, and level 0 sits at the end, 1 at the start, so 0.382 is a 38.2% pullback from the end; params.levels is a comma list such as "0,0.5,1") or plan (entry, target and stop: three priced anchors in that order, with the risk-reward ratio; the entry and target need different times, the plan spans from one to the other). Recipes: support and resistance = a level at each price from chart_levels; a retracement = fibonacci from the `from` to the `to` of the lastLeg that chart_swings returns; a trend = trend or ray through two swings of the same kind; a setup = one plan, plus a zone for the area it rests on. Keys are stable: sending a key again replaces that mark. Before drawing, read chart_state: its `data` gives the first and last bar time, the recent price range and the last close, so every price and time you send falls where the bars are. Times are milliseconds since the epoch (not seconds); prices are in the quote units of the symbol; keep text under 24 characters and send a few well-chosen marks, not a dense set. Returns which keys were applied and which the engine rejected, with a code; `notShown` lists applied marks that are not on screen with the reason (fix those rather than telling the reader they are drawn); and for each applied key a `ref:` link: put it in your message as [words](ref:...) and the reader can hover or focus the words to see that mark light up, or click to jump to it.',
       inputSchema: {
         type: 'object',
         required: ['annotations'],
@@ -424,12 +493,16 @@ export function createChartChatPlugin (options: ChartChatPluginOptions = {}): Ch
       run: async (input) => {
         const { chartId: id, annotations, replace } = (input ?? {}) as { chartId?: unknown, annotations?: unknown, replace?: unknown }
         const problem = validateChartAnnotations(annotations)
-        if (problem !== null) throw new TypeError(problem)
+        if (problem !== null) throw new TypeError(explainProblem(problem, annotations))
         const chart = find(id)
-        const result = applyAnnotations(chart, annotations as ChartAnnotation[], replace === true)
+        const { annotations: corrected, warnings: unitWarnings } = correctTimeUnits(annotations as ChartAnnotation[])
+        const warnings = [...unitWarnings, ...checkMarkShapes(corrected)]
+        const result = applyAnnotations(chart, corrected, replace === true)
         remember(chart)
         changed(chart)
-        return { chartId: chart.id, ...result, refs: refsOf(chart), total: chart.annotationsByKey.size }
+        // Say what is not on screen and why, so the agent fixes the mark instead of telling the reader it drew it.
+        const data = dataOf(chart), placement = notShownOf(chart, result.applied)
+        return { chartId: chart.id, ...result, refs: refsOf(chart), total: chart.annotationsByKey.size, data, ...(warnings.length > 0 ? { warnings: warnings satisfies MarkWarning[] } : {}), ...(placement.length > 0 ? { notShown: placement } : {}) }
       }
     },
     {

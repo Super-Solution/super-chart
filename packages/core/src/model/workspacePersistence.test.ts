@@ -15,4 +15,10 @@ describe('workspace document render options', () => {
     expect(() => parseWorkspaceDocument(document({ theme: 'sepia' }))).toThrow(/Unknown render theme/)
     expect(() => parseWorkspaceDocument(document({ themed: 'dark' }))).toThrow(/Unknown or missing render options property/)
   })
+  it('saves the viewer\'s grid, legend and hidden watermark, but never a watermark text', () => {
+    const saved = parseWorkspaceDocument(document({ gridLines: 'both', legend: false, watermark: null })).render
+    expect([saved.gridLines, saved.legend, saved.watermark]).toEqual(['both', false, null])
+    expect(() => parseWorkspaceDocument(document({ gridLines: 'diagonal' }))).toThrow(/Unknown grid lines mode/)
+    expect(() => parseWorkspaceDocument(document({ watermark: { title: 'X' } }))).toThrow(/can only be null/)
+  })
 })

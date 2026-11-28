@@ -16,7 +16,8 @@ export interface IndicatorFigure {
 }
 
 export type IndicatorRow = Readonly<Record<string, number | null>>
-export type IndicatorPane = 'price' | 'separate'
+/** `price` draws on the price scale; `separate` gets a pane below; `overlay` draws in a band along the bottom of the price pane on a scale of its own (volume's default). */
+export type IndicatorPane = 'price' | 'separate' | 'overlay'
 
 export interface IndicatorDefinition {
   readonly name: string
@@ -216,7 +217,7 @@ const BUILTINS: readonly IndicatorDefinition[] = [
   {
     name: 'VOL',
     params: [],
-    pane: 'separate',
+    pane: 'overlay',
     figures: [{ key: 'volume', title: 'Volume', type: 'bar' }],
     calculate: bars => bars.map(volumeRow)
   },
@@ -315,7 +316,7 @@ export class EngineIndicators {
     this.assertLive()
     if (typeof definition.name !== 'string' || definition.name.trim() === '') throw new TypeError('Indicator name must not be empty')
     if (this.definitions.has(definition.name)) throw new Error(`Indicator already registered: ${definition.name}`)
-    if (definition.pane !== 'price' && definition.pane !== 'separate') throw new TypeError('Invalid indicator pane')
+    if (definition.pane !== 'price' && definition.pane !== 'separate' && definition.pane !== 'overlay') throw new TypeError('Invalid indicator pane')
     if (typeof definition.calculate !== 'function' || definition.figures.length === 0) throw new TypeError('Indicator needs figures and a calculation')
     const keys = new Set<string>()
     const figures = definition.figures.map(figure => {
@@ -351,7 +352,7 @@ export class EngineIndicators {
     const params = checkedParams(spec.params ?? definition.params ?? [], builtin)
     definition.validateParams?.(params)
     const pane = spec.pane ?? definition.pane
-    if (pane !== 'price' && pane !== 'separate') throw new TypeError('Invalid indicator pane')
+    if (pane !== 'price' && pane !== 'separate' && pane !== 'overlay') throw new TypeError('Invalid indicator pane')
     let id = spec.id
     if (id === undefined) {
       do { id = `indicator-${this.nextId++}` } while (this.entries.has(id))
@@ -370,7 +371,7 @@ export class EngineIndicators {
     if (entry === undefined) return false
     this.validatePlacement(changes)
     const pane = changes.pane ?? entry.instance.pane
-    if (pane !== 'price' && pane !== 'separate') throw new TypeError('Invalid indicator pane')
+    if (pane !== 'price' && pane !== 'separate' && pane !== 'overlay') throw new TypeError('Invalid indicator pane')
     const params = changes.params === undefined ? entry.instance.params : checkedParams(changes.params, this.builtinNames.has(entry.instance.name) ? entry.builtin : undefined)
     entry.definition.validateParams?.(params)
     const instance = Object.freeze({ ...entry.instance, ...changes, pane, params, visible: changes.visible ?? entry.instance.visible })

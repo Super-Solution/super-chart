@@ -1,5 +1,6 @@
 import type { DrawingType } from '@supersolutions/super-chart-core'
 import { createIcon, toolIconName } from './icons'
+import { toolHotkey } from './hotkeys'
 
 /** What the rail needs from its workspace. Everything else (which tool is armed, drawing history) stays there. */
 export interface ToolRailHost {
@@ -21,7 +22,7 @@ export interface ToolRailHost {
 
 /** Group order in the rail, and the tool each group offers first. Groups that no tool belongs to are left out. */
 const GROUPS: ReadonlyArray<readonly [group: string, first: DrawingType]> = [
-  ['group.lines', 'trend-line'], ['group.channels', 'parallel-channel'], ['group.fibonacci', 'fibonacci'],
+  ['group.lines', 'segment'], ['group.channels', 'parallel-channel'], ['group.fibonacci', 'fibonacci'],
   ['group.patterns', 'xabcd'], ['group.shapes', 'rectangle'], ['group.measurement', 'price-range'],
   ['group.annotations', 'text'], ['group.studies', 'anchored-vwap'], ['group.freehand', 'brush']
 ]
@@ -80,7 +81,7 @@ export class ToolRail {
       this.groups.push(entry); list.append(wrap)
       host.bind(() => {
         const name = host.t(group)
-        this.label(main, host.t('rail.pick', { tool: host.toolLabel(entry.shown), group: name }), host.toolLabel(entry.shown))
+        this.label(main, host.t('rail.pick', { tool: host.toolLabel(entry.shown), group: name }), this.titleOf(entry.shown))
         this.label(more, host.t('rail.flyout', { group: name }))
       })
     }
@@ -111,7 +112,7 @@ export class ToolRail {
       group.main.setAttribute('aria-pressed', String(armed)); group.main.disabled = disabled; group.more.disabled = disabled
       group.wrap.dataset.armed = String(armed)
       const name = this.host.t(group.group)
-      this.label(group.main, this.host.t('rail.pick', { tool: this.host.toolLabel(group.shown), group: name }), this.host.toolLabel(group.shown))
+      this.label(group.main, this.host.t('rail.pick', { tool: this.host.toolLabel(group.shown), group: name }), this.titleOf(group.shown))
     }
     if (disabled) this.close(false)
   }
@@ -130,6 +131,12 @@ export class ToolRail {
     const button = this.doc.createElement('button'); button.type = 'button'; button.className = `sc-button ${className}`
     button.append(createIcon(this.doc, icon))
     return button
+  }
+
+  /** The tool's name for a tooltip, with its shortcut when it has one. */
+  private titleOf (tool: DrawingType): string {
+    const key = toolHotkey(tool), name = this.host.toolLabel(tool)
+    return key === undefined ? name : `${name} (${key})`
   }
 
   private label (button: HTMLElement, text: string, title = text): void {

@@ -12,21 +12,31 @@ export interface FrameIndicator {
   id: string
   name: string
   pane: string
+  /** Drawn in the bottom band of the price pane on a scale of its own (see `EngineLayout.overlayRatio`). */
+  overlay?: boolean
+  /** The legend's name for it, such as "MA 20"; the indicator's name when unset. */
+  label?: string
   figures: readonly IndicatorFigure[]
   rows: ReadonlyArray<Readonly<Record<string, number | null>>>
 }
 export interface EngineLayout {
+  /** The edge the price labels sit on. Default `right`, where trading charts put them; `left` keeps the older layout. */
+  axisSide?: 'left' | 'right'
   axisGutter?: number
   priceScale?: PriceScaleOptions
   /** Portion of chart height used by price when indicator panes exist. */
   priceRatio?: number
+  /** Height of the band overlay indicators (volume by default) use along the bottom of the price pane, from 0.05 to 0.5 of the plot. Default 0.2. */
+  overlayRatio?: number
   /** Positive relative heights, keyed by the pane ids in EngineFrame. */
   paneWeights?: Readonly<Record<string, number>>
 }
 
 export function validateEngineLayout (layout: EngineLayout): void {
+  if (layout.axisSide !== undefined && layout.axisSide !== 'left' && layout.axisSide !== 'right') throw new RangeError('Axis side must be left or right')
   if (layout.axisGutter !== undefined && (!Number.isFinite(layout.axisGutter) || layout.axisGutter < 0)) throw new RangeError('Axis gutter must be finite and nonnegative')
   if (layout.priceRatio !== undefined && (!Number.isFinite(layout.priceRatio) || layout.priceRatio < 0.3 || layout.priceRatio > 0.85)) throw new RangeError('Price ratio must be from 0.3 to 0.85')
+  if (layout.overlayRatio !== undefined && (!Number.isFinite(layout.overlayRatio) || layout.overlayRatio < 0.05 || layout.overlayRatio > 0.5)) throw new RangeError('Overlay ratio must be from 0.05 to 0.5')
   if (layout.paneWeights !== undefined && (layout.paneWeights === null || typeof layout.paneWeights !== 'object' || Array.isArray(layout.paneWeights) ||
     Object.values(layout.paneWeights).some(value => !Number.isFinite(value) || value <= 0))) throw new RangeError('Pane weights must be positive finite numbers')
 }
@@ -57,6 +67,8 @@ export interface EngineRenderFrame {
   indicatorPane?: boolean
   title?: string
   figureStyles?: ReadonlyMap<string, IndicatorFigure>
+  /** Price-pane indicators, for the legend: each one's label and the ids of the series it draws. */
+  legend?: ReadonlyArray<{ readonly id: string, readonly label: string, readonly seriesIds: readonly string[], readonly overlay: boolean }>
   /** Derived once from this immutable snapshot, shared by panes and cursor paints. */
   pricePrecision?: number
 }
@@ -68,7 +80,18 @@ export interface EngineFrame extends EngineRenderFrame {
   unproject: (x: number, y: number) => { timestamp: number, price: number } | null
 }
 
-function rescale (model: FinancialChartModel, values: readonly number[], options: PriceScaleOptions, base: number): PriceScale {
+/** Where an overlay series draws: a band along the bottom of the pane on a scale of its own, bars growing up from `base`. */
+interface OverlayMap { y: (value: number) => number, zeroY: number }
+function overlayMap (source: FinancialSeries, base: number, bottom: number, plotHeight: number, ratio: number): OverlayMap {
+  const bar = source.type === 'bar'
+  let lo = bar ? Math.min(0, base) : Infinity, hi = bar ? Math.max(0, base) : -Infinity
+  for (const point of source.points) { if (point[1] < lo) lo = point[1]; if (point[1] > hi) hi = point[1] }
+  const band = Math.max(16, plotHeight * ratio), span = hi - lo
+  const y = (value: number): number => !(span > 0) ? bottom : bottom - (value - lo) / span * band
+  return { y, zeroY: y(bar ? base : lo) }
+}
+
+function rescale (model: FinancialChartModel, values: readonly number[], options: PriceScaleOptions, base: number, overlays: ReadonlyMap<string, OverlayMap> = new Map()): PriceScale {
   const scale = createPriceScale(values, model.geometry.top, model.geometry.bottom, options, base)
   model.min = scale.min; model.max = scale.max; model.yTicks = scale.ticks
   model.y = scale.y
@@ -79,7 +102,9 @@ function rescale (model: FinancialChartModel, values: readonly number[], options
   }
   model.plottedCandles = model.plottedCandles.filter(c => Number.isFinite(c.wickTop) && Number.isFinite(c.wickBottom))
   for (const series of model.plottedSeries) {
-    series.points = series.points.map(point => ({ ...point, y: scale.y(point.value) })).filter(point => Number.isFinite(point.y))
+    const overlay = overlays.get(series.source.id)
+    if (overlay !== undefined) series.zeroY = overlay.zeroY
+    series.points = series.points.map(point => ({ ...point, y: (overlay?.y ?? scale.y)(point.value) })).filter(point => Number.isFinite(point.y))
   }
   return scale
 }
@@ -89,9 +114,9 @@ function rescale (model: FinancialChartModel, values: readonly number[], options
 function alignedModel (
   snapshot: RealtimeViewSnapshot, series: FinancialSeries[], indexByTime: ReadonlyMap<number, number>,
   width: number, height: number, gutter: number | undefined, scaleOptions: PriceScaleOptions,
-  values: readonly number[], base: number, primary: boolean
+  values: readonly number[], base: number, primary: boolean, axisSide: 'left' | 'right', overlays: ReadonlyMap<string, OverlayMap>
 ): { model: FinancialChartModel, scale: PriceScale } {
-  const geometry = financialGeometry(width, height, gutter, 12), count = snapshot.bars.length
+  const geometry = financialGeometry(width, height, gutter, 12, axisSide), count = snapshot.bars.length
   const scale = createPriceScale(values, geometry.top, geometry.bottom, scaleOptions, base)
   const span = snapshot.viewport.i1 - snapshot.viewport.i0
   const fractional = snapshot.dataStart !== undefined && span > 0 && count > 0
@@ -148,12 +173,13 @@ function alignedModel (
   }
   for (const source of series) {
     const points: FinancialChartModel['plottedSeries'][number]['points'] = []
+    const overlay = overlays.get(source.id), project = overlay?.y ?? scale.y
     for (const [key, value] of source.points) {
-      const index = indexByTime.get(key as number), y = scale.y(value)
+      const index = indexByTime.get(key as number), y = project(value)
       if (index === undefined || !Number.isFinite(xPositions[index]) || !Number.isFinite(y)) continue
       points.push({ x: xPositions[index], y, value, key, index })
     }
-    model.plottedSeries.push({ source, points })
+    model.plottedSeries.push(overlay === undefined ? { source, points } : { source, points, zeroY: overlay.zeroY })
   }
   return { model, scale }
 }
@@ -170,6 +196,7 @@ export function buildEngineFrame (
   dataRevision?: unknown
 ): EngineFrame {
   validateEngineLayout(layout)
+  const axisSide = layout.axisSide ?? 'right'
   const paneIds = [...new Set(indicators.filter(item => item.pane !== 'price').map(item => item.pane))]
   const ratio = Math.max(0.3, Math.min(0.85, layout.priceRatio ?? 0.62))
   const ids = ['price', ...paneIds]
@@ -228,8 +255,11 @@ export function buildEngineFrame (
     paneTop += paneHeight
     const series: FinancialSeries[] = []
     const figureStyles = new Map<string, IndicatorFigure>()
+    const legend: Array<{ id: string, label: string, seriesIds: string[], overlay: boolean }> = []
     for (const indicator of indicators) {
       if (indicator.pane !== id) continue
+      const entry = { id: indicator.id, label: indicator.label ?? indicator.name, seriesIds: [] as string[], overlay: indicator.overlay === true }
+      if (primary) legend.push(entry)
       for (const figure of indicator.figures) {
         const points: Array<readonly [number, number]> = []
         for (let i = 0; i < snapshot.bars.length; i++) {
@@ -238,22 +268,32 @@ export function buildEngineFrame (
         }
         const seriesId = JSON.stringify([indicator.id, figure.key])
         figureStyles.set(seriesId, figure)
-        series.push({ id: seriesId, name: figure.title, type: figure.type === 'circle' ? 'scatter' : figure.type, color: figure.color, points })
+        entry.seriesIds.push(seriesId)
+        series.push({ id: seriesId, name: figure.title, type: figure.type === 'circle' ? 'scatter' : figure.type, color: figure.color, points, ...(indicator.overlay === true ? { overlay: true } : {}) })
       }
     }
     const values: number[] = []
     if (primary) for (const bar of snapshot.bars) values.push(bar.high, bar.low)
-    for (const item of series) { for (const point of item.points) values.push(point[1]); if (item.type === 'bar') values.push(figureStyles.get(item.id)?.base ?? 0) }
+    const overlays = new Map<string, OverlayMap>()
+    const overlayRatio = layout.overlayRatio ?? 0.2
+    for (const item of series) {
+      if (item.overlay === true) {
+        const g = financialGeometry(width, paneHeight, layout.axisGutter, 12, axisSide)
+        overlays.set(item.id, overlayMap(item, figureStyles.get(item.id)?.base ?? 0, g.bottom, g.plotHeight, overlayRatio))
+        continue
+      }
+      for (const point of item.points) values.push(point[1]); if (item.type === 'bar') values.push(figureStyles.get(item.id)?.base ?? 0)
+    }
     const scaleOptions = primary ? layout.priceScale ?? {} : {}, base = rawBars[0]?.close ?? 1
     let model: FinancialChartModel, scale: PriceScale
     if (aligned) {
-      ({ model, scale } = alignedModel(snapshot, series, indexByTime, width, paneHeight, layout.axisGutter, scaleOptions, values, base, primary))
+      ({ model, scale } = alignedModel(snapshot, series, indexByTime, width, paneHeight, layout.axisGutter, scaleOptions, values, base, primary, axisSide, overlays))
     } else {
       // Preserve generic handling of malformed/duplicate external categories.
-      model = buildFinancialChartModel({ xType: 'category', series, candles }, width, paneHeight, layout.axisGutter)
+      model = buildFinancialChartModel({ xType: 'category', series, candles }, width, paneHeight, layout.axisGutter, undefined, 52, axisSide)
       applyRealtimeViewport(model, snapshot, 'category')
       if (!primary) model.plottedCandles = []
-      scale = rescale(model, values, scaleOptions, base)
+      scale = rescale(model, values, scaleOptions, base, overlays)
     }
     panes.push({
       id,
@@ -263,10 +303,11 @@ export function buildEngineFrame (
         snapshot,
         model,
         figureStyles,
+        ...(primary && legend.length > 0 ? { legend } : {}),
         pricePrecision,
         previousClose: primary ? previousClose : undefined,
         indicatorPane: !primary,
-        title: primary ? undefined : indicators.filter(item => item.pane === id).map(item => item.name).join(' · '),
+        title: primary ? undefined : indicators.filter(item => item.pane === id).map(item => item.label ?? item.name).join(' · '),
         inspectBar: x => inspectBar(model, x),
         inspect: x => inspect(model, x)
       },

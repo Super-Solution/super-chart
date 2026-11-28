@@ -17,7 +17,7 @@ const plugin = createChartChatPlugin({
 installChatPlugin(cardRegistry, plugin, { tools: toolRegistry })
 ```
 
-`installChatPlugin` refuses an invalid plugin or a card-kind collision. Pass `tools` to offer the agent the seven
+`installChatPlugin` refuses an invalid plugin or a card-kind collision. Pass `tools` to offer the agent the ten
 tools below; without it only the card is installed.
 
 ## The card
@@ -63,7 +63,10 @@ Moving a card between places rebuilds the chart; indicators and marks come back 
 | --- | --- | --- |
 | `chart_state` | `read` | symbol, period, chart type, indicators, annotations, bar count, replay |
 | `chart_bars` | `read` | the last N loaded bars (≤ 500) |
+| `chart_levels` | `read` | up to five support and five resistance prices from the recent bars, nearest the last close first, with touch counts; draw lines at these, not at guesses |
+| `chart_swings` | `read` | the latest swing highs and lows (time and price of real bars, alternating) and the last leg; anchor trend lines, fibonacci and plans on these |
 | `chart_set_market` | `draft` | change symbol/period (needs a feed; inline-bar cards refuse) |
+| `chart_compare` | `draft` | overlay another market (rebased to this chart's price) with `add`, `remove` or `list`; needs a feed |
 | `chart_annotate` | `draft` | merge or replace the agent's marks by key; returns `applied` / `rejected` with codes, and a `ref:` link per mark |
 | `chart_indicators` | `draft` | add/remove indicators; returns what is shown and what is available |
 | `chart_replay` | `draft` | start, step, or read bar replay |
@@ -106,11 +109,32 @@ anchor of them needs a price.
 | `marker` | 1 | a labelled point |
 | `trend` | 2 | a line through two points |
 | `ray` | 2 | the same line, extended to the right |
-| `fibonacci` | 2 | retracement levels between two points; `params.levels` is a comma list such as `"0,0.5,1"` |
+| `fibonacci` | 2 | retracement levels between two points, as the Fibonacci tool draws them: the first point is where the move began (level 1), the second where it ended (level 0); `params.levels` is a comma list such as `"0,0.5,1"` |
 | `plan` | 3 | entry, target and stop in that order, with the risk-reward ratio |
 
 Scalar `params` are accepted on `trend`, `ray`, `fibonacci` and `plan` only. A mark the engine refuses is reported
 under `rejected` with its code; the others still apply.
+
+## Getting marks right
+
+Models draw wrong marks for three reasons: wrong units, prices that were never on this chart, and marks that land where no one
+can see them. The tools say so instead of hiding it.
+
+- `chart_state` returns `data`: the first and last bar time, the price range of the 500 most recent bars and the last close.
+- `chart_state` also returns `notShown` (key, status, reason) for any existing mark that is outside the view, the same list `chart_annotate` gives for the marks it just applied, so an agent that comes back to a chart can fix what is not on screen.
+  The tool descriptions tell the agent to read it before marking.
+- Times are milliseconds. A mark whose anchor times are all plausible Unix *seconds* (between 1e8 and 1e11) is corrected by
+  ×1000 and the result carries `warnings` with code `time_in_seconds`.
+- `chart_annotate` returns `notShown`: for each applied mark that is not on screen, its `status` and a `why` (before the first
+  loaded bar, after the last bar, above or below the recent price range, outside the current view). The agent should fix
+  those, not tell the reader they are drawn.
+- `warnings` also carries `invalid_plan` (a `plan` whose stop is on the target's side of the entry, which the chart draws as a
+  note, not a plan) and `flat_range` (a `zone` or `fibonacci` with the same price at both ends), `near_duplicate` (a `level` within 0.1% of another in the same call: one line, one label) and `plan_no_width` (a `plan` whose entry and target share one time, so it has no width).
+- `chart_swings` gives the swing points and the last leg, so a trend line or retracement starts and ends on real turning bars.
+- `chart_levels` gives the support and resistance prices price has turned at, so lines go where the chart shows a reason.
+- A level whose chip would sit under the legend puts the chip at the right end of its line instead.
+- Labels of template marks (a fibonacci level, a trend caption) keep clear of the legend the same way, and two marks at one price share one axis tag.
+- Labels that would overlap move sideways so each stays level with its own price; the axis price tags stack with connectors.
 
 ## Words that point at the chart
 

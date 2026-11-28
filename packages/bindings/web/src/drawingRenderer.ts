@@ -67,7 +67,7 @@ export function paintDrawings (
     for (const geometry of geometries) {
       const selected = geometry.id === selectedId, style = geometry.style
       // A drawing's own style wins over the chart-wide options, which win over the theme.
-      const base = style?.color ?? options.color ?? theme.ink
+      const base = style?.color ?? options.color ?? theme.drawing
       const color = selected ? options.selectedColor ?? base : base
       const width = style?.width ?? lineWidth, textColor = style?.textColor ?? color
       const fill = style?.fillColor ?? options.fillColor ?? base, opacity = style?.fillOpacity ?? fillOpacity

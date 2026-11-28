@@ -31,6 +31,8 @@ export interface EngineRenderOptions {
   theme?: EngineRenderTheme
   background?: string
   grid?: string
+  /** Which grid lines the price pane draws: price levels only (default), time ticks only, both, or none. */
+  gridLines?: 'horizontal' | 'vertical' | 'both' | 'none'
   text?: string
   up?: string
   down?: string
@@ -50,6 +52,16 @@ export interface EngineRenderOptions {
    * new local date a faint line, on intraday periods only. The workspace sets it from `SymbolInfo.session`.
    */
   session?: TradingSession | null
+  /** The always-on legend at the top left of the price pane: title, open/high/low/close, change, indicator values. Default true. */
+  legend?: boolean
+  /** The legend's first words, usually "name · interval · exchange". The workspace sets it from the symbol; empty shows none. */
+  legendTitle?: string
+  /** Fold the legend's indicator rows into one line ("3 indicators"), keeping the quote row. Default false. */
+  legendCollapsed?: boolean
+  /** The folded line's words; `{count}` stands for the number of indicators. Default "{count} indicators". */
+  legendCollapsedLabel?: string
+  /** A large faint name behind the candles, with an optional smaller line under it; `null` or absent draws none. */
+  watermark?: { readonly title: string, readonly subtitle?: string } | null
   /** Internal pane composition can omit repeated time labels. */
   showTimeAxis?: boolean
   formatPrice?: (price: number, precision: number) => string

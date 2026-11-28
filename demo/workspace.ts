@@ -69,26 +69,18 @@ const feed: Datafeed = {
     subscriptions.delete(id)
   }
 }
-// ?theme=light, ?layout=compact and ?rail=off try the default chrome without code changes.
+// ?theme=light, ?locale=zh-TW, ?layout=compact and ?rail=off try the default chrome without code changes.
 const query = new URLSearchParams(window.location.search)
 const workspace = new ChartWorkspace(document.querySelector<HTMLElement>('#workspace')!, {
   datafeed: feed, symbol: symbols[0], period: { multiplier: 1, timespan: 'minute', text: '1m' },
   theme: query.get('theme') ?? undefined,
+  locale: query.get('locale') ?? undefined,
   ui: { ...(query.has('layout') ? { layout: query.get('layout') as 'compact' } : {}), parts: { toolRail: query.get('rail') !== 'off' } },
   loader: { count: 1000, historyCache: { max: 6 } },
   chart: { count: 160, indicators: [{ name: 'MA', params: [20] }, { name: 'VOL' }], render: { timeZone: 'UTC' }, drawByHolding: true }
 })
 Object.assign(window, { workspace })
 let disposed = false
-const optionalButton = document.querySelector<HTMLButtonElement>('#indicators')!
-optionalButton.addEventListener('click', () => {
-  optionalButton.disabled = true
-  void Promise.all([import('@supersolutions/super-chart-core/indicators'), import('@supersolutions/super-chart-core/indicators')]).then(([technical, classic]) => {
-    if (disposed) return
-    for (const definition of [...technical.TECHNICAL_INDICATOR_DEFINITIONS, ...classic.CLASSIC_INDICATOR_DEFINITIONS]) workspace.registerIndicator(definition)
-    optionalButton.textContent = 'Optional indicators loaded'
-  }).catch(error => { if (!disposed) { optionalButton.textContent = `Retry loading indicators: ${String(error)}`; optionalButton.disabled = false } })
-})
 const dispose = (): void => { disposed = true; workspace.dispose(); for (const timer of subscriptions.values()) window.clearInterval(timer); subscriptions.clear() }
 window.addEventListener('pagehide', dispose, { once: true })
 if (import.meta.hot !== undefined) import.meta.hot.dispose(dispose)
