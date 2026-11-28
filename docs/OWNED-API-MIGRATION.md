@@ -256,3 +256,5 @@ These change what a workspace looks like with no options. Each has an option tha
 | Drawing colour | ink (white on dark) | the `drawing` token (blue) | `color` render option, or a theme with `drawing` set to ink |
 | First Lines tool and `Alt+T` | `trend-line` (ran on past both points) | `segment`, labelled Trend line; `trend-line` is labelled Extended line | `chart.setDrawingTool('trend-line')` |
 | Background watermark | none | symbol and "name, interval", very faint | `render: { watermark: null }` |
+| `compact` size class | below 780px | below 1040px (the market bar is one row at every width) | `ui: { layout: 'regular' }` |
+| Chat plugin fibonacci mark | level 0 at the first anchor | level 0 at the second anchor, like the drawing tool (a retracement reads from where the move ended) | swap the two anchors |

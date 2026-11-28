@@ -1,6 +1,6 @@
 {
   "name": "@supersolutions/super-chart-react",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "description": "React component and hooks for the Super Chart workspace: lifecycle-safe mount, Strict Mode, market and theme props, events.",
   "license": "GPL-3.0-or-later",
   "type": "module",
@@ -36,8 +36,8 @@
     "tag": "latest"
   },
   "dependencies": {
-    "@supersolutions/super-chart-core": "0.13.1",
-    "@supersolutions/super-chart-web": "0.13.1"
+    "@supersolutions/super-chart-core": "0.14.0",
+    "@supersolutions/super-chart-web": "0.14.0"
   },
   "peerDependencies": {
     "react": ">=18"

@@ -3,7 +3,14 @@
 Releases of the five `@supersolutions/super-chart-*` packages, which share one version. Older releases are in the git
 history (`git log --oneline`, one commit per release). Nothing here is published by this repository's commits.
 
-## Unreleased
+## 0.14.0
+
+**Defaults that change for existing hosts** (details in `docs/OWNED-API-MIGRATION.md`, "Defaults that changed after 0.13"):
+
+- A drawing with no colour of its own takes the `drawing` theme token (blue; ink in the colour-blind themes). Pass `color` in `render` or on the drawing to keep a brand colour.
+- **Fibonacci agent marks (chat plugin `chart_annotate`, kind `fibonacci`) now measure like the drawing tool:** level 0 sits at the second anchor (where the move ended) and level 1 at the first, so a retracement of a leg anchored start-then-end reads 0.382 as a 38.2% pullback from the end. Before, level 0 was at the first anchor. Agents that already send start-then-end anchors need no change; hosts that drew the opposite way should swap the anchors.
+- The `compact` size class starts at 1040px instead of 780px, so the market bar is one row at every width; an `auto` interval bar that would wrap yields to the dropdown. A host that sets `ui.layout` explicitly is unaffected.
+- A faint watermark (`render.watermark`, off with `null`), the full indicator catalogue registered by default, the first Lines tool and `Alt+T` draw a segment, price axis on the right and volume as an overlay band (the rest of the list is in the migration guide).
 
 - Saving a workspace with more than 64 indicators said only "Invalid workspace indicators"; it now says the limit and how many there are.
 
