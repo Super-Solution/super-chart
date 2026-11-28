@@ -3,7 +3,7 @@
 Releases of the five `@supersolutions/super-chart-*` packages, which share one version. Older releases are in the git
 history (`git log --oneline`, one commit per release). Nothing here is published by this repository's commits.
 
-## 0.14.1 (not yet published)
+## 0.14.1
 
 Found on a live chart with ten indicators: the Indicators menu gave no sign that a click had worked, so one indicator was added again and again.
 
