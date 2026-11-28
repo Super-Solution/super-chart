@@ -283,6 +283,8 @@ export class ChartWorkspace {
   private readonly objectsMenu: HTMLDetailsElement
   private objectsDirty = true
   private readonly refreshIndicatorsUi: () => void = () => {}
+  /** Opens the Indicators menu on one indicator that is already on the chart: expanded, in view, briefly marked. */
+  private readonly revealIndicatorUi: (id: string) => void = () => {}
   private readonly fullscreenSync: () => void = () => {}
   private resizeObserver: ResizeObserver | null = null
   private readonly chartHost: HTMLDivElement
@@ -587,12 +589,17 @@ export class ChartWorkspace {
     this.bind(() => { this.indicatorSearch.placeholder = this.t('indicators.search'); this.indicatorSearch.setAttribute('aria-label', this.t('indicators.search')) })
     this.indicatorResults = this.node('div'); this.indicatorResults.className = 'sc-indicator-results'; this.indicatorResults.setAttribute('role', 'listbox')
     this.bind(() => { this.indicatorResults.setAttribute('aria-label', this.t('indicators.add')) })
-    const addIndicator = (name: string): void => { this.run(() => { this.chart.addIndicator({ name }); }) }
+    const addIndicator = (name: string): void => { this.addIndicatorOnce(name) }
     const fillResults = (): void => {
       const query = this.indicatorSearch.value.trim()
       const names = searchIndicators(this.chart.getRegisteredIndicatorNames(), query)
       const nodes: HTMLElement[] = []
       let group = ''
+      // The list is built again after every add or remove: keep the reader's place in it, and the focused row.
+      const scrolled = this.indicatorResults.scrollTop
+      const active = this.doc.activeElement, focusName = active instanceof this.win.HTMLElement && this.indicatorResults.contains(active) ? active.dataset.name : undefined
+      const onChart = new Map<string, number>()
+      for (const indicator of this.chart.listIndicators()) onChart.set(indicator.name, (onChart.get(indicator.name) ?? 0) + 1)
       for (const name of names) {
         const info = indicatorInfo(name)
         // With no query the list is the catalogue by family; with one it is a ranked list.
@@ -604,12 +611,18 @@ export class ChartWorkspace {
         const item = this.node('button'); item.type = 'button'; item.className = 'sc-button sc-indicator-result'; item.setAttribute('role', 'option'); item.dataset.name = name
         const label = this.node('span'); label.className = 'sc-label'; label.textContent = info.label
         const id = this.node('span'); id.className = 'sc-indicator-id'; id.textContent = name.replace(/^SC_/, '')
-        item.append(label, id, createIcon(this.doc, 'plus')); item.setAttribute('aria-label', this.t('indicators.add.named', { name: info.label }))
+        const count = onChart.get(name) ?? 0
+        item.append(label, id)
+        if (count > 0) { const badge = this.node('span'); badge.className = 'sc-indicator-count'; badge.textContent = String(count); item.append(badge) }
+        item.append(createIcon(this.doc, 'plus'))
+        item.setAttribute('aria-label', count > 0 ? this.t('indicators.add.counted', { name: info.label, count: String(count) }) : this.t('indicators.add.named', { name: info.label }))
         this.actions.set(item, () => { addIndicator(name) })
         nodes.push(item)
       }
       this.indicatorResults.replaceChildren(...nodes)
       if (names.length === 0) { const none = this.node('p'); none.className = 'sc-hint'; none.textContent = this.t('indicators.noMatch'); this.indicatorResults.append(none) }
+      this.indicatorResults.scrollTop = scrolled
+      if (focusName !== undefined) this.indicatorResults.querySelector<HTMLElement>(`[data-name="${this.win.CSS.escape(focusName)}"]`)?.focus({ preventScroll: true })
     }
     this.listen(this.indicatorSearch, 'input', fillResults)
     this.listen(this.indicatorSearch, 'keydown', event => {
@@ -627,6 +640,17 @@ export class ChartWorkspace {
     // Names can be registered while the menu is shut (optional packs), so the list is read again each time it opens.
     this.listen(indicators.root, 'toggle', () => { if (indicators.root.open) { fillResults(); this.indicatorSearch.focus({ preventScroll: true }) } })
     const indicatorList = this.node('div'); indicatorList.className = 'sc-indicator-list'
+    const indicatorHeading = this.node('div'); indicatorHeading.className = 'sc-indicator-family sc-indicator-onchart'; indicatorHeading.setAttribute('role', 'presentation')
+    this.revealIndicatorUi = (id: string): void => {
+      this.parts.indicators.open = true
+      const entry = [...indicatorList.children].find(node => (node as HTMLElement).dataset.indicator === id) as HTMLElement | undefined
+      if (entry === undefined) return
+      const details = entry.querySelector('details'); if (details !== null) details.open = true
+      entry.scrollIntoView({ block: 'nearest' })
+      entry.dataset.flash = 'true'
+      this.win.setTimeout(() => { delete entry.dataset.flash }, 1200)
+      entry.querySelector<HTMLElement>('summary')?.focus({ preventScroll: true })
+    }
     let indicatorEditorDirty = true
     const renderIndicators = (): void => {
       if (!indicators.root.open || !indicatorEditorDirty) return
@@ -638,6 +662,8 @@ export class ChartWorkspace {
       fillResults()
       const currentIndicators = this.chart.listIndicators()
       this.setParts(indicators.summary, [[this.t('indicators')], [currentIndicators.length > 0 ? String(currentIndicators.length) : '', 'sc-count']])
+      indicatorHeading.textContent = currentIndicators.length === 0 ? '' : this.t('indicators.onChart', { count: String(currentIndicators.length) })
+      indicatorHeading.hidden = currentIndicators.length === 0
       indicatorList.replaceChildren(...currentIndicators.map(indicator => {
         const settings = this.node('details'), title = this.node('summary')
         settings.className = 'sc-indicator'; settings.dataset.indicator = indicator.id; settings.open = expanded.has(indicator.id)
@@ -700,7 +726,7 @@ export class ChartWorkspace {
     this.listen(objects.root, 'toggle', () => { this.objectsDirty = true; this.renderObjects() })
     const indicatorAdd = this.node('div'); indicatorAdd.className = 'sc-indicator-add'
     indicatorAdd.append(this.indicatorSearch, this.indicatorResults)
-    indicators.panel.append(indicatorAdd, indicatorList)
+    indicators.panel.append(indicatorAdd, indicatorHeading, indicatorList)
     this.drawingSelect = this.select('draw.tool', [], '')
     this.drawingField = this.field('draw', this.drawingSelect)
     this.buildToolOptions()
@@ -2379,7 +2405,7 @@ export class ChartWorkspace {
     add('draw.undo', t('draw.undo'), 'palette.group.draw', () => { this.chart.drawings.undo() }, { shortcut: 'Ctrl+Z', when: () => this.chart.drawings.getSnapshot().canUndo })
     add('draw.redo', t('draw.redo'), 'palette.group.draw', () => { this.chart.drawings.redo() }, { shortcut: 'Ctrl+Shift+Z', when: () => this.chart.drawings.getSnapshot().canRedo })
     add('draw.clear', t('palette.clearDrawings'), 'palette.group.draw', () => { this.chart.drawings.clear() }, { when: () => this.chart.drawings.getSnapshot().drawings.length > 0 })
-    for (const name of searchIndicators(this.chart.getRegisteredIndicatorNames(), '')) add(`indicator.add.${name}`, t('palette.indicator.add', { name: indicatorLabel(name) }), 'palette.group.indicators', () => { this.chart.addIndicator({ name }) }, { keywords: ['indicator', name, name.replace(/^SC_/, ''), ...indicatorInfo(name).keywords.split(' ')] })
+    for (const name of searchIndicators(this.chart.getRegisteredIndicatorNames(), '')) add(`indicator.add.${name}`, t('palette.indicator.add', { name: indicatorLabel(name) }), 'palette.group.indicators', () => { this.addIndicatorOnce(name) }, { keywords: ['indicator', name, name.replace(/^SC_/, ''), ...indicatorInfo(name).keywords.split(' ')] })
     for (const indicator of this.chart.listIndicators()) add(`indicator.remove.${indicator.id}`, t('palette.indicator.remove', { name: `${indicatorLabel(indicator.name)}${indicator.params.length === 0 ? '' : ` (${indicator.params.join(', ')})`}` }), 'palette.group.indicators', () => { this.chart.removeIndicator(indicator.id) })
     const replaying = this.loader.replayInfo !== null
     add('replay.start', t('replay.start'), 'palette.group.replay', () => { if (!this.startReplay()) throw new Error(t('replay.needBars')) }, { when: () => !replaying && this.getStatus().state === 'ready' })
@@ -2502,6 +2528,24 @@ export class ChartWorkspace {
       if (key.key === 'Escape' && root.open) { key.preventDefault(); key.stopPropagation(); root.open = false; summary.focus() }
     })
     return { root, summary, panel }
+  }
+
+  /**
+   * Adds an indicator unless one with the same name, settings and pane is already on the chart: a second copy would draw
+   * exactly over the first, and the menu used to show nothing to say the first click had worked, so readers clicked
+   * again. Then the existing one is shown instead. (The chart API itself still adds as many as it is told to.)
+   */
+  private addIndicatorOnce (name: string): void {
+    this.run(() => {
+      const id = this.chart.addIndicator({ name })
+      const all = this.chart.listIndicators(), added = all.find(item => item.id === id)
+      const same = added === undefined ? undefined : all.find(item => item.id !== id && item.name === added.name && item.pane === added.pane && (item.paneId ?? '') === (added.paneId ?? '') &&
+        item.params.length === added.params.length && item.params.every((value, index) => value === added.params[index]))
+      if (same === undefined) return
+      this.chart.removeIndicator(id)
+      // After the change notice has rebuilt the menu.
+      this.win.queueMicrotask(() => { if (!this.disposed) this.revealIndicatorUi(same.id) })
+    })
   }
 
   private run (action: () => void): boolean {

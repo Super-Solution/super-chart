@@ -55,9 +55,10 @@ export function resolveXType(
   return 'number';
 }
 
-export function financialGeometry(width: number, height: number, axisGutter = 52, rightGutter = 12, axisSide: ChartAxis = 'left'): FinancialGeometry {
+/** `bottomInset` is the room under the plot for the time axis: 34 by default, less for a pane that has another pane under it. */
+export function financialGeometry(width: number, height: number, axisGutter = 52, rightGutter = 12, axisSide: ChartAxis = 'left', bottomInset = 34): FinancialGeometry {
   const w = Math.max(1, width), h = Math.max(1, height);
-  const top = 12, bottom = Math.max(top + 1, h - 34);
+  const top = 12, bottom = Math.max(top + 1, h - bottomInset);
   if (axisSide === 'right') {
     const strip = Math.max(52, Math.min(axisGutter, w * 0.34)), margin = Math.min(8, w * 0.1);
     const edge = Math.max(margin + 1, w - strip);
@@ -112,7 +113,7 @@ function domain(values: number[], zero: boolean): [number, number] {
   const padding = rawMax > rawMin ? (rawMax - rawMin) * 0.12 : Math.max(Math.abs(rawMax) * 0.05, 0.01);
   return [zero ? Math.min(0, rawMin) : rawMin - padding, zero ? Math.max(0.01, rawMax + padding) : rawMax + padding];
 }
-export function buildFinancialChartModel(data: FinancialChartData, width: number, height: number, axisGutter = 52, viewport?: FinancialViewport, rightGutter = 52, axisSide: ChartAxis = 'left'): FinancialChartModel {
+export function buildFinancialChartModel(data: FinancialChartData, width: number, height: number, axisGutter = 52, viewport?: FinancialViewport, rightGutter = 52, axisSide: ChartAxis = 'left', bottomInset = 34): FinancialChartModel {
   // Build-local identities: shared ISO keys recur across series and stacking.
   // Numeric/category keys already have cheap conversions; do not cache them.
   const identities = new Map<string, string>();
@@ -128,7 +129,7 @@ export function buildFinancialChartModel(data: FinancialChartData, width: number
   const xKeys = allKeys.slice(start, end), visibleIds = new Set(xKeys.map(key => identify(key)));
   const sources = data.series ?? [], candles = (data.candles ?? []).filter(c => validCandle(c) && visibleIds.has(identify(c.t)));
   const hasRightAxis = sources.some(s => s.axis === 'right');
-  const geometry = financialGeometry(width, height, axisGutter, hasRightAxis ? rightGutter : 12, axisSide);
+  const geometry = financialGeometry(width, height, axisGutter, hasRightAxis ? rightGutter : 12, axisSide, bottomInset);
   const indexByKey = new Map(xKeys.map((key, i) => [identify(key), i]));
   const visibleSeries = sources.map(source => ({ source, points: source.points.filter(p => visibleIds.has(identify(p[0])) && Number.isFinite(p[1])) }));
   const leftValues = candles.flatMap(c => [c.h, c.l]).filter(Number.isFinite), rightValues: number[] = [];

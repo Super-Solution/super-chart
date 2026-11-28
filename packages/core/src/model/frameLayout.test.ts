@@ -75,3 +75,38 @@ describe('overlay band', () => {
     expect(frame.panes[0].frame.legend?.map(entry => [entry.label, entry.overlay])).toEqual([['VOL', true], ['MA 20', false]])
   })
 })
+
+describe('panes under the price pane', () => {
+  const pane = (name: string, id: string): FrameIndicator => ({ id, name, label: name, pane: `indicator:${id}`, overlay: false, figures: [{ key: 'v', title: name, type: 'line', color: '#fff' }], rows: Array.from({ length: 60 }, (_, i) => ({ v: Math.sin(i / 5) + 1 })) } as unknown as FrameIndicator)
+  const plot = (item: ReturnType<typeof buildEngineFrame>['panes'][number]): number => item.frame.model.geometry.plotHeight
+
+  it('keeps every plot readable when several panes share a short chart with a high price ratio', () => {
+    const frame = frameOf([pane('A', 'a'), pane('B', 'b'), pane('C', 'c')], { priceRatio: 0.8 }, 900, 740)
+    expect(frame.panes).toHaveLength(4)
+    for (const item of frame.panes.slice(1)) expect(plot(item)).toBeGreaterThan(55)
+    // The pane heights still add up to the chart, and the candles keep the larger share.
+    expect(frame.panes.reduce((sum, item) => sum + item.height, 0)).toBeCloseTo(740, 6)
+    expect(plot(frame.panes[0])).toBeGreaterThan(plot(frame.panes[1]) * 2)
+  })
+
+  it('leaves one pane with the share the ratio gives it, and gives no pane but the lowest the time-axis room', () => {
+    const one = frameOf([pane('A', 'a')], { priceRatio: 0.8 }, 900, 740)
+    expect(one.panes[0].height).toBeCloseTo(740 * 0.8, 6)
+    const two = frameOf([pane('A', 'a'), pane('B', 'b')], {}, 900, 740)
+    expect(two.panes[1].frame.model.geometry.height - two.panes[1].frame.model.geometry.bottom).toBe(6)
+    expect(two.panes[2].frame.model.geometry.height - two.panes[2].frame.model.geometry.bottom).toBe(34)
+  })
+
+  it('still honours dragged pane weights as heights', () => {
+    const frame = frameOf([pane('A', 'a'), pane('B', 'b')], { paneWeights: { price: 400, 'indicator:a': 200, 'indicator:b': 100 } }, 900, 700)
+    expect(frame.panes.map(item => Math.round(item.height))).toEqual([400, 200, 100])
+  })
+
+  it('draws more ticks on a tall scale than on a short one, never fewer than three where the range allows', () => {
+    const tall = frameOf([], {}, 900, 800).panes[0].scale.ticks.length
+    const short = frameOf([pane('A', 'a'), pane('B', 'b'), pane('C', 'c')], { priceRatio: 0.8 }, 900, 520).panes[3].scale.ticks.length
+    expect(tall).toBeGreaterThanOrEqual(5)
+    expect(short).toBeGreaterThanOrEqual(2)
+    expect(tall).toBeGreaterThan(short)
+  })
+})

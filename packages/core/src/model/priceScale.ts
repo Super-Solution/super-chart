@@ -50,8 +50,10 @@ export function createPriceScale (values: readonly number[], top: number, bottom
     return options.reversed === true ? top + fraction * height : bottom - fraction * height
   }
   const value = (pixel: number): number => inverse(min + (options.reversed === true ? pixel - top : bottom - pixel) / height * span)
-  const rawStep = span / 4, magnitude = 10 ** Math.floor(Math.log10(rawStep))
-  const step = ([1, 2, 5, 10].find(n => n * magnitude >= rawStep) ?? 10) * magnitude
+  // About one tick per 70px, from 3 to 8: a pane 700px tall is not left with ticks 150px apart, and a small pane still
+  // gets three, which a scale needs to be read at all.
+  const rawStep = span / Math.max(3, Math.min(8, Math.round(height / 70))), magnitude = 10 ** Math.floor(Math.log10(rawStep))
+  const step = ([1, 2, 2.5, 5, 10].find(n => n * magnitude >= rawStep) ?? 10) * magnitude
   const ticks: number[] = []
   if (Number.isFinite(step) && step > 0) {
     const start = Math.ceil(min / step) * step
